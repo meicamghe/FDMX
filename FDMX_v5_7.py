@@ -743,7 +743,7 @@ class FDMX(QWidget):
         settings.addWidget(QLabel("Maximum simultaneous downloads:"))
         self.max_downloads = QSpinBox()
         self.max_downloads.setRange(1, 10)
-        self.max_downloads.setValue(2)
+        self.max_downloads.setValue(8)
         settings.addWidget(self.max_downloads)
         settings.addSpacing(18)
         settings.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"))
