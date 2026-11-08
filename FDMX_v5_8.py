@@ -16,7 +16,7 @@ from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
@@ -642,16 +642,47 @@ class FDMX(QWidget):
 
     def create_app_icon(self):
         pixmap = QPixmap(256, 256)
-        pixmap.fill(QColor("#050505"))
+        pixmap.fill(QColor("#030303"))
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#111111"))
+
+        # Deep black rounded tile with a subtle metallic edge.
+        tile = QLinearGradient(0, 0, 0, 256)
+        tile.setColorAt(0.0, QColor("#242424"))
+        tile.setColorAt(0.48, QColor("#090909"))
+        tile.setColorAt(1.0, QColor("#000000"))
+        painter.setBrush(tile)
         painter.drawRoundedRect(8, 8, 240, 240, 48, 48)
-        painter.setPen(QColor("#68152f"))
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QColor(110, 110, 110, 105))
+        painter.drawRoundedRect(9, 9, 238, 238, 47, 47)
+
         font = QFont("Arial", 178, QFont.Black)
         painter.setFont(font)
-        painter.drawText(pixmap.rect().adjusted(0, -5, 0, 0), Qt.AlignCenter, "G")
+        rect = pixmap.rect().adjusted(0, -5, 0, 0)
+
+        # Soft burgundy glow and depth behind the letter.
+        painter.setPen(QColor(105, 0, 35, 90))
+        for offset in (7, 5, 3):
+            painter.drawText(rect.translated(0, offset), Qt.AlignCenter, "G")
+        painter.setPen(QColor("#26000d"))
+        painter.drawText(rect.translated(2, 4), Qt.AlignCenter, "G")
+
+        # Bright glossy burgundy-to-red face with a light-catching upper edge.
+        letter = QLinearGradient(0, 35, 0, 220)
+        letter.setColorAt(0.0, QColor("#ff9ab8"))
+        letter.setColorAt(0.16, QColor("#e84b78"))
+        letter.setColorAt(0.42, QColor("#a9003c"))
+        letter.setColorAt(0.72, QColor("#790027"))
+        letter.setColorAt(1.0, QColor("#3d0018"))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(letter)
+        painter.drawText(rect, Qt.AlignCenter, "G")
+
+        # Narrow glossy highlight across the upper portion of the G.
+        painter.setPen(QColor(255, 220, 232, 175))
+        painter.drawText(rect.translated(0, -2), Qt.AlignCenter, "G")
         painter.end()
         return QIcon(pixmap)
 
