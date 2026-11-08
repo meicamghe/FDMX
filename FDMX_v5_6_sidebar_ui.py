@@ -606,6 +606,17 @@ class FDMX(QWidget):
             QPushButton:hover { background: #2a3a56; border-color: #4b6590; }
             QPushButton:pressed { background: #17243a; }
             QPushButton:disabled { color: #667085; background: #171f2d; border-color: #263247; }
+            QFrame#sidebar {
+                background:#131c2b; border:1px solid #29364c; border-radius:14px;
+            }
+            QFrame#sidebar QPushButton {
+                text-align:left; background:transparent; border:1px solid transparent;
+                color:#91a3bd; padding:12px 11px; font-weight:600;
+            }
+            QFrame#sidebar QPushButton:hover { background:#1c2a40; color:#eaf1ff; }
+            QFrame#sidebar QPushButton:checked {
+                background:#203b60; color:#a9caff; border:1px solid #355782;
+            }
             QGroupBox {
                 background: #151d2c; border: 1px solid #29364c;
                 border-radius: 12px; margin-top: 14px; padding: 18px 12px 12px;
