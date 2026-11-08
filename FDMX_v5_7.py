@@ -754,9 +754,9 @@ class FDMX(QWidget):
         settings.addStretch()
         root.addLayout(settings)
 
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels([
-            "File", "Status", "Progress", "Downloaded / Size",
+            "File", "Category", "Status", "Progress", "Downloaded / Size",
             "Speed", "Time left", "Location"
         ])
         self.table.setAlternatingRowColors(True)
@@ -773,8 +773,14 @@ class FDMX(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.Stretch)
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.Stretch)
         root.addWidget(self.table, 1)
+        self.details = QLabel("Select a download to view its details.")
+        self.details.setWordWrap(True)
+        self.details.setStyleSheet("background:#151f30;border:1px solid #29364c;border-radius:8px;padding:10px 12px;color:#9fb4d1;")
+        self.table.itemSelectionChanged.connect(self.update_details)
+        root.addWidget(self.details)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
 
@@ -1124,7 +1130,7 @@ class FDMX(QWidget):
 
     def fill_row(self, row, task):
         values = [
-            task["name"], task["status"],
+            task["name"], task.get("category") or category_for_filename(task["name"]), task["status"],
             f'{int(task["downloaded"] * 100 / task["total"])}%' if task["total"] else "—",
             f'{format_bytes(task["downloaded"])} / {format_bytes(task["total"])}' if task["total"] else format_bytes(task["downloaded"]),
             format_bytes(task["speed"]) + "/s",
@@ -1135,14 +1141,27 @@ class FDMX(QWidget):
             item = QTableWidgetItem(value)
             if col == 0:
                 item.setData(Qt.UserRole, task["id"])
-            if col in (2, 3, 4, 5):
+            if col in (3, 4, 5, 6):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
         bar = QProgressBar()
         bar.setRange(0, 100)
         percent = int(task["downloaded"] * 100 / task["total"]) if task["total"] else 0
         bar.setValue(min(100, percent))
-        self.table.setCellWidget(row, 2, bar)
+        self.table.setCellWidget(row, 3, bar)
+
+    def update_details(self):
+        task_id = self.selected_task()
+        task = self.tasks.get(task_id) if task_id else None
+        if not task:
+            self.details.setText("Select a download to view its details.")
+            return
+        self.details.setText(
+            f'{task.get("name", "Download")}  •  {task.get("category") or category_for_filename(task.get("name", ""))}  •  {task.get("status", "Unknown")}\n'
+            f'URL: {task.get("url", "")}\n'
+            f'Save location: {task.get("path") or task.get("folder", "")}\n'
+            f'Downloaded: {format_bytes(task.get("downloaded", 0))} / {format_bytes(task.get("total", 0))}'
+        )
 
     def update_summary(self):
         active = sum(1 for t in self.tasks.values() if t["status"] in ("Downloading", "Paused", "Checking server", "Retrying"))
