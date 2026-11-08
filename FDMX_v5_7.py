@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
-    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame
+    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog
 )
 
 
-APP_NAME = "FDMX"
+APP_NAME = "GNS Downloader"
 APP_VERSION = "5.7"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
@@ -301,7 +301,7 @@ class DownloadWorker(QThread):
         self.progress.emit(downloaded, total, speed, eta)
 
     def request(self, start=None, end=None):
-        headers = {"User-Agent": f"FDMX/{APP_VERSION}"}
+        headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION}"}
         if start is not None:
             headers["Range"] = f"bytes={start}-{end}"
         req = urllib.request.Request(self.url, headers=headers)
@@ -367,7 +367,7 @@ class DownloadWorker(QThread):
             req = urllib.request.Request(
                 self.url,
                 headers={
-                    "User-Agent": f"FDMX/{APP_VERSION}",
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
                     "Range": f"bytes={offset}-{end}",
                 },
             )
@@ -567,10 +567,62 @@ class DownloadWorker(QThread):
             self.failed.emit(str(exc))
 
 
+
+
+class PartsDialog(QDialog):
+    """Inspect the byte ranges used by one download."""
+    def __init__(self, parent, task, connections=CONNECTIONS):
+        super().__init__(parent)
+        self.setWindowTitle("Download segments — " + task.get("name", "Download"))
+        self.resize(760, 390)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("SEGMENTS  •  " + task.get("name", "Download")))
+        table = QTableWidget(0, 5)
+        table.setHorizontalHeaderLabels(["Segment", "Byte range", "Downloaded", "Expected", "State"])
+        table.setAlternatingRowColors(True)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        for col in (0, 2, 3, 4):
+            table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        layout.addWidget(table, 1)
+        total = int(task.get("total") or 0)
+        task_id = task.get("id", "")
+        parts_dir = os.path.join(task.get("folder", ""), ".fdmx_" + task_id + ".parts")
+        final_path = task.get("path", "")
+        completed = task.get("status") == "Completed" and final_path and os.path.isfile(final_path)
+        if completed:
+            total = os.path.getsize(final_path)
+        if total <= 0:
+            layout.addWidget(QLabel("Segment information will be available after the server check."))
+        else:
+            count = min(connections, total)
+            table.setRowCount(count)
+            for index in range(count):
+                start = (total * index) // count
+                end = (total * (index + 1)) // count - 1
+                expected = end - start + 1
+                part_path = os.path.join(parts_dir, "part_%02d.tmp" % index)
+                received = expected if completed else (min(os.path.getsize(part_path), expected) if os.path.isfile(part_path) else 0)
+                state = "Completed" if received == expected else ("Downloading" if received else "Waiting")
+                values = ["#%d" % (index + 1), "%s – %s" % (format_bytes(start), format_bytes(end)),
+                          format_bytes(received), format_bytes(expected), state]
+                for col, value in enumerate(values):
+                    table.setItem(index, col, QTableWidgetItem(value))
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn, alignment=Qt.AlignRight)
+        self.setStyleSheet("""
+            QDialog { background:#111c30; color:#e8f1ff; }
+            QTableWidget { background:#17263e; alternate-background-color:#1c304e; color:#e6efff; gridline-color:#304867; border:1px solid #46648d; }
+            QHeaderView::section { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #42669b,stop:1 #203959); color:white; padding:9px; font-weight:700; }
+            QPushButton { color:white; padding:8px 22px; border-radius:7px; border-top:1px solid #85b9ef; border-bottom:3px solid #0a1423; background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3976b8,stop:1 #21436f); }
+        """)
+
 class FDMX(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"FDMX - Download Manager {APP_VERSION}")
+        self.setWindowTitle(f"{APP_NAME}  •  Download Manager {APP_VERSION}")
         self.resize(1240, 760)
         self.setMinimumSize(980, 620)
         self.tasks = {}
@@ -598,7 +650,7 @@ class FDMX(QWidget):
         side.setContentsMargins(12, 18, 12, 16)
         side.setSpacing(8)
 
-        brand = QLabel("⬇  FDMX")
+        brand = QLabel("⬇  GNS Downloader")
         brand.setStyleSheet("font-size:23px;font-weight:900;color:#f8fafc;padding:8px 10px 20px;")
         side.addWidget(brand)
         nav_title = QLabel("LIBRARY")
@@ -620,7 +672,7 @@ class FDMX(QWidget):
             side.addWidget(button)
         self.nav_buttons["All downloads"].setChecked(True)
         side.addStretch()
-        side_note = QLabel("FDMX  •  Download Manager\\nVersion 5.7")
+        side_note = QLabel(f"GNS Downloader  •  Download Manager\\nVersion {APP_VERSION}")
         side_note.setStyleSheet("color:#71839e;font-size:9pt;padding:10px;")
         side.addWidget(side_note)
         outer.addWidget(sidebar)
@@ -646,28 +698,37 @@ class FDMX(QWidget):
                 border: 1px solid #4f8cff;
             }
             QPushButton {
-                background: #202b40; color: #eaf1ff;
-                border: 1px solid #34435e; border-radius: 8px;
-                padding: 9px 14px; font-weight: 600;
+                background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3c5f91,stop:0.5 #29466f,stop:1 #172a46);
+                color:#f4f8ff; border-top:1px solid #7898c5; border-left:1px solid #4b6a98;
+                border-right:2px solid #101b30; border-bottom:3px solid #0b1526;
+                border-radius:9px; padding:9px 14px; font-weight:700;
             }
-            QPushButton:hover { background: #2a3a56; border-color: #4b6590; }
-            QPushButton:pressed { background: #17243a; }
-            QPushButton:disabled { color: #667085; background: #171f2d; border-color: #263247; }
+            QPushButton:hover { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #5686c7,stop:1 #294d82); }
+            QPushButton:pressed { background:#172844; border-top:2px solid #0d1a2d; border-bottom:1px solid #5878a9; padding-top:11px; }
+            QPushButton:disabled { color:#78869c; background:#202b3d; border-color:#2d3b52; }
             QFrame#sidebar {
-                background:#131c2b; border:1px solid #29364c; border-radius:14px;
+                background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #203a60,stop:0.55 #152640,stop:1 #101b30);
+                border-top:1px solid #5878a6; border-left:1px solid #344e76;
+                border-right:3px solid #0a1424; border-bottom:4px solid #080f1c; border-radius:16px;
             }
             QFrame#sidebar QPushButton {
-                text-align:left; background:transparent; border:1px solid transparent;
-                color:#91a3bd; padding:12px 11px; font-weight:600;
+                text-align:left;
+                background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #304c75,stop:1 #1a2d4b);
+                border-top:1px solid #58769f; border-left:1px solid #3b577e;
+                border-right:2px solid #0d192c; border-bottom:2px solid #0b1526;
+                color:#c5d7f4; padding:12px 11px; font-weight:700;
             }
-            QFrame#sidebar QPushButton:hover { background:#1c2a40; color:#eaf1ff; }
+            QFrame#sidebar QPushButton:hover { background:#236a88; color:white; }
             QFrame#sidebar QPushButton:checked {
-                background:#203b60; color:#a9caff; border:1px solid #355782;
+                background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #087f9e,stop:0.52 #315fbd,stop:1 #6548a8);
+                color:white; border-top:1px solid #8bdcff; border-bottom:3px solid #101b39;
             }
             QGroupBox {
-                background: #151d2c; border: 1px solid #29364c;
-                border-radius: 12px; margin-top: 14px; padding: 18px 12px 12px;
-                font-weight: 700; color: #f1f5f9;
+                background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #263b5c,stop:1 #141f33);
+                border-top:1px solid #526b96; border-left:1px solid #344b70;
+                border-right:2px solid #0b1424; border-bottom:3px solid #080f1b;
+                border-radius:12px; margin-top:14px; padding:18px 12px 12px;
+                font-weight:700; color:#f1f5f9;
             }
             QGroupBox::title {
                 subcontrol-origin: margin; left: 14px; padding: 0 7px;
@@ -681,9 +742,9 @@ class FDMX(QWidget):
                 selection-color: #ffffff;
             }
             QHeaderView::section {
-                background: #1c2940; color: #9fb5d5;
-                border: none; border-bottom: 1px solid #34445e;
-                padding: 11px 8px; font-weight: 700;
+                background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3c608e,stop:1 #1b2d4b);
+                color:#d4e6ff; border-top:1px solid #6685b2; border-bottom:2px solid #0c1729;
+                padding:11px 8px; font-weight:800;
             }
             QTableWidget::item { padding: 7px; border-bottom: 1px solid #202c40; }
             QProgressBar {
@@ -691,13 +752,10 @@ class FDMX(QWidget):
                 border: none; border-radius: 5px; text-align: center;
                 min-height: 13px; max-height: 13px;
             }
-            QProgressBar::chunk { background: #4c8dff; border-radius: 5px; }
-            QMenu {
-                background: #1a2435; color: #e6edf7;
-                border: 1px solid #3a4963; padding: 6px;
-            }
-            QMenu::item { padding: 8px 28px 8px 12px; border-radius: 5px; }
-            QMenu::item:selected { background: #2b4268; }
+            QProgressBar::chunk { background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #00c6d7,stop:0.5 #3987ff,stop:1 #a05bff); border-radius:5px; }
+            QMenu { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #263b5e,stop:1 #141f34); color:#e6edf7; border:1px solid #5a78a5; padding:7px; }
+            QMenu::item { padding:9px 30px 9px 13px; border-radius:6px; }
+            QMenu::item:selected { background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #087f9e,stop:1 #674db0); color:white; }
             QMenu::item:disabled { color: #65738a; }
             QMenu::separator { height: 1px; background: #34435a; margin: 5px 8px; }
             QScrollBar:vertical { background: #111827; width: 10px; margin: 0; }
@@ -708,7 +766,7 @@ class FDMX(QWidget):
         root.setSpacing(14)
 
         title_row = QHBoxLayout()
-        title = QLabel(f"FDMX Download Manager  v{APP_VERSION}")
+        title = QLabel(f"GNS Downloader  v{APP_VERSION}")
         title.setStyleSheet("font-size:26px;font-weight:800;color:#f8fafc;letter-spacing:0.3px;")
         title_row.addWidget(title)
         title_row.addStretch()
@@ -776,7 +834,8 @@ class FDMX(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.Stretch)
         root.addWidget(self.table, 1)
-        self.details = QLabel("Select a download to view its details.")
+        self.table.cellDoubleClicked.connect(self.show_parts_window)
+        self.details = QLabel("Select a download to view its details. Double-click a row to inspect its segments.")
         self.details.setWordWrap(True)
         self.details.setStyleSheet("background:#151f30;border:1px solid #29364c;border-radius:8px;padding:10px 12px;color:#9fb4d1;")
         self.table.itemSelectionChanged.connect(self.update_details)
@@ -989,6 +1048,13 @@ class FDMX(QWidget):
             worker.start()
             active += 1
         self.refresh_table()
+
+    def show_parts_window(self, row, column):
+        item = self.table.item(row, 0)
+        task_id = item.data(Qt.UserRole) if item else None
+        task = self.tasks.get(task_id) if task_id else None
+        if task:
+            PartsDialog(self, task).exec()
 
     def selected_task(self):
         row = self.table.currentRow()
