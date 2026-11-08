@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
-    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog
+    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
+    QIcon, QPixmap, QPainter, QColor, QFont
 )
 
 
@@ -623,6 +624,7 @@ class FDMX(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME}  •  Download Manager {APP_VERSION}")
+        self.setWindowIcon(self.create_app_icon())
         self.resize(1240, 760)
         self.setMinimumSize(980, 620)
         self.tasks = {}
@@ -638,6 +640,27 @@ class FDMX(QWidget):
         self.scheduler_timer = self.startTimer(400)
         self.start_queue()
 
+    def create_app_icon(self):
+        pixmap = QPixmap(256, 256)
+        pixmap.fill(QColor("#050505"))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#111111"))
+        painter.drawRoundedRect(8, 8, 240, 240, 48, 48)
+        painter.setPen(QColor("#68152f"))
+        font = QFont("Arial", 178, QFont.Black)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect().adjusted(0, -5, 0, 0), Qt.AlignCenter, "G")
+        painter.end()
+        return QIcon(pixmap)
+
+    def toggle_maximize(self):
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
     def build_ui(self):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(16, 16, 16, 16)
@@ -652,6 +675,7 @@ class FDMX(QWidget):
 
         brand = QLabel("⬇  GNS Downloader")
         brand.setStyleSheet("font-size:23px;font-weight:900;color:#f8fafc;padding:8px 10px 20px;")
+        brand.setToolTip("GNS Downloader")
         side.addWidget(brand)
         nav_title = QLabel("LIBRARY")
         nav_title.setStyleSheet("font-size:9px;font-weight:800;color:#71839e;padding:8px 12px 3px;letter-spacing:1px;")
@@ -706,6 +730,21 @@ class FDMX(QWidget):
             QPushButton:hover { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #5686c7,stop:1 #294d82); }
             QPushButton:pressed { background:#172844; border-top:2px solid #0d1a2d; border-bottom:1px solid #5878a9; padding-top:11px; }
             QPushButton:disabled { color:#78869c; background:#202b3d; border-color:#2d3b52; }
+            QPushButton:hover {
+                background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #39d98a,stop:1 #087f4f);
+                color:#031b11; border-top:1px solid #a0ffd0; border-left:1px solid #5ce6a2;
+                border-right:2px solid #075333; border-bottom:3px solid #06452c;
+            }
+            QPushButton#macClose, QPushButton#macMinimize, QPushButton#macMaximize {
+                border:0; border-radius:15px; font-size:17px; font-weight:900;
+                padding:0; min-width:30px; max-width:30px; min-height:30px; max-height:30px;
+            }
+            QPushButton#macClose { background:#ff5f57; color:#4b0c09; }
+            QPushButton#macMinimize { background:#febc2e; color:#593c00; }
+            QPushButton#macMaximize { background:#28c840; color:#064b14; }
+            QPushButton#macClose:hover { background:#ff817a; color:#350400; }
+            QPushButton#macMinimize:hover { background:#ffd36a; color:#4a3000; }
+            QPushButton#macMaximize:hover { background:#65e77a; color:#003b0a; }
             QFrame#sidebar {
                 background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #203a60,stop:0.55 #152640,stop:1 #101b30);
                 border-top:1px solid #5878a6; border-left:1px solid #344e76;
@@ -778,6 +817,24 @@ class FDMX(QWidget):
         self.summary = QLabel("ACTIVE  0     QUEUED  0     COMPLETED  0")
         self.summary.setStyleSheet("background:#1b2b45;color:#9fc2ff;border:1px solid #304766;border-radius:9px;padding:9px 14px;font-weight:700;")
         title_row.addWidget(self.summary)
+
+        # Mac-inspired traffic-light window controls.
+        self.minimize_button = QPushButton("−")
+        self.minimize_button.setObjectName("macMinimize")
+        self.minimize_button.setToolTip("Minimize")
+        self.minimize_button.clicked.connect(self.showMinimized)
+        self.maximize_button = QPushButton("＋")
+        self.maximize_button.setObjectName("macMaximize")
+        self.maximize_button.setToolTip("Maximize / Restore")
+        self.maximize_button.clicked.connect(self.toggle_maximize)
+        self.close_button = QPushButton("×")
+        self.close_button.setObjectName("macClose")
+        self.close_button.setToolTip("Close")
+        self.close_button.clicked.connect(self.close)
+        for control in (self.minimize_button, self.maximize_button, self.close_button):
+            control.setFixedSize(30, 30)
+            control.setCursor(Qt.PointingHandCursor)
+            title_row.addWidget(control)
         root.addLayout(title_row)
 
         add_group = QGroupBox("New download")
@@ -1207,6 +1264,10 @@ class FDMX(QWidget):
             item = QTableWidgetItem(value)
             if col == 0:
                 item.setData(Qt.UserRole, task["id"])
+                if task.get("status") in ("Downloading", "Checking server", "Retrying", "Paused"):
+                    item.setToolTip("Double-click to show threads")
+                else:
+                    item.setToolTip("Double-click to inspect download segments")
             if col in (3, 4, 5, 6):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
