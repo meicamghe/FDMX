@@ -16,12 +16,12 @@ from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
-    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
-    QIcon, QPixmap, QPainter, QColor, QFont
+    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog
 )
 
 
