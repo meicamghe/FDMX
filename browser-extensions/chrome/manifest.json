@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "FDMX Download Manager",
+  "version": "1.0.0",
+  "description": "Send links from Chrome to the FDMX desktop download manager.",
+  "permissions": ["contextMenus", "activeTab", "tabs"],
+  "host_permissions": ["http://127.0.0.1:38471/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "FDMX", "default_popup": "popup.html"}
+}
