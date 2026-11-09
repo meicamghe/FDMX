@@ -823,6 +823,7 @@ class FDMX(QWidget):
         self.setMinimumSize(820, 520)
         self.tasks = {}
         self.workers = {}
+        self.detail_windows = {}
         self.history = []
         self._loading = False
         self._post_action_armed = False
