@@ -961,15 +961,11 @@ class FDMX(QWidget):
         self.minimize_button.setObjectName("macMinimize")
         self.minimize_button.setToolTip("Minimize")
         self.minimize_button.clicked.connect(self.showMinimized)
-        self.maximize_button = QPushButton("＋")
-        self.maximize_button.setObjectName("macMaximize")
-        self.maximize_button.setToolTip("Maximize / Restore")
-        self.maximize_button.clicked.connect(self.toggle_maximize)
         self.close_button = QPushButton("×")
         self.close_button.setObjectName("macClose")
         self.close_button.setToolTip("Close")
         self.close_button.clicked.connect(self.close)
-        for control in (self.minimize_button, self.maximize_button, self.close_button):
+        for control in (self.minimize_button, self.close_button):
             control.setFixedSize(30, 30)
             control.setCursor(Qt.PointingHandCursor)
             title_row.addWidget(control)
@@ -995,27 +991,39 @@ class FDMX(QWidget):
         add_layout.addWidget(self.add_button, 2, 4)
         root.addWidget(add_group)
 
-        settings = QHBoxLayout()
-        settings.addWidget(QLabel("Maximum simultaneous downloads:"))
+        # Responsive settings grid: labels wrap instead of being clipped on narrow windows.
+        settings = QGridLayout()
+        settings.setHorizontalSpacing(14)
+        settings.setVerticalSpacing(5)
+        settings.setColumnStretch(0, 1)
+        settings.setColumnStretch(1, 1)
+        settings.setColumnStretch(2, 1)
+
+        max_downloads_label = QLabel("Maximum simultaneous downloads:")
+        max_downloads_label.setWordWrap(True)
         self.max_downloads = QSpinBox()
         self.max_downloads.setRange(1, 10)
         self.max_downloads.setValue(8)
-        settings.addWidget(self.max_downloads)
-        settings.addSpacing(18)
-        settings.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"))
+        settings.addWidget(max_downloads_label, 0, 0)
+        settings.addWidget(self.max_downloads, 1, 0)
+
+        speed_limit_label = QLabel("Speed limit per file (KB/s, 0 = unlimited):")
+        speed_limit_label.setWordWrap(True)
         self.speed_limit = QSpinBox()
         self.speed_limit.setRange(0, 10_000_000)
         self.speed_limit.setValue(0)
-        settings.addWidget(self.speed_limit)
-        settings.addSpacing(14)
-        settings.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"))
+        settings.addWidget(speed_limit_label, 0, 1)
+        settings.addWidget(self.speed_limit, 1, 1)
+
+        torrent_limit_label = QLabel("Torrent upload limit (KB/s, 0 = unlimited):")
+        torrent_limit_label.setWordWrap(True)
         self.torrent_upload_limit = QSpinBox()
         self.torrent_upload_limit.setRange(0, 10_000_000)
-        self.torrent_upload_limit.setValue(0)
+        self.torrent_upload_limit.setValue(1)
         self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
         self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
-        settings.addWidget(self.torrent_upload_limit)
-        settings.addStretch()
+        settings.addWidget(torrent_limit_label, 0, 2)
+        settings.addWidget(self.torrent_upload_limit, 1, 2)
         root.addLayout(settings)
 
         self.table = QTableWidget(0, 8)
@@ -1040,7 +1048,7 @@ class FDMX(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.Stretch)
         root.addWidget(self.table, 1)
-        self.table.cellDoubleClicked.connect(self.show_parts_window)
+        self.table.cellDoubleClicked.connect(self.open_or_show_download)
         self.details = QLabel("Select a download to view its details. Double-click a row to inspect its segments.")
         self.details.setWordWrap(True)
         self.details.setStyleSheet("background:#151f30;border:1px solid #29364c;border-radius:8px;padding:10px 12px;color:#9fb4d1;")
@@ -1288,12 +1296,39 @@ class FDMX(QWidget):
             active += 1
         self.refresh_table()
 
-    def show_parts_window(self, row, column):
+    def open_or_show_download(self, row, column):
         item = self.table.item(row, 0)
         task_id = item.data(Qt.UserRole) if item else None
         task = self.tasks.get(task_id) if task_id else None
-        if task:
+        if not task:
+            return
+        self.table.setCurrentCell(row, 0)
+        if task.get("status") == "Completed":
+            self.open_file()
+        else:
             PartsDialog(self, task).exec()
+
+    def parts_tooltip(self, task):
+        """Build a live hover summary of the download's parallel segments."""
+        if task.get("kind") == "torrent":
+            return "Torrent task\nHover details: torrent progress and seeding status are shown in the row."
+        if task.get("status") == "Completed":
+            return "Download completed\nDouble-click to open the downloaded file."
+        total = int(task.get("total") or 0)
+        if total <= 0:
+            return "Download segments / threads\nSegment details will appear after the server check."
+        count = min(CONNECTIONS, total)
+        parts_dir = os.path.join(task.get("folder", ""), ".fdmx_" + task.get("id", "") + ".parts")
+        lines = [f"Download threads: {count}"]
+        for index in range(count):
+            start = (total * index) // count
+            end = (total * (index + 1)) // count - 1
+            expected = end - start + 1
+            part_path = os.path.join(parts_dir, "part_%02d.tmp" % index)
+            received = min(os.path.getsize(part_path), expected) if os.path.isfile(part_path) else 0
+            state = "Complete" if received >= expected else ("Downloading" if received else "Waiting")
+            lines.append(f"Part {index + 1}: {format_bytes(received)} / {format_bytes(expected)} — {state}")
+        return "\n".join(lines)
 
     def selected_task(self):
         row = self.table.currentRow()
@@ -1451,10 +1486,7 @@ class FDMX(QWidget):
             item = QTableWidgetItem(value)
             if col == 0:
                 item.setData(Qt.UserRole, task["id"])
-                if task.get("status") in ("Downloading", "Checking server", "Retrying", "Paused", "Checking metadata", "Seeding"):
-                    item.setToolTip("Double-click to show threads")
-                else:
-                    item.setToolTip("Double-click to inspect download segments")
+                item.setToolTip(self.parts_tooltip(task))
             if col in (3, 4, 5, 6):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
@@ -1573,7 +1605,7 @@ class FDMX(QWidget):
         self.settings = QSettings("GNS", "FDMX")
         self.max_downloads.setValue(self.settings.value("max_downloads", 8, type=int))
         self.speed_limit.setValue(self.settings.value("speed_limit", 0, type=int))
-        self.torrent_upload_limit.setValue(self.settings.value("torrent_upload_limit", 0, type=int))
+        self.torrent_upload_limit.setValue(self.settings.value("torrent_upload_limit", 1, type=int))
         default_folder = os.path.join(os.path.expanduser("~"), "Downloads")
         self.folder.setText(self.settings.value("download_folder", default_folder, type=str))
         self.max_downloads.valueChanged.connect(self.save_preferences)
