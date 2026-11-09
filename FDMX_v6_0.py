@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.0"
+APP_VERSION = "6.1"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -704,9 +704,32 @@ class PartsDialog(QDialog):
             QPushButton { color:white; padding:8px 22px; border-radius:7px; border-top:1px solid #85b9ef; border-bottom:3px solid #0a1423; background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3976b8,stop:1 #21436f); }
         """)
 
+class DraggableTitleBar(QWidget):
+    """Frameless-window title area that can be dragged with the mouse."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._drag_offset = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
+            self.window().move(event.globalPosition().toPoint() - self._drag_offset)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+
 class FDMX(QWidget):
     def __init__(self):
         super().__init__()
+        # Use the application's own title-bar controls; hide the native Windows frame buttons.
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setWindowTitle(f"{APP_NAME}  •  Download Manager {APP_VERSION}")
         self.setWindowIcon(self.create_app_icon())
         self.resize(1240, 760)
@@ -969,7 +992,9 @@ class FDMX(QWidget):
             control.setFixedSize(30, 30)
             control.setCursor(Qt.PointingHandCursor)
             title_row.addWidget(control)
-        root.addLayout(title_row)
+        title_bar = DraggableTitleBar(self)
+        title_bar.setLayout(title_row)
+        root.addWidget(title_bar)
 
         add_group = QGroupBox("New download")
         add_layout = QGridLayout(add_group)
@@ -1002,7 +1027,7 @@ class FDMX(QWidget):
         max_downloads_label = QLabel("Maximum simultaneous downloads:")
         max_downloads_label.setWordWrap(True)
         self.max_downloads = QSpinBox()
-        self.max_downloads.setRange(1, 10)
+        self.max_downloads.setRange(1, 16)
         self.max_downloads.setValue(8)
         settings.addWidget(max_downloads_label, 0, 0)
         settings.addWidget(self.max_downloads, 1, 0)
@@ -1036,6 +1061,7 @@ class FDMX(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(42)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setMouseTracking(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
@@ -1315,9 +1341,12 @@ class FDMX(QWidget):
         if task.get("status") == "Completed":
             return "Download completed\nDouble-click to open the downloaded file."
         total = int(task.get("total") or 0)
+        count = min(CONNECTIONS, total) if total > 0 else CONNECTIONS
         if total <= 0:
-            return "Download segments / threads\nSegment details will appear after the server check."
-        count = min(CONNECTIONS, total)
+            return (
+                f"Download threads: {count}\n"
+                "Waiting for server response; individual part sizes will appear after metadata is received."
+            )
         parts_dir = os.path.join(task.get("folder", ""), ".fdmx_" + task.get("id", "") + ".parts")
         lines = [f"Download threads: {count}"]
         for index in range(count):
@@ -1482,11 +1511,12 @@ class FDMX(QWidget):
             format_duration(task["eta"]),
             task["folder"]
         ]
+        hover_text = self.parts_tooltip(task)
         for col, value in enumerate(values):
             item = QTableWidgetItem(value)
+            item.setToolTip(hover_text)
             if col == 0:
                 item.setData(Qt.UserRole, task["id"])
-                item.setToolTip(self.parts_tooltip(task))
             if col in (3, 4, 5, 6):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
@@ -1494,6 +1524,7 @@ class FDMX(QWidget):
         bar.setRange(0, 100)
         percent = int(task["downloaded"] * 100 / task["total"]) if task["total"] else 0
         bar.setValue(min(100, percent))
+        bar.setToolTip(hover_text)
         self.table.setCellWidget(row, 3, bar)
 
     def update_details(self):
