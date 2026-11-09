@@ -36,7 +36,7 @@ READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for netw
 
 
 def open_url(request, timeout=60):
-    return open_url(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
 
 HISTORY_FILE = os.path.join(
     os.path.expanduser("~"), ".fdmx", "history.json"
