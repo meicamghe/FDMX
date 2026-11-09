@@ -978,7 +978,7 @@ class FDMX(QWidget):
         add_group = QGroupBox("New download")
         add_layout = QGridLayout(add_group)
         self.url = QLineEdit()
-        self.url.setPlaceholderText("Paste HTTP or HTTPS download URL...")
+        self.url.setPlaceholderText("Paste HTTP, HTTPS, or magnet link...")
         self.folder = QLineEdit(os.path.join(os.path.expanduser("~"), "Downloads"))
         browse = QPushButton("Browse")
         browse.clicked.connect(self.select_folder)
@@ -1347,7 +1347,7 @@ class FDMX(QWidget):
         if not task_id:
             return
         task = self.tasks.get(task_id)
-        if task and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying"):
+        if task and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding"):
             QMessageBox.information(self, "Download active", "Cancel the active download before removing it.")
             return
         self.tasks.pop(task_id, None)
