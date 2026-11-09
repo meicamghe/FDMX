@@ -1189,11 +1189,12 @@ class AdminLoginFinderWorker(QThread):
         "/phpmyadmin/", "/pma/", "/manager/html", "/cpanel", "/webmail", "/backend/"
     )
 
-    def __init__(self, start_url, find_admin=True, profile=True):
+    def __init__(self, start_url, find_admin=True, profile=True, collect_domain=True):
         super().__init__()
         self.start_url = WebsiteScanWorker.prepare_url(start_url)
         self.find_admin = find_admin
         self.profile = profile
+        self.collect_domain = collect_domain
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
@@ -1245,12 +1246,68 @@ class AdminLoginFinderWorker(QThread):
         generator = re.search(r"""<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)""", html or "", re.I)
         return found, generator.group(1) if generator else ""
 
+    def _domain_registration(self, host):
+        """Read public RDAP domain-registration metadata; omit personal contact details."""
+        domain = (host or "").strip().lower().rstrip(".")
+        if not domain:
+            return {"error": "No domain name available."}
+        request = urllib.request.Request(
+            "https://rdap.org/domain/" + urllib.parse.quote(domain, safe="."),
+            headers={"User-Agent": "FDMX/6.17 (public RDAP lookup)", "Accept": "application/rdap+json, application/json"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                data = json.loads(response.read(1024 * 1024).decode("utf-8", errors="replace"))
+        except Exception as exc:
+            return {"domain": domain, "error": "RDAP lookup unavailable: " + str(exc)}
+
+        result = {"domain": data.get("ldhName") or domain, "registrar": "Not disclosed",
+                  "registrant_organization": "Not publicly disclosed",
+                  "registrant_country": "Not publicly disclosed", "created": "Unknown",
+                  "expires": "Unknown", "updated": "Unknown", "nameservers": [],
+                  "status": data.get("status", []) or [], "rdap_source": "rdap.org"}
+        for event in data.get("events", []):
+            action = (event.get("eventAction") or "").lower()
+            date = event.get("eventDate", "")
+            if "registration" in action:
+                result["created"] = date
+            elif "expiration" in action:
+                result["expires"] = date
+            elif "last changed" in action or "last update" in action:
+                result["updated"] = date
+
+        for entity in data.get("entities", []):
+            roles = [x.lower() for x in entity.get("roles", [])]
+            vcard = entity.get("vcardArray", [])
+            props = vcard[1] if isinstance(vcard, list) and len(vcard) > 1 and isinstance(vcard[1], list) else []
+            values = {}
+            for prop in props:
+                if isinstance(prop, list) and len(prop) >= 4:
+                    values[str(prop[0]).lower()] = prop[3]
+            if "registrar" in roles and result["registrar"] == "Not disclosed":
+                result["registrar"] = values.get("fn") or values.get("org") or entity.get("handle") or "Not disclosed"
+            if "registrant" in roles:
+                # Intentionally collect only organization and country, not personal name,
+                # email, phone, or street address.
+                org = values.get("org")
+                if isinstance(org, list):
+                    org = " ".join(str(x) for x in org)
+                if isinstance(org, str) and org.strip():
+                    result["registrant_organization"] = org.strip()
+                address = values.get("adr")
+                if isinstance(address, dict):
+                    country = address.get("country-name") or address.get("country")
+                    if country:
+                        result["registrant_country"] = str(country)
+        result["nameservers"] = [x.get("ldhName", "") for x in data.get("nameservers", []) if x.get("ldhName")]
+        return result
+
     def run(self):
         report = {"target": self.start_url, "server": "Unknown", "server_family": "Unknown",
                   "powered_by": "Not disclosed", "os": "Not reliably identifiable",
                   "status": "Unknown", "final_url": self.start_url, "content_type": "Unknown",
                   "ip_addresses": [], "security_headers": {}, "cookies": [], "technologies": [],
-                  "generator": "", "login_pages": [], "notes": []}
+                  "generator": "", "login_pages": [], "domain_registration": {}, "notes": []}
         try:
             if not self.start_url:
                 raise ValueError("Invalid website address.")
@@ -1261,6 +1318,9 @@ class AdminLoginFinderWorker(QThread):
                     report["ip_addresses"] = sorted({x[4][0] for x in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)})
                 except Exception:
                     report["notes"].append("DNS address lookup was unavailable.")
+            if self.collect_domain:
+                self.progress.emit("Looking up public domain registration (RDAP)…")
+                report["domain_registration"] = self._domain_registration(host)
             self.progress.emit("Reading public server headers and website fingerprints…")
             try:
                 home = self._request(self.start_url, "GET", 512 * 1024)
@@ -1390,6 +1450,21 @@ class AdminLoginFinderDialog(QDialog):
                  f"HTML generator: {report.get('generator')}", "", "SECURITY-RELATED RESPONSE HEADERS"]
         for name, value in report.get("security_headers", {}).items():
             lines.append(f"{name}: {value}")
+        registration = report.get("domain_registration", {})
+        if registration:
+            lines += ["", "DOMAIN REGISTRATION (PUBLIC RDAP DATA)",
+                      f"Domain: {registration.get('domain', 'Unknown')}",
+                      f"Registrar: {registration.get('registrar', 'Unknown')}",
+                      f"Registrant organization: {registration.get('registrant_organization', 'Not publicly disclosed')}",
+                      f"Registrant country: {registration.get('registrant_country', 'Not publicly disclosed')}",
+                      f"Created: {registration.get('created', 'Unknown')}",
+                      f"Expires: {registration.get('expires', 'Unknown')}",
+                      f"Last updated: {registration.get('updated', 'Unknown')}",
+                      f"Nameservers: {', '.join(registration.get('nameservers', [])) or 'Unknown'}",
+                      f"Domain status: {', '.join(registration.get('status', [])) or 'Unknown'}"]
+            if registration.get("error"):
+                lines.append(registration["error"])
+            lines.append("Note: Personal registrant names, email addresses, phone numbers and street addresses are intentionally not collected; privacy-protected fields may not be public.")
         lines += ["", "COOKIE NAMES (values are not collected)"]
         lines += report.get("cookies", []) or ["No Set-Cookie header observed."]
         lines += ["", f"LOGIN / ADMIN ROUTES ({len(report.get('login_pages', []))})"]
@@ -1452,8 +1527,10 @@ class WebsiteDownloaderDialog(QWidget):
         recon_options = QHBoxLayout()
         self.find_admin_checkbox = QCheckBox("Find admin/login pages")
         self.profile_checkbox = QCheckBox("Profile server / OS / technologies")
+        self.domain_checkbox = QCheckBox("Domain registrar / registration info (RDAP)")
         recon_options.addWidget(self.find_admin_checkbox)
         recon_options.addWidget(self.profile_checkbox)
+        recon_options.addWidget(self.domain_checkbox)
         recon_options.addStretch(1)
         layout.addLayout(recon_options)
 
@@ -1527,7 +1604,7 @@ class WebsiteDownloaderDialog(QWidget):
         self.status.setText("Starting scan…")
         self.worker = WebsiteScanWorker(url, self.scope.currentData(), int(self.max_pages.currentText()))
         self.worker.found.connect(self.add_result)
-        if self.find_admin_checkbox.isChecked() or self.profile_checkbox.isChecked():
+        if self.find_admin_checkbox.isChecked() or self.profile_checkbox.isChecked() or self.domain_checkbox.isChecked():
             self.start_recon(url)
         self.worker.progress.connect(self.status.setText)
         self.worker.finished_scan.connect(self.scan_finished)
@@ -1548,7 +1625,8 @@ class WebsiteDownloaderDialog(QWidget):
         self.recon_dialog.show()
         self.recon_worker = AdminLoginFinderWorker(
             url, find_admin=self.find_admin_checkbox.isChecked(),
-            profile=self.profile_checkbox.isChecked()
+            profile=self.profile_checkbox.isChecked(),
+            collect_domain=self.domain_checkbox.isChecked()
         )
         self.recon_worker.progress.connect(self.recon_dialog.status.setText)
         self.recon_worker.result_ready.connect(self.recon_dialog.show_report)
