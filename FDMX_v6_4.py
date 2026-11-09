@@ -1514,7 +1514,7 @@ class FDMX(QWidget):
 
     def fill_row(self, row, task):
         values = [
-            task['name'], task['status'],
+            "", task['status'],
             f"{format_bytes(task['downloaded'])} / {format_bytes(task['total'])}" if task['total'] else format_bytes(task['downloaded']),
             format_bytes(task['speed']) + '/s',
             format_duration(task['eta'])
