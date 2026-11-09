@@ -1253,7 +1253,7 @@ class AdminLoginFinderWorker(QThread):
             return {"error": "No domain name available."}
         request = urllib.request.Request(
             "https://rdap.org/domain/" + urllib.parse.quote(domain, safe="."),
-            headers={"User-Agent": "FDMX/6.17 (public RDAP lookup)", "Accept": "application/rdap+json, application/json"}
+            headers={"User-Agent": "FDMX/6.16 (public RDAP lookup)", "Accept": "application/rdap+json, application/json"}
         )
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
