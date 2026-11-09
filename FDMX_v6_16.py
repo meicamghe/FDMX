@@ -1242,7 +1242,7 @@ class AdminLoginFinderWorker(QThread):
             ("Angular", ("ng-version", "angular"))
         )
         found = [name for name, markers in checks if any(m in text or m in header_text for m in markers)]
-        generator = re.search(r'<meta[^>]+name=["\\']generator["\\'][^>]+content=["\\']([^"\\']+)', html or "", re.I)
+        generator = re.search(r"""<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)""", html or "", re.I)
         return found, generator.group(1) if generator else ""
 
     def run(self):
