@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.14"
+APP_VERSION = "6.15"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -816,7 +816,7 @@ class DownloadDetailsDialog(QDialog):
 
     def cancel_download(self):
         task = self.task
-        if task.get("status") == "Queued":
+        if task.get("status") in ("Queued", "Ready", "Checking metadata"):
             task["status"] = "Canceled"
             self.parent_window.save_history_entry(task)
         elif task.get("worker"):
@@ -2249,7 +2249,7 @@ class FDMX(QWidget):
         self.schedule_downloads()
 
     def schedule_downloads(self):
-        active = sum(1 for task in self.tasks.values() if task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding"))
+        active = sum(1 for task in self.tasks.values() if task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Seeding"))
         capacity = self.max_downloads.value()
         if active >= capacity:
             return
