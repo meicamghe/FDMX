@@ -942,6 +942,12 @@ class WebsiteScanWorker(QThread):
     def stop(self):
         self._stop.set()
 
+    @staticmethod
+    def _same_site(host_a, host_b):
+        a = (host_a or "").lower().removeprefix("www.")
+        b = (host_b or "").lower().removeprefix("www.")
+        return a == b
+
     def _open(self, url, method="GET", read_limit=0):
         request = urllib.request.Request(url, headers=self.headers, method=method)
         response = urllib.request.urlopen(request, timeout=18)
@@ -971,15 +977,21 @@ class WebsiteScanWorker(QThread):
 
     def _probe_link(self, url):
         """Use response headers to distinguish extensionless files from HTML pages."""
-        for method in ("HEAD", "GET"):
-            try:
-                response, data = self._open(url, method, 2048 if method == "GET" else 0)
-                final_url = self.normalize_url(response.geturl())
-                content_type = response.headers.get("Content-Type", "").lower()
-                response.close()
-                return final_url or url, content_type
-            except Exception:
-                continue
+        parsed = urllib.parse.urlsplit(url)
+        candidates = [url, urllib.parse.urlunsplit((
+            "http" if parsed.scheme == "https" else "https",
+            parsed.netloc, parsed.path, parsed.query, ""
+        ))]
+        for candidate in candidates:
+            for method in ("HEAD", "GET"):
+                try:
+                    response, data = self._open(candidate, method, 2048 if method == "GET" else 0)
+                    final_url = self.normalize_url(response.geturl())
+                    content_type = response.headers.get("Content-Type", "").lower()
+                    response.close()
+                    return final_url or candidate, content_type
+                except Exception:
+                    continue
         return url, ""
 
     def run(self):
@@ -994,7 +1006,7 @@ class WebsiteScanWorker(QThread):
                 if not page_url or page_url in self.seen_pages:
                     continue
                 host = (urllib.parse.urlsplit(page_url).hostname or "").lower()
-                if not self.include_external and host != base_host:
+                if not self.include_external and not self._same_site(host, base_host):
                     continue
                 self.seen_pages.add(page_url)
                 self.progress.emit(f"Scanning {len(self.seen_pages)}/{self.max_pages}: {page_url}")
@@ -1027,7 +1039,7 @@ class WebsiteScanWorker(QThread):
                         continue
                     parsed = urllib.parse.urlsplit(absolute)
                     link_host = (parsed.hostname or "").lower()
-                    if not self.include_external and link_host != base_host:
+                    if not self.include_external and not self._same_site(link_host, base_host):
                         continue
                     path = urllib.parse.unquote(parsed.path).lower()
                     ext = os.path.splitext(path)[1]
@@ -1250,7 +1262,8 @@ class WebsiteDownloaderDialog(QDialog):
     def set_all_checked(self, checked):
         state = Qt.Checked if checked else Qt.Unchecked
         for row in range(self.results.rowCount()):
-            self.results.item(row, 0).setCheckState(state)
+            if not self.results.isRowHidden(row):
+                self.results.item(row, 0).setCheckState(state)
 
     def download_selected(self):
         urls = []
