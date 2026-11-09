@@ -663,6 +663,49 @@ class TorrentWorker(QThread):
             else: self.failed.emit(f"Torrent error: {exc}")
 
 
+class FileInfoWorker(QThread):
+    info_ready = Signal(dict)
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        info = {"size": -1, "name": "", "content_type": "", "accept_ranges": False, "error": ""}
+        headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "*/*"}
+        response = None
+        try:
+            request = urllib.request.Request(self.url, headers=headers, method="HEAD")
+            try:
+                response = urllib.request.urlopen(request, timeout=12)
+            except Exception:
+                request = urllib.request.Request(self.url, headers={**headers, "Range": "bytes=0-0"})
+                response = urllib.request.urlopen(request, timeout=12)
+            content_range = response.headers.get("Content-Range", "")
+            if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
+                info["size"] = int(content_range.rsplit("/", 1)[1])
+            else:
+                raw_size = response.headers.get("Content-Length", "")
+                if raw_size.isdigit():
+                    info["size"] = int(raw_size)
+            info["content_type"] = response.headers.get("Content-Type", "")
+            info["accept_ranges"] = "bytes" in response.headers.get("Accept-Ranges", "").lower() or response.status == 206
+            disposition = response.headers.get("Content-Disposition", "")
+            if disposition:
+                message = Message()
+                message["content-disposition"] = disposition
+                filename = message.get_filename()
+                if filename:
+                    info["name"] = os.path.basename(filename)
+        except Exception as exc:
+            info["error"] = str(exc)
+        finally:
+            if response is not None:
+                try: response.close()
+                except Exception: pass
+        self.info_ready.emit(info)
+
+
 class DownloadDetailsDialog(QDialog):
     """Live per-download window showing metadata, progress and byte segments."""
     def __init__(self, parent, task, connections=CONNECTIONS):
@@ -703,11 +746,13 @@ class DownloadDetailsDialog(QDialog):
         self.resume_btn = QPushButton("Resume")
         self.cancel_btn = QPushButton("Cancel")
         self.retry_btn = QPushButton("Retry")
+        self.start_btn = QPushButton("Start")
+        self.start_btn.clicked.connect(self.start_download)
         self.pause_btn.clicked.connect(self.pause_download)
         self.resume_btn.clicked.connect(self.resume_download)
         self.cancel_btn.clicked.connect(self.cancel_download)
         self.retry_btn.clicked.connect(self.retry_download)
-        for button in (self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
+        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
             button.setMinimumHeight(36)
             actions.addWidget(button)
         layout.addLayout(actions)
@@ -740,6 +785,16 @@ class DownloadDetailsDialog(QDialog):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_data)
         self.refresh_timer.start(700)
+
+    def start_download(self):
+        if self.task.get("status") != "Ready":
+            return
+        self.task["status"] = "Queued"
+        self.task["scheduled_at"] = ""
+        self.parent_window.save_tasks()
+        self.parent_window.refresh_table()
+        self.parent_window.start_queue()
+        self.refresh_data()
 
     def pause_download(self):
         task = self.task
@@ -786,6 +841,8 @@ class DownloadDetailsDialog(QDialog):
         name = task.get("name", "Download")
         status = task.get("status", "Unknown")
         active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")
+        self.start_btn.setVisible(status in ("Ready", "Checking metadata"))
+        self.start_btn.setEnabled(status == "Ready")
         self.pause_btn.setEnabled(status in active_states)
         self.resume_btn.setEnabled(status == "Paused")
         self.cancel_btn.setEnabled(status in active_states or status in ("Paused", "Queued"))
@@ -800,9 +857,12 @@ class DownloadDetailsDialog(QDialog):
         eta_text = format_duration(eta)
         self.setWindowTitle("Download details — " + name)
         self.title_label.setText(name)
+        metadata_size = format_bytes(total) if total > 0 else "Unknown"
+        content_type = task.get("content_type", "Unknown") or "Unknown"
         self.summary_label.setText(
-            f"Status: {status}    |    Progress: {percent}%    |    Size: {size_text}\n"
-            f"Speed: {speed_text}    |    Time remaining: {eta_text}"
+            f"Status: {status}    |    File size: {metadata_size}\n"
+            f"Progress: {percent}%    |    Downloaded: {size_text}\n"
+            f"Type: {content_type}    |    Speed: {speed_text}    |    ETA: {eta_text}"
         )
         self.url_label.setText("URL: " + str(task.get("url", "")))
         self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
@@ -915,6 +975,8 @@ class WebsiteScanWorker(QThread):
         self._stop = threading.Event()
         self.seen_pages = set()
         self.seen_resources = set()
+        self._resource_lock = threading.Lock()
+        self._size_executor = ThreadPoolExecutor(max_workers=16)
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -1031,6 +1093,7 @@ class WebsiteScanWorker(QThread):
                 for match in re.findall(r"""url\(['"]?(.*?)['"]?\)""", html, flags=re.I):
                     if match and not match.strip().startswith("data:"):
                         links.add(match.strip())
+                probe_urls = []
                 for raw_link in links:
                     if self._stop.is_set():
                         break
@@ -1045,19 +1108,30 @@ class WebsiteScanWorker(QThread):
                     ext = os.path.splitext(path)[1]
                     if ext:
                         self._add_resource(absolute, mimetypes.guess_type(path)[0] or "")
-                        # CSS and JS can contain more resources; scan CSS itself below.
                         if ext == ".css":
                             self._scan_css(absolute)
-                        continue
-                    # Extensionless URLs can be pages OR files; ask the server.
-                    checked_url, checked_type = self._probe_link(absolute)
-                    if "html" in checked_type or "xhtml" in checked_type or not checked_type:
-                        if depth < self.max_depth and checked_url not in self.seen_pages:
-                            queue.append((checked_url, depth + 1))
                     else:
-                        self._add_resource(checked_url, checked_type)
+                        probe_urls.append(absolute)
+                with ThreadPoolExecutor(max_workers=16) as probe_pool:
+                    futures = {probe_pool.submit(self._probe_link, link): link for link in probe_urls}
+                    for future in as_completed(futures):
+                        if self._stop.is_set():
+                            break
+                        original = futures[future]
+                        try:
+                            checked_url, checked_type = future.result()
+                        except Exception:
+                            checked_url, checked_type = original, ""
+                        if "html" in checked_type or "xhtml" in checked_type or not checked_type:
+                            if depth < self.max_depth and checked_url not in self.seen_pages:
+                                queue.append((checked_url, depth + 1))
+                        else:
+                            self._add_resource(checked_url, checked_type)
+            self._size_executor.shutdown(wait=True)
             self.finished_scan.emit(len(self.seen_resources))
         except Exception as exc:
+            try: self._size_executor.shutdown(wait=False, cancel_futures=True)
+            except Exception: pass
             self.failed_scan.emit(str(exc))
 
     def _scan_css(self, css_url):
@@ -1076,15 +1150,19 @@ class WebsiteScanWorker(QThread):
             pass
 
     def _add_resource(self, url, content_type):
-        if url in self.seen_resources:
-            return
-        self.seen_resources.add(url)
+        with self._resource_lock:
+            if url in self.seen_resources:
+                return
+            self.seen_resources.add(url)
         parsed = urllib.parse.urlsplit(url)
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "index"
         if not os.path.splitext(name)[1]:
             guessed = mimetypes.guess_extension(content_type.split(";")[0].strip()) if content_type else None
             if guessed:
                 name += guessed
+        self._size_executor.submit(self._emit_resource_info, url, name, content_type)
+
+    def _emit_resource_info(self, url, name, content_type):
         size = -1
         try:
             request = urllib.request.Request(url, headers=self.headers, method="HEAD")
@@ -1157,6 +1235,8 @@ class WebsiteDownloaderDialog(QWidget):
         layout.addWidget(self.total_size_label)
         self.results = QTableWidget(0, 5)
         self.results.setHorizontalHeaderLabels(["Download", "File name", "Type", "Size", "URL"])
+        self.results.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.results.customContextMenuRequested.connect(self.copy_result_url)
         self.results.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.results.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.results.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -1171,12 +1251,15 @@ class WebsiteDownloaderDialog(QWidget):
         self.select_all_button.clicked.connect(lambda: self.set_all_checked(True))
         self.clear_button = QPushButton("Clear selection")
         self.clear_button.clicked.connect(lambda: self.set_all_checked(False))
+        self.copy_url_button = QPushButton("Copy selected URL")
+        self.copy_url_button.clicked.connect(self.copy_result_url)
         self.download_button = QPushButton("Download selected")
         self.download_button.clicked.connect(self.download_selected)
         self.download_button.setEnabled(False)
         buttons.addWidget(self.select_all_button)
         buttons.addWidget(self.clear_button)
         buttons.addStretch(1)
+        buttons.addWidget(self.copy_url_button)
         buttons.addWidget(self.download_button)
         layout.addLayout(buttons)
 
@@ -1206,6 +1289,17 @@ class WebsiteDownloaderDialog(QWidget):
         self.worker.finished_scan.connect(self.scan_finished)
         self.worker.failed_scan.connect(self.scan_failed)
         self.worker.start()
+
+    def copy_result_url(self, position=None):
+        row = self.results.currentRow()
+        if position is not None:
+            item = self.results.itemAt(position)
+            if item:
+                row = item.row()
+        url_item = self.results.item(row, 4) if row >= 0 else None
+        if url_item:
+            QApplication.clipboard().setText(url_item.text())
+            self.status.setText("File URL copied to clipboard.")
 
     def stop_scan(self):
         if self.worker and self.worker.isRunning():
@@ -2072,22 +2166,55 @@ class FDMX(QWidget):
         os.makedirs(folder, exist_ok=True)
         task_id = uuid.uuid4().hex
         self._session_task_ids.add(task_id)
+        name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         self.tasks[task_id] = {
-            "id": task_id, "url": url, "folder": folder,
-            "name": os.path.basename(urllib.parse.unquote(parsed.path)) or "Download",
-            "status": "Queued", "downloaded": 0, "total": 0,
+            "id": task_id, "url": url, "folder": folder, "name": name,
+            "status": "Checking metadata", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
-            "worker": None, "history": False,
-            "scheduled_at": "",
-            "category": category_for_filename(os.path.basename(urllib.parse.unquote(parsed.path)) or "Download")
+            "worker": None, "history": False, "metadata_worker": None,
+            "scheduled_at": "", "total_known": False,
+            "category": category_for_filename(name)
         }
         self._post_action_armed = True
         self._post_action_done = False
         self.save_tasks()
         self.url.clear()
+        self.status.setText("Checking file information before download…")
+        self.probe_download_task(task_id)
+
+    def probe_download_task(self, task_id):
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+        worker = FileInfoWorker(task["url"])
+        task["metadata_worker"] = worker
+        worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
+        worker.start()
+        self.show_download_details(task_id)
         self.refresh_table()
-        self.status.setText("Added to queue. Set its start time in the Schedule tab if needed.")
-        self.start_queue()
+
+    def on_file_info_ready(self, task_id, info):
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+        task["metadata_worker"] = None
+        if task.get("status") == "Canceled":
+            return
+        if info.get("name"):
+            task["name"] = info["name"]
+        task["total"] = max(0, int(info.get("size", -1)))
+        task["total_known"] = task["total"] > 0
+        task["content_type"] = info.get("content_type", "") or "Unknown"
+        task["accept_ranges"] = bool(info.get("accept_ranges"))
+        task["status"] = "Ready"
+        task["category"] = category_for_filename(task["name"])
+        self.save_tasks()
+        self.refresh_table()
+        self.show_download_details(task_id)
+        self.status.setText(
+            f"File information ready: {task['name']} — "
+            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Press Start to download."
+        )
 
     def add_torrent_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open torrent file", "", "Torrent files (*.torrent)")
