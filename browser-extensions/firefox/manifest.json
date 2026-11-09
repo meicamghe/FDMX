@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "name": "FDMX Download Manager",
+  "version": "1.0.0",
+  "description": "Send links from Firefox to the FDMX desktop download manager.",
+  "permissions": ["contextMenus", "activeTab", "tabs", "http://127.0.0.1:38471/*"],
+  "background": {"scripts": ["background.js"]},
+  "browser_action": {"default_title": "FDMX", "default_popup": "popup.html"},
+  "applications": {"gecko": {"id": "fdmx-browser@gns.local", "strict_min_version": "109.0"}}
+}
