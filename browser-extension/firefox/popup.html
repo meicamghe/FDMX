@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GNS Downloader</title>
+<style>
+body{width:300px;margin:0;padding:16px;background:#101522;color:#e6edf7;font:14px "Segoe UI",Arial}
+h3{margin:0 0 12px;color:#ff3333}label{display:block;margin:10px 0 5px;color:#a9bad4}
+input{box-sizing:border-box;width:100%;padding:9px;border:1px solid #405575;border-radius:7px;background:#18243a;color:white}
+button{width:100%;margin-top:12px;padding:10px;border:0;border-radius:7px;background:#c91525;color:white;font-weight:700;cursor:pointer}
+#status{min-height:18px;margin-top:10px;color:#9fc2ff;word-break:break-word}
+</style></head>
+<body><h3>GNS Downloader</h3>
+<label for="token">Security token (copy from FDMX → Browser extension)</label>
+<input id="token" type="password" autocomplete="off" placeholder="Paste app token">
+<button id="save">Save token</button><button id="send">Download current page</button><div id="status"></div>
+<script src="popup.js"></script></body></html>
