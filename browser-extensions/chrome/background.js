@@ -1,6 +1,6 @@
 const API = "http://127.0.0.1:38471";
 function sendToFDMX(url) {
-  if (!url || !/^https?:\\/\\//i.test(url)) return;
+  if (!url || !(url.startsWith("http://") || url.startsWith("https://"))) return;
   fetch(API + "/download", {
     method: "POST",
     headers: {"Content-Type": "text/plain;charset=UTF-8"},
