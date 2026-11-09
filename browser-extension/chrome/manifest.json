@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "GNS Downloader Connector",
+  "version": "6.3.0",
+  "description": "Send the current page or a link directly to GNS Downloader.",
+  "permissions": ["activeTab", "contextMenus", "storage"],
+  "host_permissions": ["http://127.0.0.1:47831/*"],
+  "action": { "default_title": "Send to GNS Downloader", "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" }
+}
