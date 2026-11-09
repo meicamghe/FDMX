@@ -1371,6 +1371,13 @@ class AdminLoginFinderDialog(QDialog):
         self.worker.result_ready.connect(self.show_report)
         self.worker.start()
 
+    def closeEvent(self, event):
+        if self.worker and self.worker.isRunning():
+            self.status.setText("Discovery is still running; wait for it to finish before closing.")
+            event.ignore()
+            return
+        event.accept()
+
     def show_report(self, report):
         lines = ["FDMX ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
                  f"Target: {report.get('target')}", f"Final URL: {report.get('final_url')}",
