@@ -1,0 +1,22 @@
+name: Build browser extensions
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "browser-extensions/**"
+      - ".github/workflows/build-browser-extensions.yml"
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package Chrome extension
+        run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome.zip .
+      - name: Package Firefox XPI
+        run: cd browser-extensions/firefox && zip -r ../../FDMX-Firefox.xpi .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FDMX-browser-extensions
+          path: |
+            FDMX-Chrome.zip
+            FDMX-Firefox.xpi
