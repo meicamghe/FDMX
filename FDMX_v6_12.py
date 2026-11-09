@@ -1016,7 +1016,7 @@ class WebsiteScanWorker(QThread):
                 parser.feed(html)
                 links = set(parser.links)
                 # Discover resources referenced from inline CSS and stylesheets.
-                for match in re.findall(r"url\(['""]?(.*?)['""]?\)", html, flags=re.I):
+                for match in re.findall(r"""url\(['"]?(.*?)['"]?\)""", html, flags=re.I):
                     if match and not match.strip().startswith("data:"):
                         links.add(match.strip())
                 for raw_link in links:
@@ -1054,8 +1054,8 @@ class WebsiteScanWorker(QThread):
             base = response.geturl()
             response.close()
             text = raw.decode("utf-8", errors="replace")
-            for match in re.findall(r"url\(['""]?(.*?)['""]?\)", text, flags=re.I):
-                value = match.strip().strip("'""")
+            for match in re.findall(r"""url\(['"]?(.*?)['"]?\)""", text, flags=re.I):
+                value = match.strip().strip(" '\"")
                 if value and not value.startswith("data:"):
                     target = self.normalize_url(urllib.parse.urljoin(base, value))
                     if target:
@@ -1158,11 +1158,12 @@ class WebsiteDownloaderDialog(QDialog):
         layout.addLayout(buttons)
 
     def start_scan(self):
-        url = self.url_input.text().strip()
+        url = WebsiteScanWorker.prepare_url(self.url_input.text())
         parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            QMessageBox.warning(self, "Invalid address", "Enter a valid website URL beginning with http:// or https://.")
+        if not url or parsed.scheme not in ("http", "https") or not parsed.netloc:
+            QMessageBox.warning(self, "Invalid address", "Enter a valid website address, for example example.com.")
             return
+        self.url_input.setText(url)
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(1500)
@@ -1210,7 +1211,7 @@ class WebsiteDownloaderDialog(QDialog):
             "Audio": {".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus"},
             "Documents": {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt", ".csv"},
             "Archives": {".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso"},
-            "Programs": {".exe", ".msi", ".apk", ".dmg", ".deb", ".rpm", ".jar", ". AppImage".strip()},
+            "Programs": {".exe", ".msi", ".apk", ".dmg", ".deb", ".rpm", ".jar", ".appimage"},
             "Web files": {".html", ".htm", ".css", ".js", ".mjs", ".json", ".xml", ".woff", ".woff2", ".ttf", ".otf"}
         }
         for category, extensions in groups.items():
@@ -1260,7 +1261,7 @@ class WebsiteDownloaderDialog(QDialog):
         if not urls:
             QMessageBox.information(self, "Nothing selected", "Select at least one file to download.")
             return
-        parsed = urllib.parse.urlsplit(self.url_input.text().strip())
+        parsed = urllib.parse.urlsplit(WebsiteScanWorker.prepare_url(self.url_input.text()))
         site_name = re.sub(r"[^A-Za-z0-9._-]+", "_", parsed.hostname or "website").strip("._-") or "website"
         base_folder = self.main_window.folder.text().strip() or os.path.join(os.path.expanduser("~"), "Downloads")
         site_folder = os.path.join(base_folder, site_name)
