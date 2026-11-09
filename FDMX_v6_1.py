@@ -11,26 +11,33 @@ import threading
 import select
 import tempfile
 import shutil
+import datetime
 import urllib.request
 import urllib.parse
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize
+from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
-    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog
+    QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
+    QDateTimeEdit, QCheckBox, QComboBox, QVBoxLayout as VBoxLayout
 )
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.1"
+APP_VERSION = "6.2"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
+
+
+def open_url(request, timeout=60):
+    return open_url(request, timeout=timeout)
+
 HISTORY_FILE = os.path.join(
     os.path.expanduser("~"), ".fdmx", "history.json"
 )
@@ -738,6 +745,8 @@ class FDMX(QWidget):
         self.workers = {}
         self.history = []
         self._loading = False
+        self._post_action_armed = False
+        self._post_action_done = False
         self.current_filter = "All downloads"
         self.search_query = ""
         self.load_history()
@@ -1008,6 +1017,17 @@ class FDMX(QWidget):
         add_layout.addWidget(QLabel("Save to"), 1, 0)
         add_layout.addWidget(self.folder, 1, 1, 1, 3)
         add_layout.addWidget(browse, 1, 4)
+        self.clipboard_button = QPushButton("Read clipboard")
+        self.clipboard_button.setToolTip("Read a URL from the clipboard into the URL field")
+        self.clipboard_button.clicked.connect(self.paste_clipboard_url)
+        add_layout.addWidget(self.clipboard_button, 2, 1)
+        self.schedule_enabled = QCheckBox("Schedule start")
+        self.schedule_time = QDateTimeEdit(QDateTime.currentDateTime())
+        self.schedule_time.setCalendarPopup(True)
+        self.schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.schedule_time.setToolTip("The download remains queued until this local date and time")
+        add_layout.addWidget(self.schedule_enabled, 2, 2)
+        add_layout.addWidget(self.schedule_time, 3, 1, 1, 3)
         self.add_torrent_button = QPushButton("Add .torrent")
         self.add_torrent_button.clicked.connect(self.add_torrent_file)
         add_layout.addWidget(self.add_torrent_button, 2, 3)
@@ -1051,9 +1071,26 @@ class FDMX(QWidget):
         settings.addWidget(self.torrent_upload_limit, 1, 2)
         root.addLayout(settings)
 
-        self.table = QTableWidget(0, 8)
+        extra_group = QGroupBox("Network & after-download actions")
+        extra = QGridLayout(extra_group)
+        self.proxy_enabled = QCheckBox("Use HTTP/HTTPS proxy")
+        self.proxy_url = QLineEdit()
+        self.proxy_url.setPlaceholderText("http://127.0.0.1:8080  (or http://user:pass@host:port)")
+        extra.addWidget(self.proxy_enabled, 0, 0)
+        extra.addWidget(self.proxy_url, 0, 1, 1, 3)
+        self.post_action_enabled = QCheckBox("After all downloads finish:")
+        self.post_action = QComboBox()
+        self.post_action.addItem("Do nothing", "none")
+        self.post_action.addItem("Shut down Windows", "shutdown")
+        self.post_action.addItem("Log out of Windows", "logout")
+        self.post_action.addItem("Hibernate Windows", "hibernate")
+        extra.addWidget(self.post_action_enabled, 1, 0)
+        extra.addWidget(self.post_action, 1, 1)
+        root.addWidget(extra_group)
+
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels([
-            "File", "Category", "Status", "Progress", "Downloaded / Size",
+            "File / Progress", "Category", "Status", "Downloaded / Size",
             "Speed", "Time left", "Location"
         ])
         self.table.setAlternatingRowColors(True)
@@ -1071,8 +1108,7 @@ class FDMX(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.Stretch)
+        header.setSectionResizeMode(6, QHeaderView.Stretch)
         root.addWidget(self.table, 1)
         self.table.cellDoubleClicked.connect(self.open_or_show_download)
         self.details = QLabel("Select a download to view its details. Double-click a row to inspect its segments.")
@@ -1238,6 +1274,15 @@ class FDMX(QWidget):
         if folder:
             self.folder.setText(folder)
 
+    def paste_clipboard_url(self):
+        value = QApplication.clipboard().text().strip()
+        if value:
+            self.url.setText(value)
+            self.url.setFocus()
+            self.status.setText("URL read from clipboard.")
+        else:
+            self.status.setText("Clipboard is empty.")
+
     def add_download(self):
         url = self.url.text().strip()
         folder = self.folder.text().strip()
@@ -1260,12 +1305,15 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False,
+            "scheduled_at": self.schedule_time.dateTime().toString(Qt.ISODate) if self.schedule_enabled.isChecked() else "",
             "category": category_for_filename(os.path.basename(urllib.parse.unquote(parsed.path)) or "Download")
         }
+        self._post_action_armed = True
+        self._post_action_done = False
         self.save_tasks()
         self.url.clear()
         self.refresh_table()
-        self.status.setText("Added to queue.")
+        self.status.setText("Scheduled download added to queue." if self.schedule_enabled.isChecked() else "Added to queue.")
         self.start_queue()
 
     def add_torrent_file(self):
@@ -1306,6 +1354,14 @@ class FDMX(QWidget):
                 break
             if task["status"] != "Queued":
                 continue
+            scheduled_at = task.get("scheduled_at")
+            if scheduled_at:
+                try:
+                    start_time = datetime.datetime.fromisoformat(scheduled_at)
+                    if datetime.datetime.now().astimezone() < start_time.astimezone():
+                        continue
+                except (ValueError, TypeError):
+                    task["scheduled_at"] = ""
             if task.get("kind") == "torrent":
                 worker = TorrentWorker(task_id, task["url"], task["folder"], self.torrent_upload_limit.value())
             else:
@@ -1321,6 +1377,7 @@ class FDMX(QWidget):
             worker.start()
             active += 1
         self.refresh_table()
+        self.check_after_download_action()
 
     def open_or_show_download(self, row, column):
         item = self.table.item(row, 0)
@@ -1460,6 +1517,7 @@ class FDMX(QWidget):
             self.status.setText(f"Completed: {path}")
         self.cleanup_worker(task_id)
         self.schedule_downloads()
+        self.check_after_download_action()
 
     def on_failed(self, message):
         task_id = self.sender().task_id
@@ -1471,6 +1529,7 @@ class FDMX(QWidget):
             self.status.setText(f"Download failed: {message}")
         self.cleanup_worker(task_id)
         self.schedule_downloads()
+        self.check_after_download_action()
         QMessageBox.warning(self, "Download failed", message)
 
     def on_canceled(self):
@@ -1482,6 +1541,7 @@ class FDMX(QWidget):
             self.refresh_table()
         self.cleanup_worker(task_id)
         self.schedule_downloads()
+        self.check_after_download_action()
 
     def cleanup_worker(self, task_id):
         worker = self.workers.pop(task_id, None)
@@ -1505,7 +1565,6 @@ class FDMX(QWidget):
     def fill_row(self, row, task):
         values = [
             task["name"], task.get("category") or category_for_filename(task["name"]), task["status"],
-            f'{int(task["downloaded"] * 100 / task["total"])}%' if task["total"] else "—",
             f'{format_bytes(task["downloaded"])} / {format_bytes(task["total"])}' if task["total"] else format_bytes(task["downloaded"]),
             format_bytes(task["speed"]) + "/s",
             format_duration(task["eta"]),
@@ -1517,7 +1576,7 @@ class FDMX(QWidget):
             item.setToolTip(hover_text)
             if col == 0:
                 item.setData(Qt.UserRole, task["id"])
-            if col in (3, 4, 5, 6):
+            if col in (3, 4, 5):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
         bar = QProgressBar()
@@ -1525,7 +1584,17 @@ class FDMX(QWidget):
         percent = int(task["downloaded"] * 100 / task["total"]) if task["total"] else 0
         bar.setValue(min(100, percent))
         bar.setToolTip(hover_text)
-        self.table.setCellWidget(row, 3, bar)
+        name_label = QLabel(task["name"])
+        name_label.setStyleSheet("font-weight:700;color:#f1f5f9;padding-left:3px;")
+        name_label.setToolTip(hover_text)
+        file_cell = QWidget()
+        file_layout = VBoxLayout(file_cell)
+        file_layout.setContentsMargins(4, 3, 4, 3)
+        file_layout.setSpacing(3)
+        file_layout.addWidget(name_label)
+        file_layout.addWidget(bar)
+        self.table.setCellWidget(row, 0, file_cell)
+        self.table.setRowHeight(row, 54)
 
     def update_details(self):
         task_id = self.selected_task()
@@ -1567,6 +1636,7 @@ class FDMX(QWidget):
                     "speed": 0.0, "eta": -1.0, "path": entry.get("path", ""),
                     "worker": None, "history": False,
                     "kind": entry.get("kind", "http"),
+                    "scheduled_at": entry.get("scheduled_at", ""),
                     "category": entry.get("category") or category_for_filename(entry.get("name", ""))
                 }
         except (OSError, ValueError, TypeError):
@@ -1580,7 +1650,7 @@ class FDMX(QWidget):
             if task.get("status") in ("Completed", "Failed", "Canceled"):
                 continue
             saved.append({key: task.get(key) for key in (
-                "id", "url", "folder", "name", "status", "downloaded", "total", "path", "category", "kind"
+                "id", "url", "folder", "name", "status", "downloaded", "total", "path", "category", "kind", "scheduled_at"
             )})
         temp_path = TASKS_FILE + ".tmp"
         try:
@@ -1643,6 +1713,16 @@ class FDMX(QWidget):
         self.speed_limit.valueChanged.connect(self.save_preferences)
         self.torrent_upload_limit.valueChanged.connect(self.save_preferences)
         self.folder.editingFinished.connect(self.save_preferences)
+        self.proxy_enabled.setChecked(self.settings.value("proxy_enabled", False, type=bool))
+        self.proxy_url.setText(self.settings.value("proxy_url", "", type=str))
+        self.post_action_enabled.setChecked(self.settings.value("post_action_enabled", False, type=bool))
+        action = self.settings.value("post_action", "none", type=str)
+        self.post_action.setCurrentIndex(max(0, self.post_action.findData(action)))
+        self.proxy_enabled.toggled.connect(self.save_preferences)
+        self.proxy_url.editingFinished.connect(self.save_preferences)
+        self.post_action_enabled.toggled.connect(self.save_preferences)
+        self.post_action.currentIndexChanged.connect(self.save_preferences)
+        self.apply_proxy_settings()
 
     def save_preferences(self):
         """Persist preferences without touching queued or active download data."""
@@ -1652,7 +1732,49 @@ class FDMX(QWidget):
         self.settings.setValue("speed_limit", self.speed_limit.value())
         self.settings.setValue("torrent_upload_limit", self.torrent_upload_limit.value())
         self.settings.setValue("download_folder", self.folder.text().strip())
+        self.settings.setValue("proxy_enabled", self.proxy_enabled.isChecked())
+        self.settings.setValue("proxy_url", self.proxy_url.text().strip())
+        self.settings.setValue("post_action_enabled", self.post_action_enabled.isChecked())
+        self.settings.setValue("post_action", self.post_action.currentData())
         self.settings.sync()
+        self.apply_proxy_settings()
+
+    def apply_proxy_settings(self):
+        """Apply the optional HTTP/HTTPS proxy to urllib-based downloads."""
+        if self.proxy_enabled.isChecked() and self.proxy_url.text().strip():
+            proxy = self.proxy_url.text().strip()
+            handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
+            urllib.request.install_opener(urllib.request.build_opener(handler))
+        else:
+            urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+
+    def check_after_download_action(self):
+        if not self._post_action_armed or self._post_action_done or not self.post_action_enabled.isChecked():
+            return
+        active_states = ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
+        if any(t.get("status") in active_states or t.get("status") == "Queued" for t in self.tasks.values()):
+            return
+        if not any(t.get("status") == "Completed" for t in self.tasks.values()):
+            return
+        action = self.post_action.currentData()
+        if action == "none":
+            self._post_action_done = True
+            return
+        if os.name != "nt":
+            self.status.setText("Post-download power actions are available on Windows only.")
+            self._post_action_done = True
+            return
+        import subprocess
+        commands = {
+            "shutdown": ["shutdown", "/s", "/t", "30"],
+            "logout": ["shutdown", "/l"],
+            "hibernate": ["shutdown", "/h"]
+        }
+        command = commands.get(action)
+        if command:
+            self._post_action_done = True
+            self.status.setText("All downloads finished. Windows action will run shortly.")
+            subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def update_torrent_upload_limit(self, value):
         for worker in self.workers.values():
