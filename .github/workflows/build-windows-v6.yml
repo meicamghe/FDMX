@@ -1,8 +1,8 @@
-name: Build GNS Downloader v6.1 for Windows
+name: Build GNS Downloader v6.2 for Windows
 on:
   workflow_dispatch:
   push:
-    branches: [v6.1]
+    branches: [v6.2]
   pull_request:
     branches: [main]
 permissions:
@@ -39,9 +39,9 @@ jobs:
           python create_icon.py
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 --collect-all libtorrent FDMX_v6_1.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 --collect-all libtorrent FDMX_v6_2.py
       - uses: actions/upload-artifact@v4
         with:
-          name: GNS-Downloader-Windows-v6.1
+          name: GNS-Downloader-Windows-v6.2
           path: dist/GNS-Downloader.exe
           if-no-files-found: error
