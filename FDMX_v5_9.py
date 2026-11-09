@@ -943,7 +943,6 @@ class FDMX(QWidget):
         self.hash_button = QPushButton("SHA-256")
         self.export_button = QPushButton("Export CSV")
         self.export_button.setToolTip("Export the download list to a CSV report")
-        self.export_button.clicked.connect(self.export_csv)
         self.open_button = QPushButton("Open folder")
         for button, callback in [
             (self.start_button, self.start_queue),
