@@ -12,6 +12,8 @@ import select
 import tempfile
 import shutil
 import datetime
+import secrets
+import http.server
 import urllib.request
 import urllib.parse
 from email.message import Message
@@ -24,12 +26,12 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
     QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
-    QDateTimeEdit, QCheckBox, QComboBox, QVBoxLayout as VBoxLayout
+    QDateTimeEdit, QCheckBox, QComboBox, QVBoxLayout as VBoxLayout, QStackedWidget
 )
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.2"
+APP_VERSION = "6.3"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -733,6 +735,8 @@ class DraggableTitleBar(QWidget):
 
 
 class FDMX(QWidget):
+    browser_url_received = Signal(str)
+
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -754,6 +758,8 @@ class FDMX(QWidget):
         self.load_tasks()
         self.build_ui()
         self.load_preferences()
+        self.browser_url_received.connect(self.add_url_from_browser)
+        self.start_browser_bridge()
         self.refresh_table()
         self.scheduler_timer = self.startTimer(400)
         self.start_queue()
@@ -817,8 +823,12 @@ class FDMX(QWidget):
     def toggle_maximize(self):
         if self.isMaximized():
             self.showNormal()
+            self.maximize_button.setText("□")
+            self.maximize_button.setToolTip("Maximize")
         else:
             self.showMaximized()
+            self.maximize_button.setText("❐")
+            self.maximize_button.setToolTip("Restore")
 
     def build_ui(self):
         outer = QHBoxLayout(self)
@@ -866,6 +876,24 @@ class FDMX(QWidget):
             self.nav_buttons[label] = button
             side.addWidget(button)
         self.nav_buttons["All downloads"].setChecked(True)
+        settings_title = QLabel("SETTINGS")
+        settings_title.setStyleSheet("font-size:9px;font-weight:800;color:#71839e;padding:14px 12px 3px;letter-spacing:1px;")
+        side.addWidget(settings_title)
+        self.section_buttons = {}
+        for label, symbol, key in [
+            ("Proxy", "⇄", "proxy"),
+            ("Torrent", "⇩", "torrent"),
+            ("Schedule", "◷", "schedule"),
+            ("Browser extension", "⌘", "browser"),
+        ]:
+            button = QPushButton(label)
+            button.setIcon(self.make_nav_icon(symbol))
+            button.setIconSize(QSize(20, 20))
+            button.setCursor(Qt.PointingHandCursor)
+            button.setCheckable(True)
+            button.clicked.connect(lambda checked=False, page=key: self.show_section(page))
+            self.section_buttons[key] = button
+            side.addWidget(button)
         side.addStretch()
         side_note = QLabel(f"GNS Downloader  •  Download Manager\\nVersion {APP_VERSION}")
         side_note.setStyleSheet("color:#71839e;font-size:9pt;padding:10px;")
@@ -998,7 +1026,11 @@ class FDMX(QWidget):
         self.close_button.setObjectName("macClose")
         self.close_button.setToolTip("Close")
         self.close_button.clicked.connect(self.close)
-        for control in (self.minimize_button, self.close_button):
+        self.maximize_button = QPushButton("□")
+        self.maximize_button.setObjectName("macMaximize")
+        self.maximize_button.setToolTip("Maximize")
+        self.maximize_button.clicked.connect(self.toggle_maximize)
+        for control in (self.minimize_button, self.maximize_button, self.close_button):
             control.setFixedSize(30, 30)
             control.setCursor(Qt.PointingHandCursor)
             title_row.addWidget(control)
@@ -1022,16 +1054,6 @@ class FDMX(QWidget):
         self.clipboard_button.setToolTip("Read a URL from the clipboard into the URL field")
         self.clipboard_button.clicked.connect(self.paste_clipboard_url)
         add_layout.addWidget(self.clipboard_button, 2, 1)
-        self.schedule_enabled = QCheckBox("Schedule start")
-        self.schedule_time = QDateTimeEdit(QDateTime.currentDateTime())
-        self.schedule_time.setCalendarPopup(True)
-        self.schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.schedule_time.setToolTip("The download remains queued until this local date and time")
-        add_layout.addWidget(self.schedule_enabled, 2, 2)
-        add_layout.addWidget(self.schedule_time, 3, 1, 1, 3)
-        self.add_torrent_button = QPushButton("Add .torrent")
-        self.add_torrent_button.clicked.connect(self.add_torrent_file)
-        add_layout.addWidget(self.add_torrent_button, 2, 3)
         self.add_button = QPushButton("Add to queue")
         self.add_button.clicked.connect(self.add_download)
         add_layout.addWidget(self.add_button, 2, 4)
@@ -1061,33 +1083,7 @@ class FDMX(QWidget):
         settings.addWidget(speed_limit_label, 0, 1)
         settings.addWidget(self.speed_limit, 1, 1)
 
-        torrent_limit_label = QLabel("Torrent upload limit (KB/s, 0 = unlimited):")
-        torrent_limit_label.setWordWrap(True)
-        self.torrent_upload_limit = QSpinBox()
-        self.torrent_upload_limit.setRange(0, 10_000_000)
-        self.torrent_upload_limit.setValue(1)
-        self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
-        self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
-        settings.addWidget(torrent_limit_label, 0, 2)
-        settings.addWidget(self.torrent_upload_limit, 1, 2)
         root.addLayout(settings)
-
-        extra_group = QGroupBox("Network & after-download actions")
-        extra = QGridLayout(extra_group)
-        self.proxy_enabled = QCheckBox("Use HTTP/HTTPS proxy")
-        self.proxy_url = QLineEdit()
-        self.proxy_url.setPlaceholderText("http://127.0.0.1:8080  (or http://user:pass@host:port)")
-        extra.addWidget(self.proxy_enabled, 0, 0)
-        extra.addWidget(self.proxy_url, 0, 1, 1, 3)
-        self.post_action_enabled = QCheckBox("After all downloads finish:")
-        self.post_action = QComboBox()
-        self.post_action.addItem("Do nothing", "none")
-        self.post_action.addItem("Shut down Windows", "shutdown")
-        self.post_action.addItem("Log out of Windows", "logout")
-        self.post_action.addItem("Hibernate Windows", "hibernate")
-        extra.addWidget(self.post_action_enabled, 1, 0)
-        extra.addWidget(self.post_action, 1, 1)
-        root.addWidget(extra_group)
 
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels([
@@ -1150,10 +1146,116 @@ class FDMX(QWidget):
         self.status.setStyleSheet("background:#151f30;border:1px solid #29364c;border-radius:8px;padding:10px 12px;color:#9fb4d1;")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
         root.addWidget(self.status)
-        outer.addWidget(content, 1)
+        root.removeWidget(title_bar)
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(6, 4, 6, 4)
+        shell_layout.setSpacing(10)
+        shell_layout.addWidget(title_bar)
+        self.page_stack = QStackedWidget()
+        self.page_stack.addWidget(content)
+        self._build_settings_pages()
+        shell_layout.addWidget(self.page_stack, 1)
+        outer.addWidget(shell, 1)
+
+    def _build_settings_pages(self):
+        proxy_page = QWidget()
+        proxy_layout = QVBoxLayout(proxy_page)
+        proxy_layout.addWidget(QLabel("Proxy settings"))
+        proxy_group = QGroupBox("HTTP / HTTPS proxy")
+        proxy_grid = QGridLayout(proxy_group)
+        self.proxy_enabled = QCheckBox("Enable proxy")
+        self.proxy_url = QLineEdit()
+        self.proxy_url.setPlaceholderText("http://127.0.0.1:8080  (optional user:password@host:port)")
+        proxy_grid.addWidget(self.proxy_enabled, 0, 0)
+        proxy_grid.addWidget(self.proxy_url, 0, 1)
+        proxy_layout.addWidget(proxy_group)
+        action_group = QGroupBox("After all downloads finish")
+        action_grid = QGridLayout(action_group)
+        self.post_action_enabled = QCheckBox("Enable action")
+        self.post_action = QComboBox()
+        self.post_action.addItem("Do nothing", "none")
+        self.post_action.addItem("Shut down Windows", "shutdown")
+        self.post_action.addItem("Log out of Windows", "logout")
+        self.post_action.addItem("Hibernate Windows", "hibernate")
+        action_grid.addWidget(self.post_action_enabled, 0, 0)
+        action_grid.addWidget(self.post_action, 0, 1)
+        proxy_layout.addWidget(action_group)
+        proxy_layout.addStretch()
+        self.page_stack.addWidget(proxy_page)
+
+        torrent_page = QWidget()
+        torrent_layout = QVBoxLayout(torrent_page)
+        torrent_layout.addWidget(QLabel("Torrent settings"))
+        torrent_group = QGroupBox("BitTorrent")
+        torrent_grid = QGridLayout(torrent_group)
+        self.add_torrent_button = QPushButton("Add .torrent file")
+        self.add_torrent_button.clicked.connect(self.add_torrent_file)
+        torrent_grid.addWidget(self.add_torrent_button, 0, 0)
+        torrent_grid.addWidget(QLabel("Upload limit (KB/s, 0 = unlimited):"), 1, 0)
+        self.torrent_upload_limit = QSpinBox()
+        self.torrent_upload_limit.setRange(0, 10_000_000)
+        self.torrent_upload_limit.setValue(1)
+        self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
+        self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
+        torrent_grid.addWidget(self.torrent_upload_limit, 1, 1)
+        torrent_layout.addWidget(torrent_group)
+        torrent_layout.addStretch()
+        self.page_stack.addWidget(torrent_page)
+
+        schedule_page = QWidget()
+        schedule_layout = QVBoxLayout(schedule_page)
+        schedule_layout.addWidget(QLabel("Download scheduling"))
+        schedule_group = QGroupBox("Start downloads at a selected date and time")
+        schedule_grid = QGridLayout(schedule_group)
+        self.schedule_enabled = QCheckBox("Enable schedule for the next download")
+        self.schedule_time = QDateTimeEdit(QDateTime.currentDateTime())
+        self.schedule_time.setCalendarPopup(True)
+        self.schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
+        schedule_grid.addWidget(self.schedule_enabled, 0, 0)
+        schedule_grid.addWidget(self.schedule_time, 0, 1)
+        schedule_layout.addWidget(schedule_group)
+        schedule_layout.addStretch()
+        self.page_stack.addWidget(schedule_page)
+
+        browser_page = QWidget()
+        browser_layout = QVBoxLayout(browser_page)
+        browser_layout.addWidget(QLabel("Browser integration"))
+        browser_group = QGroupBox("Chrome and Firefox extension")
+        browser_grid = QGridLayout(browser_group)
+        browser_grid.addWidget(QLabel("Local bridge: http://127.0.0.1:47831"), 0, 0, 1, 2)
+        browser_grid.addWidget(QLabel("Security token (paste into extension):"), 1, 0)
+        self.browser_token_edit = QLineEdit()
+        self.browser_token_edit.setReadOnly(True)
+        browser_grid.addWidget(self.browser_token_edit, 1, 1)
+        self.copy_browser_token = QPushButton("Copy token")
+        self.copy_browser_token.clicked.connect(lambda: QApplication.clipboard().setText(self.browser_token_edit.text()))
+        browser_grid.addWidget(self.copy_browser_token, 2, 1)
+        browser_grid.addWidget(QLabel("Chrome: load chrome folder as unpacked extension. Firefox: open about:debugging and load firefox/manifest.json."), 3, 0, 1, 2)
+        browser_layout.addWidget(browser_group)
+        browser_layout.addStretch()
+        self.page_stack.addWidget(browser_page)
+
+    def show_section(self, key):
+        indexes = {"proxy": 1, "torrent": 2, "schedule": 3, "browser": 4}
+        self.page_stack.setCurrentIndex(indexes[key])
+        for name, button in self.section_buttons.items():
+            button.setChecked(name == key)
+        for button in self.nav_buttons.values():
+            button.setChecked(False)
+
+    def show_downloads(self):
+        self.page_stack.setCurrentIndex(0)
+        for button in self.section_buttons.values():
+            button.setChecked(False)
+        self.nav_buttons["All downloads"].setChecked(True)
+        self.set_filter("All downloads")
 
     def set_filter(self, name):
         self.current_filter = name
+        self.page_stack.setCurrentIndex(0)
+        for section_button in self.section_buttons.values():
+            section_button.setChecked(False)
         for key, button in self.nav_buttons.items():
             button.setChecked(key == name)
         self.refresh_table()
@@ -1710,6 +1812,12 @@ class FDMX(QWidget):
     def load_preferences(self):
         """Restore user preferences saved by the previous session."""
         self.settings = QSettings("GNS", "FDMX")
+        token = self.settings.value("browser_token", "", type=str)
+        if not token:
+            token = secrets.token_urlsafe(32)
+            self.settings.setValue("browser_token", token)
+        self.browser_token = token
+        self.browser_token_edit.setText(token)
         self.max_downloads.setValue(self.settings.value("max_downloads", 8, type=int))
         self.speed_limit.setValue(self.settings.value("speed_limit", 0, type=int))
         self.torrent_upload_limit.setValue(self.settings.value("torrent_upload_limit", 1, type=int))
@@ -1744,6 +1852,68 @@ class FDMX(QWidget):
         self.settings.setValue("post_action", self.post_action.currentData())
         self.settings.sync()
         self.apply_proxy_settings()
+
+    def add_url_from_browser(self, url):
+        self.show_downloads()
+        self.url.setText(url)
+        self.add_download()
+        self.status.setText("Link received from browser extension.")
+
+    def start_browser_bridge(self):
+        window = self
+        token = self.browser_token
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _send(self, code, payload, origin=""):
+                data = json.dumps(payload).encode("utf-8")
+                self.send_response(code)
+                if origin.startswith(("chrome-extension://", "moz-extension://")):
+                    self.send_header("Access-Control-Allow-Origin", origin)
+                    self.send_header("Vary", "Origin")
+                    self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+                    self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "0" if code == 204 else str(len(data)))
+                self.end_headers()
+                if code != 204 and data:
+                    self.wfile.write(data)
+
+            def do_OPTIONS(self):
+                self._send(204, {}, self.headers.get("Origin", ""))
+
+            def do_POST(self):
+                if self.path != "/add":
+                    self._send(404, {"ok": False, "error": "Unknown endpoint"})
+                    return
+                origin = self.headers.get("Origin", "")
+                auth = self.headers.get("Authorization", "")
+                if not secrets.compare_digest(auth, "Bearer " + token):
+                    self._send(403, {"ok": False, "error": "Invalid token"}, origin)
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                    url = str(payload.get("url", "")).strip()
+                    parsed = urllib.parse.urlsplit(url)
+                    if not (url.lower().startswith("magnet:?") or (parsed.scheme in ("http", "https") and parsed.netloc)):
+                        raise ValueError("Only HTTP, HTTPS and magnet links are accepted.")
+                    window.browser_url_received.emit(url)
+                    self._send(200, {"ok": True, "message": "URL sent to GNS Downloader"}, origin)
+                except Exception as exc:
+                    self._send(400, {"ok": False, "error": str(exc)}, origin)
+
+            def log_message(self, fmt, *args):
+                return
+
+        try:
+            self.browser_server = http.server.ThreadingHTTPServer(("127.0.0.1", 47831), Handler)
+            self.browser_server.daemon_threads = True
+            self.browser_thread = threading.Thread(target=self.browser_server.serve_forever, daemon=True)
+            self.browser_thread.start()
+        except OSError as exc:
+            self.browser_server = None
+            self.status.setText(f"Browser bridge unavailable: {exc}")
 
     def apply_proxy_settings(self):
         """Apply the optional HTTP/HTTPS proxy to urllib-based downloads."""
@@ -1850,6 +2020,9 @@ class FDMX(QWidget):
         self.schedule_downloads()
 
     def closeEvent(self, event):
+        if getattr(self, "browser_server", None):
+            self.browser_server.shutdown()
+            self.browser_server.server_close()
         active = [
             task for task in self.tasks.values()
             if task.get("worker") and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
