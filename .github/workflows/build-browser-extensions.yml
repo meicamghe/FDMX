@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate desktop bridge syntax
+        run: python -m py_compile FDMX_v6_3.py
       - name: Package Chrome extension
         run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome.zip .
       - name: Package Firefox XPI
