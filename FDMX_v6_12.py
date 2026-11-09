@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.12"
+APP_VERSION = "6.13"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -882,6 +882,12 @@ class WebsitePageParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
+        srcset = values.get("srcset", "")
+        if srcset:
+            for candidate in srcset.split(","):
+                candidate_url = candidate.strip().split(" ")[0]
+                if candidate_url:
+                    self.links.add(candidate_url)
         for attr in self.RESOURCE_ATTRS:
             value = values.get(attr)
             if value:
@@ -900,32 +906,88 @@ class WebsiteScanWorker(QThread):
     finished_scan = Signal(int)
     failed_scan = Signal(str)
 
-    def __init__(self, start_url, include_external=False, max_pages=500, max_depth=3):
+    def __init__(self, start_url, include_external=False, max_pages=500, max_depth=4):
         super().__init__()
-        self.start_url = start_url
+        self.start_url = self.prepare_url(start_url)
         self.include_external = include_external
         self.max_pages = max_pages
         self.max_depth = max_depth
         self._stop = threading.Event()
         self.seen_pages = set()
         self.seen_resources = set()
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.8"
+        }
+
+    @staticmethod
+    def prepare_url(url):
+        url = (url or "").strip()
+        if not re.match(r"(?i)^https?://", url):
+            url = "https://" + url.lstrip("/")
+        return WebsiteScanWorker.normalize_url(url)
+
+    @staticmethod
+    def normalize_url(url):
+        try:
+            parsed = urllib.parse.urlsplit(url.strip())
+            if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+                return ""
+            return urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(),
+                                            parsed.path or "/", parsed.query, ""))
+        except Exception:
+            return ""
 
     def stop(self):
         self._stop.set()
 
-    @staticmethod
-    def normalize_url(url):
+    def _open(self, url, method="GET", read_limit=0):
+        request = urllib.request.Request(url, headers=self.headers, method=method)
+        response = urllib.request.urlopen(request, timeout=18)
+        if read_limit:
+            data = response.read(read_limit)
+        else:
+            data = b""
+        return response, data
+
+    def _fetch_page(self, url):
+        candidates = [url]
         parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
-            return ""
-        return urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(),
-                                        parsed.path or "/", parsed.query, ""))
+        alternate = ("http" if parsed.scheme == "https" else "https")
+        candidates.append(urllib.parse.urlunsplit((alternate, parsed.netloc, parsed.path, parsed.query, "")))
+        last_error = None
+        for candidate in candidates:
+            try:
+                response, data = self._open(candidate, "GET", 4 * 1024 * 1024)
+                final_url = self.normalize_url(response.geturl())
+                content_type = response.headers.get("Content-Type", "").lower()
+                charset = response.headers.get_content_charset() or "utf-8"
+                response.close()
+                return final_url, content_type, data, charset
+            except Exception as exc:
+                last_error = exc
+        raise last_error or OSError("Unable to open URL")
+
+    def _probe_link(self, url):
+        """Use response headers to distinguish extensionless files from HTML pages."""
+        for method in ("HEAD", "GET"):
+            try:
+                response, data = self._open(url, method, 2048 if method == "GET" else 0)
+                final_url = self.normalize_url(response.geturl())
+                content_type = response.headers.get("Content-Type", "").lower()
+                response.close()
+                return final_url or url, content_type
+            except Exception:
+                continue
+        return url, ""
 
     def run(self):
         try:
+            if not self.start_url:
+                raise ValueError("Enter a valid website address.")
             base_host = (urllib.parse.urlsplit(self.start_url).hostname or "").lower()
             queue = [(self.start_url, 0)]
-            headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION} WebsiteScanner"}
             while queue and len(self.seen_pages) < self.max_pages and not self._stop.is_set():
                 page_url, depth = queue.pop(0)
                 page_url = self.normalize_url(page_url)
@@ -935,52 +997,71 @@ class WebsiteScanWorker(QThread):
                 if not self.include_external and host != base_host:
                     continue
                 self.seen_pages.add(page_url)
-                self.progress.emit(f"Scanning {len(self.seen_pages)} pages: {page_url}")
-                request = urllib.request.Request(page_url, headers=headers)
+                self.progress.emit(f"Scanning {len(self.seen_pages)}/{self.max_pages}: {page_url}")
                 try:
-                    with urllib.request.urlopen(request, timeout=15) as response:
-                        final_url = self.normalize_url(response.geturl())
-                        content_type = response.headers.get("Content-Type", "").lower()
-                        if not final_url:
-                            continue
-                        if "text/html" not in content_type and not final_url.lower().endswith((".html", ".htm", "/")):
-                            self._add_resource(final_url, response.headers.get("Content-Type", ""))
-                            continue
-                        raw = response.read(3 * 1024 * 1024)
-                        charset = response.headers.get_content_charset() or "utf-8"
-                    try:
-                        html = raw.decode(charset, errors="replace")
-                    except LookupError:
-                        html = raw.decode("utf-8", errors="replace")
-                    parser = WebsitePageParser()
-                    parser.feed(html)
-                    # CSS url(...) references are also useful downloadable resources.
-                    for match in re.findall(r"url\(['\"]?(.*?)['\"]?\)", html, flags=re.I):
-                        if match and not match.startswith("data:"):
-                            parser.links.add(match.strip())
-                    for raw_link in parser.links:
-                        absolute = urllib.parse.urljoin(final_url, raw_link)
-                        absolute = self.normalize_url(absolute)
-                        if not absolute:
-                            continue
-                        parsed = urllib.parse.urlsplit(absolute)
-                        link_host = (parsed.hostname or "").lower()
-                        if not self.include_external and link_host != base_host:
-                            continue
-                        path = parsed.path.lower()
-                        looks_like_page = (not os.path.splitext(path)[1] or
-                                           path.endswith((".html", ".htm", ".php", ".asp", ".aspx")))
-                        if looks_like_page and depth < self.max_depth:
-                            if absolute not in self.seen_pages:
-                                queue.append((absolute, depth + 1))
-                        else:
-                            self._add_resource(absolute, "")
-                except Exception:
-                    # A single inaccessible page should not abort the site scan.
+                    final_url, content_type, raw, charset = self._fetch_page(page_url)
+                except Exception as exc:
+                    self.progress.emit(f"Skipped inaccessible page: {page_url} ({exc})")
                     continue
+                if not final_url:
+                    continue
+                if "html" not in content_type and "xhtml" not in content_type:
+                    self._add_resource(final_url, content_type)
+                    continue
+                try:
+                    html = raw.decode(charset, errors="replace")
+                except LookupError:
+                    html = raw.decode("utf-8", errors="replace")
+                parser = WebsitePageParser()
+                parser.feed(html)
+                links = set(parser.links)
+                # Discover resources referenced from inline CSS and stylesheets.
+                for match in re.findall(r"url\(['""]?(.*?)['""]?\)", html, flags=re.I):
+                    if match and not match.strip().startswith("data:"):
+                        links.add(match.strip())
+                for raw_link in links:
+                    if self._stop.is_set():
+                        break
+                    absolute = self.normalize_url(urllib.parse.urljoin(final_url, raw_link))
+                    if not absolute:
+                        continue
+                    parsed = urllib.parse.urlsplit(absolute)
+                    link_host = (parsed.hostname or "").lower()
+                    if not self.include_external and link_host != base_host:
+                        continue
+                    path = urllib.parse.unquote(parsed.path).lower()
+                    ext = os.path.splitext(path)[1]
+                    if ext:
+                        self._add_resource(absolute, mimetypes.guess_type(path)[0] or "")
+                        # CSS and JS can contain more resources; scan CSS itself below.
+                        if ext == ".css":
+                            self._scan_css(absolute)
+                        continue
+                    # Extensionless URLs can be pages OR files; ask the server.
+                    checked_url, checked_type = self._probe_link(absolute)
+                    if "html" in checked_type or "xhtml" in checked_type or not checked_type:
+                        if depth < self.max_depth and checked_url not in self.seen_pages:
+                            queue.append((checked_url, depth + 1))
+                    else:
+                        self._add_resource(checked_url, checked_type)
             self.finished_scan.emit(len(self.seen_resources))
         except Exception as exc:
             self.failed_scan.emit(str(exc))
+
+    def _scan_css(self, css_url):
+        try:
+            response, raw = self._open(css_url, "GET", 2 * 1024 * 1024)
+            base = response.geturl()
+            response.close()
+            text = raw.decode("utf-8", errors="replace")
+            for match in re.findall(r"url\(['""]?(.*?)['""]?\)", text, flags=re.I):
+                value = match.strip().strip("'""")
+                if value and not value.startswith("data:"):
+                    target = self.normalize_url(urllib.parse.urljoin(base, value))
+                    if target:
+                        self._add_resource(target, mimetypes.guess_type(target)[0] or "")
+        except Exception:
+            pass
 
     def _add_resource(self, url, content_type):
         if url in self.seen_resources:
@@ -988,11 +1069,11 @@ class WebsiteScanWorker(QThread):
         self.seen_resources.add(url)
         parsed = urllib.parse.urlsplit(url)
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "index"
-        if not os.path.splitext(name)[1] and content_type:
-            ext = mimetypes.guess_extension(content_type.split(";")[0].strip())
-            if ext:
-                name += ext
-        self.found.emit(url, name, content_type or "Unknown")
+        if not os.path.splitext(name)[1]:
+            guessed = mimetypes.guess_extension(content_type.split(";")[0].strip()) if content_type else None
+            if guessed:
+                name += guessed
+        self.found.emit(url, name, content_type or mimetypes.guess_type(name)[0] or "Unknown")
 
 
 class WebsiteDownloaderDialog(QDialog):
@@ -1033,6 +1114,20 @@ class WebsiteDownloaderDialog(QDialog):
         options.addStretch(1)
         layout.addLayout(options)
 
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("File category:"))
+        self.category_filter = QComboBox()
+        self.category_filter.addItems(["All files", "Images", "Video", "Audio", "Documents", "Archives", "Programs", "Web files", "Other"])
+        self.category_filter.currentTextChanged.connect(self.apply_filters)
+        filter_row.addWidget(self.category_filter)
+        filter_row.addWidget(QLabel("Extension:"))
+        self.extension_filter = QComboBox()
+        self.extension_filter.addItem("All extensions")
+        self.extension_filter.currentTextChanged.connect(self.apply_filters)
+        filter_row.addWidget(self.extension_filter)
+        filter_row.addStretch(1)
+        layout.addLayout(filter_row)
+
         self.status = QLabel("No scan started.")
         layout.addWidget(self.status)
         self.results = QTableWidget(0, 4)
@@ -1072,6 +1167,10 @@ class WebsiteDownloaderDialog(QDialog):
             self.worker.stop()
             self.worker.wait(1500)
         self.results.setRowCount(0)
+        self.extension_filter.blockSignals(True)
+        self.extension_filter.clear()
+        self.extension_filter.addItem("All extensions")
+        self.extension_filter.blockSignals(False)
         self.download_button.setEnabled(False)
         self.scan_button.setEnabled(False)
         self.status.setText("Starting scan…")
@@ -1090,9 +1189,53 @@ class WebsiteDownloaderDialog(QDialog):
         check.setCheckState(Qt.Unchecked)
         check.setData(Qt.UserRole, url)
         self.results.setItem(row, 0, check)
-        self.results.setItem(row, 1, QTableWidgetItem(name))
+        name_item = QTableWidgetItem(name)
+        ext = os.path.splitext(name.lower())[1] or "(no extension)"
+        name_item.setData(Qt.UserRole, ext)
+        self.results.setItem(row, 1, name_item)
         self.results.setItem(row, 2, QTableWidgetItem(content_type))
         self.results.setItem(row, 3, QTableWidgetItem(url))
+        existing = [self.extension_filter.itemText(i) for i in range(self.extension_filter.count())]
+        if ext not in existing:
+            self.extension_filter.addItem(ext)
+        self.apply_filters()
+
+    @staticmethod
+    def file_category(name, content_type):
+        ext = os.path.splitext(name.lower())[1]
+        mime = (content_type or "").lower()
+        groups = {
+            "Images": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".ico", ".tif", ".tiff", ".avif"},
+            "Video": {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp"},
+            "Audio": {".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a", ".wma", ".opus"},
+            "Documents": {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt", ".csv"},
+            "Archives": {".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso"},
+            "Programs": {".exe", ".msi", ".apk", ".dmg", ".deb", ".rpm", ".jar", ". AppImage".strip()},
+            "Web files": {".html", ".htm", ".css", ".js", ".mjs", ".json", ".xml", ".woff", ".woff2", ".ttf", ".otf"}
+        }
+        for category, extensions in groups.items():
+            if ext in extensions:
+                return category
+        if mime.startswith("image/"): return "Images"
+        if mime.startswith("video/"): return "Video"
+        if mime.startswith("audio/"): return "Audio"
+        if mime in ("application/pdf",): return "Documents"
+        if mime.startswith(("application/zip", "application/x-rar", "application/x-7z")): return "Archives"
+        if mime.startswith(("text/", "application/javascript", "application/json")): return "Web files"
+        return "Other"
+
+    def apply_filters(self):
+        category = self.category_filter.currentText()
+        extension = self.extension_filter.currentText()
+        for row in range(self.results.rowCount()):
+            name_item = self.results.item(row, 1)
+            type_item = self.results.item(row, 2)
+            row_ext = name_item.data(Qt.UserRole) if name_item else ""
+            row_category = self.file_category(name_item.text() if name_item else "",
+                                              type_item.text() if type_item else "")
+            visible = (category == "All files" or category == row_category)
+            visible = visible and (extension == "All extensions" or extension == row_ext)
+            self.results.setRowHidden(row, not visible)
 
     def scan_finished(self, count):
         self.scan_button.setEnabled(True)
