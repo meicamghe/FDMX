@@ -14,6 +14,7 @@ import shutil
 import datetime
 import urllib.request
 import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -733,6 +734,8 @@ class DraggableTitleBar(QWidget):
 
 
 class FDMX(QWidget):
+    browser_download_requested = Signal(str)
+
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -754,6 +757,8 @@ class FDMX(QWidget):
         self.load_tasks()
         self.build_ui()
         self.load_preferences()
+        self.browser_download_requested.connect(self.add_download_from_browser)
+        self.start_browser_bridge()
         self.refresh_table()
         self.scheduler_timer = self.startTimer(400)
         self.start_queue()
@@ -1283,6 +1288,75 @@ class FDMX(QWidget):
             self.status.setText("URL read from clipboard.")
         else:
             self.status.setText("Clipboard is empty.")
+
+
+    def start_browser_bridge(self):
+        """Local-only HTTP bridge used by the official Firefox and Chrome extensions."""
+        window = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _send(self, code, payload):
+                data = json.dumps(payload).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "null"))
+                self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Vary", "Origin")
+                self.end_headers()
+                self.wfile.write(data)
+
+            def _allowed_origin(self):
+                origin = self.headers.get("Origin", "")
+                return origin.startswith("moz-extension://") or origin.startswith("chrome-extension://")
+
+            def do_OPTIONS(self):
+                if not self._allowed_origin():
+                    self._send(403, {"ok": False, "error": "Extension origin required"})
+                    return
+                self._send(204, {"ok": True})
+
+            def do_GET(self):
+                if self.path == "/health":
+                    self._send(200, {"ok": True, "app": "FDMX", "version": APP_VERSION})
+                else:
+                    self._send(404, {"ok": False, "error": "Not found"})
+
+            def do_POST(self):
+                if self.path != "/download" or not self._allowed_origin():
+                    self._send(403, {"ok": False, "error": "Not allowed"})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length < 1 or length > 65536:
+                        raise ValueError("Invalid request size")
+                    payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                    url = str(payload.get("url", "")).strip()
+                    parsed = urllib.parse.urlsplit(url)
+                    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                        raise ValueError("Only HTTP and HTTPS links are supported")
+                    window.browser_download_requested.emit(url)
+                    self._send(202, {"ok": True, "message": "Added to FDMX queue"})
+                except Exception as exc:
+                    self._send(400, {"ok": False, "error": str(exc)})
+
+            def log_message(self, fmt, *args):
+                return
+
+        try:
+            self._browser_server = ThreadingHTTPServer(("127.0.0.1", 38471), Handler)
+            self._browser_server.daemon_threads = True
+            self._browser_thread = threading.Thread(target=self._browser_server.serve_forever, daemon=True)
+            self._browser_thread.start()
+        except OSError as exc:
+            self._browser_server = None
+            self.status.setText(f"Browser bridge unavailable: {exc}")
+
+    def add_download_from_browser(self, url):
+        """Queue a browser-submitted URL using the current download folder."""
+        self.url.setText(url)
+        self.add_download()
 
     def add_download(self):
         url = self.url.text().strip()
@@ -1869,6 +1943,9 @@ class FDMX(QWidget):
                 task["worker"].wait(3000)
         self.save_preferences()
         self.save_tasks()
+        if getattr(self, '_browser_server', None):
+            self._browser_server.shutdown()
+            self._browser_server.server_close()
         event.accept()
 
 
