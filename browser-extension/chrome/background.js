@@ -1,5 +1,7 @@
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({id:"send-link-to-fdmx",title:"Download link with GNS Downloader",contexts:["link"]});
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({id:"send-link-to-fdmx",title:"Download link with GNS Downloader",contexts:["link"]});
+  });
 });
 chrome.contextMenus.onClicked.addListener(async(info) => {
   if(info.menuItemId !== "send-link-to-fdmx" || !info.linkUrl) return;
