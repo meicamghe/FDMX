@@ -747,6 +747,7 @@ class FDMX(QWidget):
         self._loading = False
         self._post_action_armed = False
         self._post_action_done = False
+        self._session_task_ids = set()
         self.current_filter = "All downloads"
         self.search_query = ""
         self.load_history()
@@ -1299,6 +1300,7 @@ class FDMX(QWidget):
             return
         os.makedirs(folder, exist_ok=True)
         task_id = uuid.uuid4().hex
+        self._session_task_ids.add(task_id)
         self.tasks[task_id] = {
             "id": task_id, "url": url, "folder": folder,
             "name": os.path.basename(urllib.parse.unquote(parsed.path)) or "Download",
@@ -1331,15 +1333,19 @@ class FDMX(QWidget):
         if os.path.isfile(source):
             name = os.path.basename(source)
         task_id = uuid.uuid4().hex
+        self._session_task_ids.add(task_id)
         self.tasks[task_id] = {
             "id": task_id, "url": source, "folder": folder, "name": name,
             "status": "Queued", "downloaded": 0, "total": 0, "speed": 0.0,
             "eta": -1.0, "path": "", "worker": None, "history": False,
-            "kind": "torrent", "category": "Torrent", "upload_speed": 0.0
+            "kind": "torrent", "category": "Torrent", "upload_speed": 0.0,
+            "scheduled_at": self.schedule_time.dateTime().toString(Qt.ISODate) if self.schedule_enabled.isChecked() else ""
         }
+        self._post_action_armed = True
+        self._post_action_done = False
         self.save_tasks()
         self.refresh_table()
-        self.status.setText("Torrent added to queue.")
+        self.status.setText("Scheduled torrent added to queue." if self.schedule_enabled.isChecked() else "Torrent added to queue.")
         self.start_queue()
     def start_queue(self):
         self.schedule_downloads()
@@ -1746,15 +1752,18 @@ class FDMX(QWidget):
             handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
             urllib.request.install_opener(urllib.request.build_opener(handler))
         else:
-            urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+            urllib.request.install_opener(urllib.request.build_opener())
 
     def check_after_download_action(self):
         if not self._post_action_armed or self._post_action_done or not self.post_action_enabled.isChecked():
             return
         active_states = ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
-        if any(t.get("status") in active_states or t.get("status") == "Queued" for t in self.tasks.values()):
+        session_tasks = [self.tasks[tid] for tid in self._session_task_ids if tid in self.tasks]
+        if not session_tasks:
             return
-        if not any(t.get("status") == "Completed" for t in self.tasks.values()):
+        if any(t.get("status") in active_states or t.get("status") == "Queued" for t in session_tasks):
+            return
+        if not any(t.get("status") == "Completed" for t in session_tasks):
             return
         action = self.post_action.currentData()
         if action == "none":
