@@ -979,10 +979,10 @@ class FDMX(QWidget):
         settings_buttons.addWidget(settings_close)
         settings_layout.addLayout(settings_buttons)
 
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels([
-            "File / Progress", "Category", "Status", "Downloaded / Size",
-            "Speed", "Time left", "Location"
+            "File / Progress", "Status", "Downloaded / Size",
+            "Speed", "Time left"
         ])
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -991,9 +991,8 @@ class FDMX(QWidget):
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col in range(1, 6):
+        for col in range(1, 5):
             header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.Stretch)
         root.addWidget(self.table, 1)
         self.table.cellDoubleClicked.connect(self.open_or_show_download)
 
@@ -1515,37 +1514,41 @@ class FDMX(QWidget):
 
     def fill_row(self, row, task):
         values = [
-            task["name"], task.get("category") or category_for_filename(task["name"]), task["status"],
-            f'{format_bytes(task["downloaded"])} / {format_bytes(task["total"])}' if task["total"] else format_bytes(task["downloaded"]),
-            format_bytes(task["speed"]) + "/s",
-            format_duration(task["eta"]),
-            task["folder"]
+            task['name'], task['status'],
+            f"{format_bytes(task['downloaded'])} / {format_bytes(task['total'])}" if task['total'] else format_bytes(task['downloaded']),
+            format_bytes(task['speed']) + '/s',
+            format_duration(task['eta'])
         ]
         hover_text = self.parts_tooltip(task)
         for col, value in enumerate(values):
             item = QTableWidgetItem(value)
             item.setToolTip(hover_text)
             if col == 0:
-                item.setData(Qt.UserRole, task["id"])
-            if col in (3, 4, 5):
+                item.setData(Qt.UserRole, task['id'])
+            if col in (2, 3, 4):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
+
+        category = task.get('category') or category_for_filename(task['name'])
+        type_icons = {'Video': '🎬', 'Audio': '🎵', 'Documents': '📄', 'Compressed': '📦', 'Programs': '💿', 'Other': '📁'}
+        icon = type_icons.get(category, '📁')
         bar = QProgressBar()
         bar.setRange(0, 100)
-        percent = int(task["downloaded"] * 100 / task["total"]) if task["total"] else 0
+        percent = int(task['downloaded'] * 100 / task['total']) if task['total'] else 0
         bar.setValue(min(100, percent))
+        bar.setFormat(f'{min(100, percent)}%')
         bar.setToolTip(hover_text)
-        name_label = QLabel(task["name"])
-        name_label.setStyleSheet("font-weight:700;color:#f1f5f9;padding-left:3px;")
+        name_label = QLabel(f"{icon}  {task['name']}")
+        name_label.setStyleSheet('font-weight:600;padding-left:3px;')
         name_label.setToolTip(hover_text)
         file_cell = QWidget()
         file_layout = VBoxLayout(file_cell)
         file_layout.setContentsMargins(4, 3, 4, 3)
-        file_layout.setSpacing(3)
+        file_layout.setSpacing(2)
         file_layout.addWidget(name_label)
         file_layout.addWidget(bar)
         self.table.setCellWidget(row, 0, file_cell)
-        self.table.setRowHeight(row, 54)
+        self.table.setRowHeight(row, 58)
 
     def update_details(self):
         task_id = self.selected_task()
