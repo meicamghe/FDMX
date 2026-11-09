@@ -1107,11 +1107,11 @@ class WebsiteScanWorker(QThread):
                     lower_html = html.lower()
                     complexity = sum((
                         len(links) >= 8,
-                        len(re.findall(r"<form\\b", lower_html)) >= 1,
-                        len(re.findall(r"<script\\b", lower_html)) >= 2,
+                        len(re.findall(r"<form\b", lower_html)) >= 1,
+                        len(re.findall(r"<script\b", lower_html)) >= 2,
                         any(token in lower_html for token in ("<nav", "application/json", "__next_data__", "wp-content", "data-reactroot", "ng-version")),
                         len(html) >= 18000,
-                        len(re.findall(r"<(?:article|section|main)\\b", lower_html)) >= 2
+                        len(re.findall(r"<(?:article|section|main)\b", lower_html)) >= 2
                     ))
                     if complexity < 2:
                         self.progress.emit(f"Skipped simple page: {page_url}")
