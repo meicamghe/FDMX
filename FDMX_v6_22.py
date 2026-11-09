@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.22"
+APP_VERSION = "6.23"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -2845,7 +2845,12 @@ class FDMX(QWidget):
             ("OLED Black", "oled"), ("Nord Frost", "nord"),
             ("Dracula", "dracula"), ("Cyber Neon", "cyber"),
             ("macOS Sonoma", "sonoma"), ("Windows 11 Fluent", "fluent"),
-            ("Solarized", "solarized"), ("Rose Pine", "rose")
+            ("Solarized", "solarized"), ("Rose Pine", "rose"),
+            ("Aero Glass Blue", "aero_blue"),
+            ("Aero Glass Light", "aero_light"),
+            ("Crystal White", "crystal"),
+            ("Aero Glass Sunset", "aero_sunset"),
+            ("Aero Glass Dark", "aero_dark")
         ]
         for label, key in theme_presets:
             self.theme_combo.addItem(label, key)
@@ -3077,10 +3082,15 @@ class FDMX(QWidget):
             "sonoma": ("#20232b", "#292e38", "#343b48", "#f5f6fa", "#b6bfce", "#8b9cff", "#ffffff", "#4a5262"),
             "fluent": ("#f3f5f9", "#ffffff", "#e8edf5", "#1d2635", "#66758b", "#536fcb", "#ffffff", "#d5ddeb"),
             "solarized": ("#002b36", "#073642", "#164752", "#eee8d5", "#93a1a1", "#2aa198", "#002b36", "#586e75"),
-            "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86")
+            "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86"),
+            "aero_blue": ("#d9efff", "#eaf7ff", "#ffffff", "#18364f", "#54738b", "#269fe8", "#ffffff", "#a9d8f4"),
+            "aero_light": ("#e9f4fa", "#f8fcff", "#ffffff", "#263d4d", "#688294", "#4b9fc8", "#ffffff", "#c2dce9"),
+            "crystal": ("#eef2f7", "#ffffff", "#f9fcff", "#263344", "#718096", "#6b9ed8", "#ffffff", "#d2deeb"),
+            "aero_sunset": ("#fff0ed", "#fff8f5", "#ffffff", "#54384a", "#927286", "#d77ca7", "#ffffff", "#f0c7d8"),
+            "aero_dark": ("#172638", "#20364c", "#2b4962", "#eff8ff", "#b5d0e2", "#58c4f5", "#10283a", "#527b98")
         }
         bg, panel, raised, fg, muted, accent, accent_text, border = palettes.get(theme, palettes["dark"])
-        is_light = theme in ("light", "fluent")
+        is_light = theme in ("light", "fluent", "aero_blue", "aero_light", "crystal", "aero_sunset")
         selection = accent
         self._active_theme_palette = {
             "background": bg, "panel": panel, "raised": raised,
@@ -3164,10 +3174,84 @@ class FDMX(QWidget):
             QToolButton {{ background: {raised}; color: {fg}; border: 1px solid {border}; border-radius: 7px; padding: 6px; }}
             QToolButton:hover {{ background: {accent}; color: {accent_text}; }}
         """
+        # Aero Glass presets use layered gradients, translucent-looking surfaces,
+        # bright inner highlights and bevel-like borders. Qt stylesheets do not
+        # provide true desktop backdrop blur; this is a lightweight glass visual.
+        glass_qss = ""
+        if theme.startswith("aero_") or theme == "crystal":
+            if theme == "aero_blue":
+                base_a, base_b = "#cceaff", "#f4fbff"
+                surface_a, surface_b = "rgba(255,255,255,0.88)", "rgba(220,242,255,0.78)"
+                edge, glow = "#ffffff", "#65bff0"
+            elif theme == "aero_light":
+                base_a, base_b = "#dcecf5", "#f9fdff"
+                surface_a, surface_b = "rgba(255,255,255,0.92)", "rgba(230,244,250,0.82)"
+                edge, glow = "#ffffff", "#8bc7e2"
+            elif theme == "crystal":
+                base_a, base_b = "#e2eaf3", "#ffffff"
+                surface_a, surface_b = "rgba(255,255,255,0.96)", "rgba(238,245,252,0.88)"
+                edge, glow = "#ffffff", "#9bbce0"
+            elif theme == "aero_sunset":
+                base_a, base_b = "#f8dce8", "#fff8f2"
+                surface_a, surface_b = "rgba(255,255,255,0.92)", "rgba(255,232,239,0.82)"
+                edge, glow = "#ffffff", "#e6a0bd"
+            else:
+                base_a, base_b = "#102338", "#294a65"
+                surface_a, surface_b = "rgba(91,133,164,0.42)", "rgba(25,49,70,0.88)"
+                edge, glow = "#9bdcff", "#45bdf5"
+            glass_qss = f"""
+                QWidget {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {base_a}, stop:1 {base_b}); }}
+                QMainWindow, QDialog {{ border: 1px solid {edge}; }}
+                QTabWidget::pane, QGroupBox {{
+                    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {surface_a}, stop:1 {surface_b});
+                    border: 1px solid {edge}; border-radius: 13px;
+                }}
+                QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QComboBox,
+                QTextEdit, QTableWidget, QListWidget {{
+                    background: {surface_a}; border: 1px solid {edge};
+                    border-top-color: #ffffff; border-radius: 10px;
+                }}
+                QPushButton, QToolButton {{
+                    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                        stop:0 #ffffff, stop:0.48 {surface_a}, stop:1 {surface_b});
+                    border: 1px solid {edge}; border-top: 2px solid #ffffff;
+                    border-bottom: 2px solid {glow}; border-radius: 11px;
+                    padding: 8px 16px; font-weight: 600;
+                }}
+                QPushButton:hover, QToolButton:hover {{
+                    background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                        stop:0 #ffffff, stop:1 {glow});
+                    border: 1px solid {glow};
+                }}
+                QPushButton:pressed, QToolButton:pressed {{
+                    background: {surface_b}; border-top: 2px solid {glow};
+                    border-bottom: 1px solid {edge}; padding-top: 9px;
+                }}
+                QTabBar::tab {{
+                    background: {surface_b}; border: 1px solid {edge};
+                    border-radius: 9px; padding: 9px 16px; margin: 3px;
+                }}
+                QTabBar::tab:selected {{
+                    background: {surface_a}; border: 2px solid {glow};
+                    color: {accent}; font-weight: 700;
+                }}
+                QHeaderView::section {{
+                    background: {surface_b}; border: 0;
+                    border-bottom: 1px solid {edge}; padding: 8px;
+                }}
+                QProgressBar {{
+                    background: {surface_b}; border: 1px solid {edge};
+                    border-radius: 8px; text-align: center;
+                }}
+                QProgressBar::chunk {{
+                    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                        stop:0 {accent}, stop:1 {glow}); border-radius: 7px;
+                }}
+            """
         app = QApplication.instance()
         if app:
             app.setStyle("Fusion")
-            app.setStyleSheet(qss)
+            app.setStyleSheet(qss + glass_qss)
         if hasattr(self, "settings"):
             self.settings.setValue("theme", theme)
             self.settings.sync()
@@ -3176,9 +3260,14 @@ class FDMX(QWidget):
                 f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
                 "Theme applied to the entire FDMX interface"
             )
+            preview_background = (
+                f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
+                if theme.startswith("aero_") or theme == "crystal" else panel
+            )
             self.theme_preview.setStyleSheet(
-                f"background:{panel}; color:{fg}; border:1px solid {accent}; "
-                "border-radius:12px; padding:22px; font-size:12pt; font-weight:600;"
+                f"background:{preview_background}; color:{fg}; border:2px solid {accent}; "
+                "border-top:2px solid white; border-radius:16px; padding:22px; "
+                "font-size:12pt; font-weight:600;"
             )
 
     def refresh_analytics(self):
