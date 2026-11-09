@@ -1,6 +1,6 @@
 # FDMX — Download Manager
 
-**FDMX** is a Python desktop download manager built with **PySide6**. The project includes a Windows-focused desktop application, an Ubuntu-themed interface variant, and browser extensions for Chrome and Firefox.
+**FDMX** is a Python desktop download manager built with **PySide6**. [راهنمای فارسی نصب و استفاده](docs/README_FA.md) is also available. The project includes a Windows-focused desktop application, an Ubuntu-themed interface variant, and browser extensions for Chrome and Firefox.
 
 > Project status: actively developed. Some capabilities and browser-integration workflows may depend on the selected script version. This repository currently contains multiple historical builds; for the latest tested Windows build use **FDMX_v6_11.py**. The Ubuntu-themed build is **ubuntu.py** and should be treated as experimental until tested on your system.
 
@@ -171,7 +171,7 @@ FDMX stores local task/history data under the user's home directory in `.fdmx` (
 
 ## License
 
-No license file is currently included. Until a license is added, assume that reuse, redistribution, and modification are not granted by default. A license should be selected and added explicitly by the project owner.
+The repository does not currently grant an open-source license. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md). Viewing the source does not by itself grant permission to redistribute, modify, or use it commercially.
 
 ## Acknowledgements
 
