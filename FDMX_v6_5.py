@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
     QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
-    QDateTimeEdit, QCheckBox, QComboBox, QMenuBar, QVBoxLayout as VBoxLayout
+    QDateTimeEdit, QCheckBox, QComboBox, QMenuBar, QTabWidget, QVBoxLayout as VBoxLayout
 )
 
 
@@ -871,6 +871,14 @@ class FDMX(QWidget):
         help_menu.addAction("About FDMX", self.show_about)
         root.setMenuBar(self.menu_bar)
 
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 1)
+        downloads_page = QWidget()
+        downloads_layout = QVBoxLayout(downloads_page)
+        downloads_layout.setContentsMargins(0, 0, 0, 0)
+        downloads_layout.setSpacing(7)
+        self.tabs.addTab(downloads_page, "Downloads")
+
         top = QHBoxLayout()
         brand = QLabel(f"<b>G</b>  GNS Downloader  <span style='color:#777'>v{APP_VERSION}</span>")
         brand.setStyleSheet("font-size:13pt;")
@@ -884,7 +892,7 @@ class FDMX(QWidget):
         top.addWidget(self.search)
         self.summary = QLabel("Active: 0 | Queued: 0 | Completed: 0")
         top.addWidget(self.summary)
-        root.addLayout(top)
+        downloads_layout.addLayout(top)
 
         toolbar = QHBoxLayout()
         for label, callback in (
@@ -897,7 +905,7 @@ class FDMX(QWidget):
             button.clicked.connect(callback)
             toolbar.addWidget(button)
         toolbar.addStretch(1)
-        root.addLayout(toolbar)
+        downloads_layout.addLayout(toolbar)
 
         entry = QGridLayout()
         self.url = QLineEdit()
@@ -920,18 +928,7 @@ class FDMX(QWidget):
         entry.addWidget(browse, 1, 5)
         entry.addWidget(self.add_torrent_button, 1, 6)
         entry.addWidget(self.add_button, 1, 7)
-        root.addLayout(entry)
-
-        schedule_row = QHBoxLayout()
-        self.schedule_enabled = QCheckBox("Schedule this download")
-        self.schedule_time = QDateTimeEdit(QDateTime.currentDateTime())
-        self.schedule_time.setCalendarPopup(True)
-        self.schedule_time.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.schedule_time.setToolTip("The download remains queued until this local date and time")
-        schedule_row.addWidget(self.schedule_enabled)
-        schedule_row.addWidget(self.schedule_time)
-        schedule_row.addStretch(1)
-        root.addLayout(schedule_row)
+        downloads_layout.addLayout(entry)
 
         self.settings_dialog = QDialog(self)
         self.settings_dialog.setWindowTitle("FDMX Preferences")
@@ -993,13 +990,13 @@ class FDMX(QWidget):
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         for col in range(1, 5):
             header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        root.addWidget(self.table, 1)
+        downloads_layout.addWidget(self.table, 1)
         self.table.cellDoubleClicked.connect(self.open_or_show_download)
 
         self.details = QLabel("Select a download to view details. Double-click a row to inspect its segments.")
         self.details.setWordWrap(True)
         self.table.itemSelectionChanged.connect(self.update_details)
-        root.addWidget(self.details)
+        downloads_layout.addWidget(self.details)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
 
@@ -1011,10 +1008,147 @@ class FDMX(QWidget):
         bottom.addWidget(self.hash_button)
         bottom.addWidget(self.export_button)
         bottom.addStretch(1)
-        root.addLayout(bottom)
+        downloads_layout.addLayout(bottom)
+        schedule_page = QWidget()
+        schedule_layout = QVBoxLayout(schedule_page)
+        schedule_layout.setContentsMargins(10, 10, 10, 10)
+        schedule_layout.addWidget(QLabel("Select a queued file, choose its start date and time, then apply the schedule."))
+
+        self.schedule_table = QTableWidget(0, 3)
+        self.schedule_table.setHorizontalHeaderLabels(["File", "Status", "Scheduled start"])
+        self.schedule_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.schedule_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.schedule_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.schedule_table.verticalHeader().setVisible(False)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.schedule_table.itemSelectionChanged.connect(self.load_selected_schedule)
+        schedule_layout.addWidget(self.schedule_table, 1)
+
+        schedule_controls = QHBoxLayout()
+        schedule_controls.addWidget(QLabel("Start date and time:"))
+        self.schedule_editor = QDateTimeEdit(QDateTime.currentDateTime().addSecs(300))
+        self.schedule_editor.setCalendarPopup(True)
+        self.schedule_editor.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.schedule_editor.setMinimumWidth(175)
+        schedule_controls.addWidget(self.schedule_editor)
+        apply_schedule = QPushButton("Apply to selected file")
+        apply_schedule.clicked.connect(self.apply_selected_schedule)
+        schedule_controls.addWidget(apply_schedule)
+        clear_schedule = QPushButton("Clear schedule")
+        clear_schedule.clicked.connect(self.clear_selected_schedule)
+        schedule_controls.addWidget(clear_schedule)
+        start_now = QPushButton("Start now")
+        start_now.clicked.connect(self.start_selected_now)
+        schedule_controls.addWidget(start_now)
+        schedule_controls.addStretch(1)
+        schedule_layout.addLayout(schedule_controls)
+        self.schedule_hint = QLabel("Each download has its own independent schedule.")
+        schedule_layout.addWidget(self.schedule_hint)
+        self.tabs.addTab(schedule_page, "Schedule")
+
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
         root.addWidget(self.status)
+        self.refresh_schedule_table()
+
+
+    def refresh_schedule_table(self):
+        if not hasattr(self, "schedule_table"):
+            return
+        selected_id = self.selected_schedule_task()
+        entries = list(self.tasks.items())
+        self.schedule_table.setRowCount(len(entries))
+        selected_row = -1
+        for row, (task_id, task) in enumerate(entries):
+            name_item = QTableWidgetItem(task.get("name", "Download"))
+            name_item.setData(Qt.UserRole, task_id)
+            status_item = QTableWidgetItem(task.get("status", "Unknown"))
+            scheduled_at = task.get("scheduled_at", "")
+            if scheduled_at:
+                try:
+                    scheduled_text = datetime.datetime.fromisoformat(scheduled_at).astimezone().strftime("%Y-%m-%d %H:%M")
+                except (ValueError, TypeError):
+                    scheduled_text = scheduled_at
+            else:
+                scheduled_text = "Not scheduled"
+            time_item = QTableWidgetItem(scheduled_text)
+            self.schedule_table.setItem(row, 0, name_item)
+            self.schedule_table.setItem(row, 1, status_item)
+            self.schedule_table.setItem(row, 2, time_item)
+            if task_id == selected_id:
+                selected_row = row
+        if selected_row >= 0:
+            self.schedule_table.selectRow(selected_row)
+        elif entries and self.schedule_table.currentRow() < 0:
+            self.schedule_table.selectRow(0)
+
+    def selected_schedule_task(self):
+        if not hasattr(self, "schedule_table"):
+            return None
+        row = self.schedule_table.currentRow()
+        item = self.schedule_table.item(row, 0) if row >= 0 else None
+        return item.data(Qt.UserRole) if item else None
+
+    def load_selected_schedule(self):
+        task_id = self.selected_schedule_task()
+        task = self.tasks.get(task_id) if task_id else None
+        if not task:
+            return
+        scheduled_at = task.get("scheduled_at", "")
+        if scheduled_at:
+            try:
+                scheduled = datetime.datetime.fromisoformat(scheduled_at).astimezone()
+                self.schedule_editor.setDateTime(QDateTime.fromSecsSinceEpoch(int(scheduled.timestamp())))
+            except (ValueError, TypeError, OverflowError):
+                self.schedule_editor.setDateTime(QDateTime.currentDateTime().addSecs(300))
+        else:
+            self.schedule_editor.setDateTime(QDateTime.currentDateTime().addSecs(300))
+        self.schedule_hint.setText(f"Selected: {task.get('name', 'Download')} — schedule is stored separately for this file.")
+
+    def apply_selected_schedule(self):
+        task_id = self.selected_schedule_task()
+        task = self.tasks.get(task_id) if task_id else None
+        if not task:
+            QMessageBox.information(self, "Select a file", "Select a file in the Schedule tab first.")
+            return
+        if task.get("status") != "Queued":
+            QMessageBox.information(self, "Cannot schedule", "Only queued downloads can be scheduled. Pause or queue the file first.")
+            return
+        selected_time = self.schedule_editor.dateTime()
+        if selected_time <= QDateTime.currentDateTime():
+            QMessageBox.warning(self, "Invalid time", "Choose a future date and time.")
+            return
+        task["scheduled_at"] = selected_time.toString(Qt.ISODate)
+        self.save_tasks()
+        self.refresh_schedule_table()
+        self.status.setText(f"Scheduled {task.get('name', 'download')} for {selected_time.toString('yyyy-MM-dd HH:mm')}.")
+
+    def clear_selected_schedule(self):
+        task_id = self.selected_schedule_task()
+        task = self.tasks.get(task_id) if task_id else None
+        if not task:
+            QMessageBox.information(self, "Select a file", "Select a file in the Schedule tab first.")
+            return
+        task["scheduled_at"] = ""
+        self.save_tasks()
+        self.refresh_schedule_table()
+        self.status.setText(f"Schedule cleared for {task.get('name', 'download')}.")
+
+    def start_selected_now(self):
+        task_id = self.selected_schedule_task()
+        task = self.tasks.get(task_id) if task_id else None
+        if not task:
+            QMessageBox.information(self, "Select a file", "Select a file in the Schedule tab first.")
+            return
+        if task.get("status") != "Queued":
+            QMessageBox.information(self, "Not queued", "Only queued downloads can be started from this tab.")
+            return
+        task["scheduled_at"] = ""
+        self.save_tasks()
+        self.schedule_downloads()
+        self.refresh_schedule_table()
 
     def open_settings_dialog(self):
         self.settings_dialog.exec()
@@ -1251,7 +1385,7 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False,
-            "scheduled_at": self.schedule_time.dateTime().toString(Qt.ISODate) if self.schedule_enabled.isChecked() else "",
+            "scheduled_at": "",
             "category": category_for_filename(os.path.basename(urllib.parse.unquote(parsed.path)) or "Download")
         }
         self._post_action_armed = True
@@ -1259,7 +1393,7 @@ class FDMX(QWidget):
         self.save_tasks()
         self.url.clear()
         self.refresh_table()
-        self.status.setText("Scheduled download added to queue." if self.schedule_enabled.isChecked() else "Added to queue.")
+        self.status.setText("Added to queue. Set its start time in the Schedule tab if needed.")
         self.start_queue()
 
     def add_torrent_file(self):
@@ -1283,13 +1417,13 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0, "speed": 0.0,
             "eta": -1.0, "path": "", "worker": None, "history": False,
             "kind": "torrent", "category": "Torrent", "upload_speed": 0.0,
-            "scheduled_at": self.schedule_time.dateTime().toString(Qt.ISODate) if self.schedule_enabled.isChecked() else ""
+            "scheduled_at": ""
         }
         self._post_action_armed = True
         self._post_action_done = False
         self.save_tasks()
         self.refresh_table()
-        self.status.setText("Scheduled torrent added to queue." if self.schedule_enabled.isChecked() else "Torrent added to queue.")
+        self.status.setText("Torrent added to queue. Set its start time in the Schedule tab if needed.")
         self.start_queue()
     def start_queue(self):
         self.schedule_downloads()
@@ -1512,6 +1646,7 @@ class FDMX(QWidget):
         for row, (task_id, task) in enumerate(visible):
             self.fill_row(row, task)
         self.update_summary()
+        self.refresh_schedule_table()
 
     def fill_row(self, row, task):
         values = [
