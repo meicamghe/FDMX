@@ -22,3 +22,8 @@ Right-click a link and choose "Download link with FDMX", or open the extension p
 
 ## Packaging
 The folders are source distributions. ZIP them for Chrome "Load unpacked" workflow and package the Firefox folder as an XPI for temporary/testing installation. An unsigned XPI cannot be permanently installed in standard Firefox release builds; submit/sign through addons.mozilla.org for that.
+
+
+## Main project documentation
+
+See the repository [README](../README.md) for project overview and [Persian setup guide](../docs/README_FA.md) for step-by-step installation and troubleshooting.
