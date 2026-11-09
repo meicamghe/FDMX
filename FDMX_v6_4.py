@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.4"
+APP_VERSION = "6.5"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -1370,8 +1370,8 @@ class FDMX(QWidget):
         row = self.table.currentRow()
         if row < 0:
             return None
-        item = self.table.item(row, 0)
-        return item.data(Qt.UserRole) if item else None
+        file_cell = self.table.cellWidget(row, 0)
+        return file_cell.property("task_id") if file_cell else None
 
     def pause_selected(self):
         task_id = self.selected_task()
@@ -1500,7 +1500,8 @@ class FDMX(QWidget):
 
     def update_row(self, task_id):
         for row in range(self.table.rowCount()):
-            if self.table.item(row, 0) and self.table.item(row, 0).data(Qt.UserRole) == task_id:
+            file_cell = self.table.cellWidget(row, 0)
+            if file_cell and file_cell.property("task_id") == task_id:
                 self.fill_row(row, self.tasks[task_id])
                 break
         self.update_summary()
@@ -1520,11 +1521,11 @@ class FDMX(QWidget):
             format_duration(task['eta'])
         ]
         hover_text = self.parts_tooltip(task)
-        for col, value in enumerate(values):
-            item = QTableWidgetItem(value)
+        # Column 0 is a custom widget; do not create a table item underneath it.
+        # This prevents the filename from being painted twice by Qt.
+        for col in range(1, len(values)):
+            item = QTableWidgetItem(values[col])
             item.setToolTip(hover_text)
-            if col == 0:
-                item.setData(Qt.UserRole, task['id'])
             if col in (2, 3, 4):
                 item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
@@ -1542,6 +1543,7 @@ class FDMX(QWidget):
         name_label.setStyleSheet('font-weight:600;padding-left:3px;')
         name_label.setToolTip(hover_text)
         file_cell = QWidget()
+        file_cell.setProperty("task_id", task['id'])
         file_layout = VBoxLayout(file_cell)
         file_layout.setContentsMargins(4, 3, 4, 3)
         file_layout.setSpacing(2)
