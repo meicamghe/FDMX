@@ -2839,10 +2839,16 @@ class FDMX(QWidget):
         theme_row = QHBoxLayout()
         theme_row.addWidget(QLabel("Theme preset:"))
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("FDMX Dark", "dark")
-        self.theme_combo.addItem("Ubuntu", "ubuntu")
-        self.theme_combo.addItem("Light", "light")
-        self.theme_combo.addItem("Midnight Blue", "blue")
+        theme_presets = [
+            ("FDMX Graphite", "dark"), ("Ubuntu Aubergine", "ubuntu"),
+            ("Pearl Light", "light"), ("Midnight Blue", "blue"),
+            ("OLED Black", "oled"), ("Nord Frost", "nord"),
+            ("Dracula", "dracula"), ("Cyber Neon", "cyber"),
+            ("macOS Sonoma", "sonoma"), ("Windows 11 Fluent", "fluent"),
+            ("Solarized", "solarized"), ("Rose Pine", "rose")
+        ]
+        for label, key in theme_presets:
+            self.theme_combo.addItem(label, key)
         theme_row.addWidget(self.theme_combo, 1)
         apply_theme_button = QPushButton("Apply theme")
         apply_theme_button.clicked.connect(self.apply_selected_theme)
@@ -3059,48 +3065,121 @@ class FDMX(QWidget):
 
     def apply_selected_theme(self):
         theme = self.theme_combo.currentData()
-        themes = {
-            "dark": """
-                QWidget { background:#17191d; color:#e8e8e8; }
-                QLineEdit, QSpinBox, QDateTimeEdit, QComboBox, QTextEdit, QTableWidget, QListWidget { background:#22262c; color:#f1f1f1; border:1px solid #414750; selection-background-color:#7d2028; }
-                QHeaderView::section { background:#292e35; color:#f4f4f4; }
-                QPushButton { background:#30363e; color:#fff; border:1px solid #555d68; border-radius:5px; padding:7px 12px; }
-                QPushButton:hover { background:#7d2028; }
-                QProgressBar { background:#292e35; color:#fff; border:1px solid #555; }
-                QProgressBar::chunk { background:#bd2735; }
-                QFrame { border-color:#444; }
-            """,
-            "ubuntu": """
-                QWidget { background:#2c001e; color:#f7edf4; }
-                QLineEdit, QSpinBox, QDateTimeEdit, QComboBox, QTextEdit, QTableWidget, QListWidget { background:#3d1834; color:#fff; border:1px solid #772953; selection-background-color:#e95420; }
-                QHeaderView::section { background:#51263f; color:#fff; }
-                QPushButton { background:#772953; color:#fff; border:1px solid #a34a78; border-radius:5px; padding:7px 12px; }
-                QPushButton:hover { background:#e95420; }
-                QProgressBar { background:#51263f; color:#fff; }
-                QProgressBar::chunk { background:#e95420; }
-            """,
-            "light": """
-                QWidget { background:#f4f5f7; color:#20242a; }
-                QLineEdit, QSpinBox, QDateTimeEdit, QComboBox, QTextEdit, QTableWidget, QListWidget { background:#fff; color:#20242a; border:1px solid #c8cdd4; selection-background-color:#cfe3ff; }
-                QHeaderView::section { background:#e7ebf0; color:#20242a; }
-                QPushButton { background:#e8edf3; color:#20242a; border:1px solid #b9c2ce; border-radius:5px; padding:7px 12px; }
-                QPushButton:hover { background:#d5e5f8; }
-                QProgressBar::chunk { background:#2878c8; }
-            """,
-            "blue": """
-                QWidget { background:#101c2c; color:#e6f0ff; }
-                QLineEdit, QSpinBox, QDateTimeEdit, QComboBox, QTextEdit, QTableWidget, QListWidget { background:#172a40; color:#f0f6ff; border:1px solid #345575; selection-background-color:#1769aa; }
-                QHeaderView::section { background:#203a55; color:#fff; }
-                QPushButton { background:#244766; color:#fff; border:1px solid #416d94; border-radius:5px; padding:7px 12px; }
-                QPushButton:hover { background:#1769aa; }
-                QProgressBar::chunk { background:#2798df; }
-            """
+        palettes = {
+            "dark": ("#171a21", "#202631", "#293241", "#e8edf5", "#aab6c8", "#e34b5b", "#ffffff", "#343e4e"),
+            "ubuntu": ("#2c001e", "#3d1834", "#51263f", "#fff4fb", "#d9b9ce", "#e95420", "#ffffff", "#772953"),
+            "light": ("#f3f6fb", "#ffffff", "#e9eef6", "#202938", "#65738a", "#2878d0", "#ffffff", "#d5e0ee"),
+            "blue": ("#0e1a2b", "#14263c", "#1c3550", "#e8f2ff", "#9fb8d2", "#2997e8", "#ffffff", "#294d70"),
+            "oled": ("#000000", "#101114", "#1a1b20", "#f5f5f7", "#a6a8b0", "#8b5cf6", "#ffffff", "#30313a"),
+            "nord": ("#2e3440", "#3b4252", "#434c5e", "#eceff4", "#c0c8d8", "#88c0d0", "#20242b", "#5e81ac"),
+            "dracula": ("#282a36", "#343746", "#44475a", "#f8f8f2", "#bdc0d0", "#bd93f9", "#282a36", "#6272a4"),
+            "cyber": ("#0b1020", "#111a30", "#1b2945", "#e6f7ff", "#8ba6c9", "#00e5ff", "#07111d", "#31516f"),
+            "sonoma": ("#20232b", "#292e38", "#343b48", "#f5f6fa", "#b6bfce", "#8b9cff", "#ffffff", "#4a5262"),
+            "fluent": ("#f3f5f9", "#ffffff", "#e8edf5", "#1d2635", "#66758b", "#536fcb", "#ffffff", "#d5ddeb"),
+            "solarized": ("#002b36", "#073642", "#164752", "#eee8d5", "#93a1a1", "#2aa198", "#002b36", "#586e75"),
+            "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86")
         }
-        QApplication.instance().setStyleSheet(themes.get(theme, themes["dark"]))
+        bg, panel, raised, fg, muted, accent, accent_text, border = palettes.get(theme, palettes["dark"])
+        is_light = theme in ("light", "fluent")
+        selection = accent
+        self._active_theme_palette = {
+            "background": bg, "panel": panel, "raised": raised,
+            "foreground": fg, "muted": muted, "accent": accent, "border": border
+        }
+        qss = f"""
+            QWidget {{
+                background-color: {bg}; color: {fg};
+                font-family: "Segoe UI", "Inter", "Noto Sans", sans-serif;
+                font-size: 10pt;
+            }}
+            QMainWindow, QDialog {{ background-color: {bg}; }}
+            QTabWidget::pane {{
+                border: 1px solid {border}; border-radius: 10px;
+                top: -1px; background: {panel};
+            }}
+            QTabBar::tab {{
+                background: {raised}; color: {muted}; border: 1px solid {border};
+                padding: 9px 17px; margin-right: 4px;
+                border-top-left-radius: 8px; border-top-right-radius: 8px;
+            }}
+            QTabBar::tab:selected {{
+                background: {panel}; color: {accent};
+                border-bottom: 3px solid {accent}; font-weight: 700;
+            }}
+            QTabBar::tab:hover:!selected {{ color: {fg}; background: {panel}; }}
+            QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QDateEdit,
+            QTimeEdit, QComboBox, QTextEdit, QPlainTextEdit, QTableWidget,
+            QTableView, QListWidget, QTreeWidget, QTreeView {{
+                background: {panel}; color: {fg}; border: 1px solid {border};
+                border-radius: 7px; padding: 6px; selection-background-color: {selection};
+                selection-color: {accent_text};
+            }}
+            QLineEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QComboBox:focus,
+            QTextEdit:focus, QPlainTextEdit:focus {{
+                border: 2px solid {accent};
+            }}
+            QComboBox::drop-down {{ border: 0; width: 25px; }}
+            QComboBox QAbstractItemView {{
+                background: {panel}; color: {fg}; border: 1px solid {border};
+                selection-background-color: {accent}; selection-color: {accent_text};
+            }}
+            QPushButton {{
+                background: {raised}; color: {fg}; border: 1px solid {border};
+                border-radius: 8px; padding: 8px 15px; min-height: 20px;
+            }}
+            QPushButton:hover {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
+            QPushButton:pressed {{ background: {border}; }}
+            QPushButton:disabled {{ color: {muted}; background: {panel}; }}
+            QHeaderView::section {{
+                background: {raised}; color: {fg}; border: 0;
+                border-bottom: 1px solid {border}; padding: 8px; font-weight: 700;
+            }}
+            QTableWidget {{ gridline-color: {border}; alternate-background-color: {raised}; }}
+            QTableWidget::item {{ padding: 5px; }}
+            QProgressBar {{
+                background: {raised}; color: {fg}; border: 1px solid {border};
+                border-radius: 6px; text-align: center; min-height: 13px;
+            }}
+            QProgressBar::chunk {{ background: {accent}; border-radius: 5px; }}
+            QCheckBox, QRadioButton {{ spacing: 8px; }}
+            QCheckBox::indicator, QRadioButton::indicator {{
+                width: 16px; height: 16px;
+            }}
+            QGroupBox {{
+                border: 1px solid {border}; border-radius: 9px;
+                margin-top: 12px; padding: 12px 8px 8px; font-weight: 700;
+            }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 5px; color: {accent}; }}
+            QMenuBar {{ background: {panel}; color: {fg}; border-bottom: 1px solid {border}; }}
+            QMenuBar::item:selected, QMenu::item:selected {{ background: {accent}; color: {accent_text}; }}
+            QMenu {{ background: {panel}; color: {fg}; border: 1px solid {border}; padding: 5px; }}
+            QStatusBar {{ background: {panel}; color: {muted}; border-top: 1px solid {border}; }}
+            QToolTip {{ background: {raised}; color: {fg}; border: 1px solid {accent}; padding: 5px; }}
+            QScrollBar:vertical {{ background: {bg}; width: 12px; margin: 2px; }}
+            QScrollBar::handle:vertical {{ background: {border}; min-height: 25px; border-radius: 5px; }}
+            QScrollBar::handle:vertical:hover {{ background: {accent}; }}
+            QScrollBar:horizontal {{ background: {bg}; height: 12px; margin: 2px; }}
+            QScrollBar::handle:horizontal {{ background: {border}; min-width: 25px; border-radius: 5px; }}
+            QScrollBar::handle:horizontal:hover {{ background: {accent}; }}
+            QToolButton {{ background: {raised}; color: {fg}; border: 1px solid {border}; border-radius: 7px; padding: 6px; }}
+            QToolButton:hover {{ background: {accent}; color: {accent_text}; }}
+        """
+        app = QApplication.instance()
+        if app:
+            app.setStyle("Fusion")
+            app.setStyleSheet(qss)
         if hasattr(self, "settings"):
             self.settings.setValue("theme", theme)
             self.settings.sync()
-        self.theme_preview.setText("Applied theme: " + self.theme_combo.currentText())
+        if hasattr(self, "theme_preview"):
+            self.theme_preview.setText(
+                f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
+                "Theme applied to the entire FDMX interface"
+            )
+            self.theme_preview.setStyleSheet(
+                f"background:{panel}; color:{fg}; border:1px solid {accent}; "
+                "border-radius:12px; padding:22px; font-size:12pt; font-weight:600;"
+            )
 
     def refresh_analytics(self):
         if not hasattr(self, "analytics_table"):
