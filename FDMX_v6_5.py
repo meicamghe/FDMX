@@ -1047,6 +1047,9 @@ class FDMX(QWidget):
         self.schedule_hint = QLabel("Each download has its own independent schedule.")
         schedule_layout.addWidget(self.schedule_hint)
         self.tabs.addTab(schedule_page, "Schedule")
+        self.tabs.currentChanged.connect(
+            lambda index: self.refresh_schedule_table() if index == 1 else None
+        )
 
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -1646,7 +1649,6 @@ class FDMX(QWidget):
         for row, (task_id, task) in enumerate(visible):
             self.fill_row(row, task)
         self.update_summary()
-        self.refresh_schedule_table()
 
     def fill_row(self, row, task):
         values = [
