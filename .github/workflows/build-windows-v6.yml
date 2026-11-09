@@ -4,7 +4,7 @@ on:
   push:
     branches: [v6.3]
   pull_request:
-    branches: [main]
+    branches: [v6.2]
 permissions:
   contents: read
 jobs:
