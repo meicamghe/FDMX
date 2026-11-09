@@ -1,4 +1,5 @@
-browser.runtime.onInstalled.addListener(() => {
+browser.runtime.onInstalled.addListener(async () => {
+  await browser.contextMenus.removeAll();
   browser.contextMenus.create({id:"send-link-to-fdmx",title:"Download link with GNS Downloader",contexts:["link"]});
 });
 browser.contextMenus.onClicked.addListener(async(info) => {
