@@ -2552,7 +2552,9 @@ class FDMX(QWidget):
                 if task_id in self.tasks:
                     continue
                 status = entry.get("status", "Queued")
-                if status in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding"):
+                if status == "Checking metadata":
+                    status = "Ready"
+                elif status in ("Downloading", "Paused", "Checking server", "Retrying", "Seeding"):
                     status = "Queued"
                 self.tasks[task_id] = {
                     "id": task_id, "url": entry["url"], "folder": entry["folder"],
@@ -2560,6 +2562,7 @@ class FDMX(QWidget):
                     "downloaded": entry.get("downloaded", 0), "total": entry.get("total", 0),
                     "speed": 0.0, "eta": -1.0, "path": entry.get("path", ""),
                     "worker": None, "history": False,
+                    "content_type": entry.get("content_type", "Unknown"),
                     "kind": entry.get("kind", "http"),
                     "scheduled_at": entry.get("scheduled_at", ""),
                     "category": entry.get("category") or category_for_filename(entry.get("name", ""))
@@ -2575,7 +2578,8 @@ class FDMX(QWidget):
             if task.get("status") in ("Completed", "Failed", "Canceled"):
                 continue
             saved.append({key: task.get(key) for key in (
-                "id", "url", "folder", "name", "status", "downloaded", "total", "path", "category", "kind", "scheduled_at"
+                "id", "url", "folder", "name", "status", "downloaded", "total", "path",
+                "category", "kind", "scheduled_at", "content_type"
             )})
         temp_path = TASKS_FILE + ".tmp"
         try:
