@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.13"
+APP_VERSION = "6.14"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -901,7 +901,7 @@ class WebsitePageParser(HTMLParser):
 
 
 class WebsiteScanWorker(QThread):
-    found = Signal(str, str, str)
+    found = Signal(str, str, str, int)
     progress = Signal(str)
     finished_scan = Signal(int)
     failed_scan = Signal(str)
@@ -1085,17 +1085,24 @@ class WebsiteScanWorker(QThread):
             guessed = mimetypes.guess_extension(content_type.split(";")[0].strip()) if content_type else None
             if guessed:
                 name += guessed
-        self.found.emit(url, name, content_type or mimetypes.guess_type(name)[0] or "Unknown")
+        size = -1
+        try:
+            request = urllib.request.Request(url, headers=self.headers, method="HEAD")
+            with urllib.request.urlopen(request, timeout=7) as response:
+                raw_size = response.headers.get("Content-Length")
+                if raw_size and raw_size.isdigit():
+                    size = int(raw_size)
+        except Exception:
+            pass
+        self.found.emit(url, name, content_type or mimetypes.guess_type(name)[0] or "Unknown", size)
 
 
-class WebsiteDownloaderDialog(QDialog):
+class WebsiteDownloaderDialog(QWidget):
     """Scan a website, review discovered files, and queue only user-selected items."""
     def __init__(self, parent):
         super().__init__(parent)
         self.main_window = parent
         self.worker = None
-        self.setWindowTitle("Website Downloader")
-        self.resize(900, 600)
         layout = QVBoxLayout(self)
         intro = QLabel("Scan accessible pages and resources. Review the results and select only the files you want.")
         intro.setWordWrap(True)
@@ -1109,6 +1116,10 @@ class WebsiteDownloaderDialog(QDialog):
         self.scan_button = QPushButton("Scan website")
         self.scan_button.clicked.connect(self.start_scan)
         url_row.addWidget(self.scan_button)
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self.stop_scan)
+        self.stop_button.setEnabled(False)
+        url_row.addWidget(self.stop_button)
         layout.addLayout(url_row)
 
         options = QHBoxLayout()
@@ -1142,14 +1153,17 @@ class WebsiteDownloaderDialog(QDialog):
 
         self.status = QLabel("No scan started.")
         layout.addWidget(self.status)
-        self.results = QTableWidget(0, 4)
-        self.results.setHorizontalHeaderLabels(["Download", "File name", "Type", "URL"])
+        self.total_size_label = QLabel("Found: 0 files | Known total size: 0 B")
+        layout.addWidget(self.total_size_label)
+        self.results = QTableWidget(0, 5)
+        self.results.setHorizontalHeaderLabels(["Download", "File name", "Type", "Size", "URL"])
         self.results.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.results.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.results.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.results.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.results.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.results.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.results.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.results.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         layout.addWidget(self.results, 1)
 
         buttons = QHBoxLayout()
@@ -1160,13 +1174,10 @@ class WebsiteDownloaderDialog(QDialog):
         self.download_button = QPushButton("Download selected")
         self.download_button.clicked.connect(self.download_selected)
         self.download_button.setEnabled(False)
-        close_button = QPushButton("Close")
-        close_button.clicked.connect(self.close)
         buttons.addWidget(self.select_all_button)
         buttons.addWidget(self.clear_button)
         buttons.addStretch(1)
         buttons.addWidget(self.download_button)
-        buttons.addWidget(close_button)
         layout.addLayout(buttons)
 
     def start_scan(self):
@@ -1180,12 +1191,14 @@ class WebsiteDownloaderDialog(QDialog):
             self.worker.stop()
             self.worker.wait(1500)
         self.results.setRowCount(0)
+        self.total_size_label.setText("Found: 0 files | Known total size: 0 B")
         self.extension_filter.blockSignals(True)
         self.extension_filter.clear()
         self.extension_filter.addItem("All extensions")
         self.extension_filter.blockSignals(False)
         self.download_button.setEnabled(False)
         self.scan_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
         self.status.setText("Starting scan…")
         self.worker = WebsiteScanWorker(url, self.scope.currentData(), int(self.max_pages.currentText()))
         self.worker.found.connect(self.add_result)
@@ -1194,7 +1207,13 @@ class WebsiteDownloaderDialog(QDialog):
         self.worker.failed_scan.connect(self.scan_failed)
         self.worker.start()
 
-    def add_result(self, url, name, content_type):
+    def stop_scan(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.stop_button.setEnabled(False)
+            self.status.setText("Stopping scan…")
+
+    def add_result(self, url, name, content_type, size):
         row = self.results.rowCount()
         self.results.insertRow(row)
         check = QTableWidgetItem()
@@ -1207,7 +1226,11 @@ class WebsiteDownloaderDialog(QDialog):
         name_item.setData(Qt.UserRole, ext)
         self.results.setItem(row, 1, name_item)
         self.results.setItem(row, 2, QTableWidgetItem(content_type))
-        self.results.setItem(row, 3, QTableWidgetItem(url))
+        size_item = QTableWidgetItem(format_bytes(size) if size >= 0 else "Unknown")
+        size_item.setData(Qt.UserRole, size)
+        self.results.setItem(row, 3, size_item)
+        self.results.setItem(row, 4, QTableWidgetItem(url))
+        self.update_total_size()
         existing = [self.extension_filter.itemText(i) for i in range(self.extension_filter.count())]
         if ext not in existing:
             self.extension_filter.addItem(ext)
@@ -1237,6 +1260,21 @@ class WebsiteDownloaderDialog(QDialog):
         if mime.startswith(("text/", "application/javascript", "application/json")): return "Web files"
         return "Other"
 
+    def update_total_size(self):
+        count = self.results.rowCount()
+        known_total = sum(
+            max(0, int(self.results.item(row, 3).data(Qt.UserRole) or 0))
+            for row in range(count) if self.results.item(row, 3)
+        )
+        known_count = sum(
+            1 for row in range(count)
+            if self.results.item(row, 3) and int(self.results.item(row, 3).data(Qt.UserRole) or -1) >= 0
+        )
+        self.total_size_label.setText(
+            f"Found: {count} files | Known total size: {format_bytes(known_total)} "
+            f"({known_count} sizes known)"
+        )
+
     def apply_filters(self):
         category = self.category_filter.currentText()
         extension = self.extension_filter.currentText()
@@ -1252,11 +1290,18 @@ class WebsiteDownloaderDialog(QDialog):
 
     def scan_finished(self, count):
         self.scan_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
         self.download_button.setEnabled(count > 0)
-        self.status.setText(f"Scan complete: {count} unique downloadable links found. Select the files you want.")
+        stopped = self.worker and self.worker._stop.is_set()
+        self.status.setText(
+            f"Scan stopped: {count} files found. Select the files you want."
+            if stopped else
+            f"Scan complete: {count} unique downloadable links found. Select the files you want."
+        )
 
     def scan_failed(self, message):
         self.scan_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
         self.status.setText(f"Scan error: {message}")
 
     def set_all_checked(self, checked):
@@ -1283,13 +1328,6 @@ class WebsiteDownloaderDialog(QDialog):
         self.status.setText(f"Queued {added} selected files in: {site_folder}")
         self.main_window.status.setText(f"Website files queued: {added} → {site_folder}")
         self.main_window.tabs.setCurrentIndex(0)
-        self.accept()
-
-    def closeEvent(self, event):
-        if self.worker and self.worker.isRunning():
-            self.worker.stop()
-            self.worker.wait(1500)
-        super().closeEvent(event)
 
 
 
@@ -1621,6 +1659,8 @@ class FDMX(QWidget):
         self.schedule_hint = QLabel("Choose a start date/time, paste a direct link, then click Add link to schedule.")
         schedule_layout.addWidget(self.schedule_hint)
         self.tabs.addTab(schedule_page, "Schedule")
+        self.website_page = WebsiteDownloaderDialog(self)
+        self.tabs.addTab(self.website_page, "Website scan")
         self.tabs.currentChanged.connect(
             lambda index: self.refresh_schedule_table() if index == 1 else None
         )
@@ -1986,8 +2026,7 @@ class FDMX(QWidget):
         self.add_download()
 
     def open_website_downloader(self):
-        dialog = WebsiteDownloaderDialog(self)
-        dialog.exec()
+        self.tabs.setCurrentWidget(self.website_page)
 
     def add_website_downloads(self, urls_and_names, destination_folder):
         """Queue reviewed website resources in the site's dedicated folder."""
