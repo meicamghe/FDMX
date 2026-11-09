@@ -1866,15 +1866,18 @@ class FDMX(QWidget):
                     self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
                     self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Length", "0" if code == 204 else str(len(data)))
                 self.end_headers()
-                if data:
+                if code != 204 and data:
                     self.wfile.write(data)
 
             def do_OPTIONS(self):
                 self._send(204, {}, self.headers.get("Origin", ""))
 
             def do_POST(self):
+                if self.path != "/add":
+                    self._send(404, {"ok": False, "error": "Unknown endpoint"})
+                    return
                 origin = self.headers.get("Origin", "")
                 auth = self.headers.get("Authorization", "")
                 if not secrets.compare_digest(auth, "Bearer " + token):
