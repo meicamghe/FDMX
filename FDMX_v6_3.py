@@ -1865,6 +1865,7 @@ class FDMX(QWidget):
                     self.send_header("Vary", "Origin")
                     self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
                     self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "0" if code == 204 else str(len(data)))
                 self.end_headers()
