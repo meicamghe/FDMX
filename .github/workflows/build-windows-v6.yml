@@ -39,7 +39,7 @@ jobs:
           python create_icon.py
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 --collect-all libtorrent --collect-all libtorrent_windows_dll FDMX_v6_0.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 --collect-all libtorrent FDMX_v6_0.py
       - uses: actions/upload-artifact@v4
         with:
           name: GNS-Downloader-Windows-v6.0
