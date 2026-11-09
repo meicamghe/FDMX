@@ -14,6 +14,7 @@ import shutil
 import datetime
 import urllib.request
 import urllib.parse
+import urllib.error
 import socket
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1188,9 +1189,11 @@ class AdminLoginFinderWorker(QThread):
         "/phpmyadmin/", "/pma/", "/manager/html", "/cpanel", "/webmail", "/backend/"
     )
 
-    def __init__(self, start_url):
+    def __init__(self, start_url, find_admin=True, profile=True):
         super().__init__()
         self.start_url = WebsiteScanWorker.prepare_url(start_url)
+        self.find_admin = find_admin
+        self.profile = profile
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
@@ -1198,7 +1201,10 @@ class AdminLoginFinderWorker(QThread):
 
     def _request(self, url, method="GET", limit=262144):
         request = urllib.request.Request(url, headers=self.headers, method=method)
-        response = urllib.request.urlopen(request, timeout=9)
+        try:
+            response = urllib.request.urlopen(request, timeout=9)
+        except urllib.error.HTTPError as error:
+            response = error
         body = response.read(limit) if method == "GET" else b""
         result = {"status": getattr(response, "status", response.getcode()),
                   "url": response.geturl(), "headers": dict(response.headers.items()), "body": body}
@@ -1250,10 +1256,11 @@ class AdminLoginFinderWorker(QThread):
                 raise ValueError("Invalid website address.")
             parsed = urllib.parse.urlsplit(self.start_url)
             host = parsed.hostname or ""
-            try:
-                report["ip_addresses"] = sorted({x[4][0] for x in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)})
-            except Exception:
-                report["notes"].append("DNS address lookup was unavailable.")
+            if self.profile:
+                try:
+                    report["ip_addresses"] = sorted({x[4][0] for x in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)})
+                except Exception:
+                    report["notes"].append("DNS address lookup was unavailable.")
             self.progress.emit("Reading public server headers and website fingerprints…")
             try:
                 home = self._request(self.start_url, "GET", 512 * 1024)
@@ -1262,43 +1269,41 @@ class AdminLoginFinderWorker(QThread):
             headers = home["headers"]
             report["status"] = str(home["status"])
             report["final_url"] = home["url"]
-            report["server"] = headers.get("Server", "Not disclosed")
-            report["server_family"] = self._server_family(report["server"])
-            report["powered_by"] = headers.get("X-Powered-By", "Not disclosed")
-            report["content_type"] = headers.get("Content-Type", "Not disclosed")
-            security_names = ("Strict-Transport-Security", "Content-Security-Policy",
-                              "X-Frame-Options", "X-Content-Type-Options",
-                              "Referrer-Policy", "Permissions-Policy", "Cross-Origin-Opener-Policy")
-            report["security_headers"] = {n: headers.get(n, "Not present") for n in security_names}
-            report["cookies"] = [v.split("=", 1)[0].strip() for k, v in headers.items()
-                                 if k.lower() == "set-cookie" and v]
             html = home.get("body", b"").decode("utf-8", errors="replace")
-            report["technologies"], generator = self._detect_stack(html, headers)
-            report["generator"] = generator or "Not detected"
-            combined = (report["server"] + " " + report["powered_by"] + " " + generator).lower()
-            if "win" in combined or "iis" in combined or "asp.net" in combined:
-                report["os"] = "Windows (hint only; not confirmed)"
-            elif "ubuntu" in combined:
-                report["os"] = "Ubuntu/Linux (hint only; not confirmed)"
-            elif "debian" in combined:
-                report["os"] = "Debian/Linux (hint only; not confirmed)"
-            elif any(x in combined for x in ("centos", "rhel", "fedora", "red hat")):
-                report["os"] = "RHEL-family Linux (hint only; not confirmed)"
-            elif any(x in combined for x in ("linux", "unix")):
-                report["os"] = "Linux/Unix (hint only; not confirmed)"
-            report["notes"].append("Operating-system detection is a weak fingerprint, not a verified server OS.")
+            if self.profile:
+                report["server"] = headers.get("Server", "Not disclosed")
+                report["server_family"] = self._server_family(report["server"])
+                report["powered_by"] = headers.get("X-Powered-By", "Not disclosed")
+                report["content_type"] = headers.get("Content-Type", "Not disclosed")
+                security_names = ("Strict-Transport-Security", "Content-Security-Policy",
+                                  "X-Frame-Options", "X-Content-Type-Options",
+                                  "Referrer-Policy", "Permissions-Policy", "Cross-Origin-Opener-Policy")
+                report["security_headers"] = {n: headers.get(n, "Not present") for n in security_names}
+                report["cookies"] = [v.split("=", 1)[0].strip() for k, v in headers.items()
+                                     if k.lower() == "set-cookie" and v]
+                report["technologies"], generator = self._detect_stack(html, headers)
+                report["generator"] = generator or "Not detected"
+                combined = (report["server"] + " " + report["powered_by"] + " " + generator).lower()
+                if "win" in combined or "iis" in combined or "asp.net" in combined:
+                    report["os"] = "Windows (hint only; not confirmed)"
+                elif "ubuntu" in combined:
+                    report["os"] = "Ubuntu/Linux (hint only; not confirmed)"
+                elif "debian" in combined:
+                    report["os"] = "Debian/Linux (hint only; not confirmed)"
+                elif any(x in combined for x in ("centos", "rhel", "fedora", "red hat")):
+                    report["os"] = "RHEL-family Linux (hint only; not confirmed)"
+                elif any(x in combined for x in ("linux", "unix")):
+                    report["os"] = "Linux/Unix (hint only; not confirmed)"
+                report["notes"].append("Operating-system detection is a weak fingerprint, not a verified server OS.")
             report["notes"].append("Only public unauthenticated HTTP requests were made; no passwords or exploit tests.")
             origin = f"{parsed.scheme}://{parsed.netloc}"
-            for index, path in enumerate(self.LOGIN_PATHS, 1):
+            for index, path in enumerate(self.LOGIN_PATHS if self.find_admin else (), 1):
                 self.progress.emit(f"Checking common login routes {index}/{len(self.LOGIN_PATHS)}…")
                 target = urllib.parse.urljoin(origin + "/", path.lstrip("/"))
                 try:
-                    result = self._request(target, "HEAD", 0)
+                    result = self._request(target, "GET", 64 * 1024)
                 except Exception:
-                    try:
-                        result = self._request(target, "GET", 64 * 1024)
-                    except Exception:
-                        continue
+                    continue
                 if (urllib.parse.urlsplit(result["url"]).hostname or "").lower() != host.lower():
                     continue
                 code = int(result["status"])
@@ -1534,7 +1539,10 @@ class WebsiteDownloaderDialog(QWidget):
         self.recon_dialog = AdminLoginFinderDialog(self, url)
         self.recon_dialog.setAttribute(Qt.WA_DeleteOnClose, True)
         self.recon_dialog.show()
-        self.recon_worker = AdminLoginFinderWorker(url)
+        self.recon_worker = AdminLoginFinderWorker(
+            url, find_admin=self.find_admin_checkbox.isChecked(),
+            profile=self.profile_checkbox.isChecked()
+        )
         self.recon_worker.progress.connect(self.recon_dialog.status.setText)
         self.recon_worker.result_ready.connect(self.recon_dialog.show_report)
         self.recon_worker.start()
