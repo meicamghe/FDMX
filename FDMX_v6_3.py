@@ -1146,10 +1146,17 @@ class FDMX(QWidget):
         self.status.setStyleSheet("background:#151f30;border:1px solid #29364c;border-radius:8px;padding:10px 12px;color:#9fb4d1;")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
         root.addWidget(self.status)
+        root.removeWidget(title_bar)
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(6, 4, 6, 4)
+        shell_layout.setSpacing(10)
+        shell_layout.addWidget(title_bar)
         self.page_stack = QStackedWidget()
         self.page_stack.addWidget(content)
         self._build_settings_pages()
-        outer.addWidget(self.page_stack, 1)
+        shell_layout.addWidget(self.page_stack, 1)
+        outer.addWidget(shell, 1)
 
     def _build_settings_pages(self):
         proxy_page = QWidget()
