@@ -1,4 +1,4 @@
-name: Build GNS Downloader for Windows
+name: Build GNS Downloader v5.9 for Windows
 
 on:
   workflow_dispatch:
@@ -46,11 +46,11 @@ jobs:
 
       - name: Build standalone executable
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 FDMX_v5_8.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name GNS-Downloader --icon gns.ico --collect-all PySide6 FDMX_v5_9.py
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
-          name: GNS-Downloader-Windows-v5.8
+          name: GNS-Downloader-Windows-v5.9
           path: dist/GNS-Downloader.exe
           if-no-files-found: error
