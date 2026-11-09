@@ -14,6 +14,7 @@ import shutil
 import datetime
 import urllib.request
 import urllib.parse
+from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,7 +31,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.11"
+APP_VERSION = "6.12"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -869,6 +870,272 @@ class DraggableTitleBar(QWidget):
         super().mouseReleaseEvent(event)
 
 
+
+
+class WebsitePageParser(HTMLParser):
+    """Collect navigational links and downloadable resources from an HTML page."""
+    RESOURCE_ATTRS = ("src", "href", "poster", "data-src", "data-href", "content")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links = set()
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        for attr in self.RESOURCE_ATTRS:
+            value = values.get(attr)
+            if value:
+                value = value.strip()
+                if value and not value.startswith(("#", "data:", "javascript:", "mailto:", "tel:")):
+                    self.links.add(value)
+        if tag.lower() == "meta":
+            content = values.get("content", "")
+            if content and re.match(r"(?i)^https?://", content.strip()):
+                self.links.add(content.strip())
+
+
+class WebsiteScanWorker(QThread):
+    found = Signal(str, str, str)
+    progress = Signal(str)
+    finished_scan = Signal(int)
+    failed_scan = Signal(str)
+
+    def __init__(self, start_url, include_external=False, max_pages=500, max_depth=3):
+        super().__init__()
+        self.start_url = start_url
+        self.include_external = include_external
+        self.max_pages = max_pages
+        self.max_depth = max_depth
+        self._stop = threading.Event()
+        self.seen_pages = set()
+        self.seen_resources = set()
+
+    def stop(self):
+        self._stop.set()
+
+    @staticmethod
+    def normalize_url(url):
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+            return ""
+        return urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(),
+                                        parsed.path or "/", parsed.query, ""))
+
+    def run(self):
+        try:
+            base_host = (urllib.parse.urlsplit(self.start_url).hostname or "").lower()
+            queue = [(self.start_url, 0)]
+            headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION} WebsiteScanner"}
+            while queue and len(self.seen_pages) < self.max_pages and not self._stop.is_set():
+                page_url, depth = queue.pop(0)
+                page_url = self.normalize_url(page_url)
+                if not page_url or page_url in self.seen_pages:
+                    continue
+                host = (urllib.parse.urlsplit(page_url).hostname or "").lower()
+                if not self.include_external and host != base_host:
+                    continue
+                self.seen_pages.add(page_url)
+                self.progress.emit(f"Scanning {len(self.seen_pages)} pages: {page_url}")
+                request = urllib.request.Request(page_url, headers=headers)
+                try:
+                    with urllib.request.urlopen(request, timeout=15) as response:
+                        final_url = self.normalize_url(response.geturl())
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        if not final_url:
+                            continue
+                        if "text/html" not in content_type and not final_url.lower().endswith((".html", ".htm", "/")):
+                            self._add_resource(final_url, response.headers.get("Content-Type", ""))
+                            continue
+                        raw = response.read(3 * 1024 * 1024)
+                        charset = response.headers.get_content_charset() or "utf-8"
+                    try:
+                        html = raw.decode(charset, errors="replace")
+                    except LookupError:
+                        html = raw.decode("utf-8", errors="replace")
+                    parser = WebsitePageParser()
+                    parser.feed(html)
+                    # CSS url(...) references are also useful downloadable resources.
+                    for match in re.findall(r"url\(['\"]?(.*?)['\"]?\)", html, flags=re.I):
+                        if match and not match.startswith("data:"):
+                            parser.links.add(match.strip())
+                    for raw_link in parser.links:
+                        absolute = urllib.parse.urljoin(final_url, raw_link)
+                        absolute = self.normalize_url(absolute)
+                        if not absolute:
+                            continue
+                        parsed = urllib.parse.urlsplit(absolute)
+                        link_host = (parsed.hostname or "").lower()
+                        if not self.include_external and link_host != base_host:
+                            continue
+                        path = parsed.path.lower()
+                        looks_like_page = (not os.path.splitext(path)[1] or
+                                           path.endswith((".html", ".htm", ".php", ".asp", ".aspx")))
+                        if looks_like_page and depth < self.max_depth:
+                            if absolute not in self.seen_pages:
+                                queue.append((absolute, depth + 1))
+                        else:
+                            self._add_resource(absolute, "")
+                except Exception:
+                    # A single inaccessible page should not abort the site scan.
+                    continue
+            self.finished_scan.emit(len(self.seen_resources))
+        except Exception as exc:
+            self.failed_scan.emit(str(exc))
+
+    def _add_resource(self, url, content_type):
+        if url in self.seen_resources:
+            return
+        self.seen_resources.add(url)
+        parsed = urllib.parse.urlsplit(url)
+        name = os.path.basename(urllib.parse.unquote(parsed.path)) or "index"
+        if not os.path.splitext(name)[1] and content_type:
+            ext = mimetypes.guess_extension(content_type.split(";")[0].strip())
+            if ext:
+                name += ext
+        self.found.emit(url, name, content_type or "Unknown")
+
+
+class WebsiteDownloaderDialog(QDialog):
+    """Scan a website, review discovered files, and queue only user-selected items."""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.main_window = parent
+        self.worker = None
+        self.setWindowTitle("Website Downloader")
+        self.resize(900, 600)
+        layout = QVBoxLayout(self)
+        intro = QLabel("Scan accessible pages and resources. Review the results and select only the files you want.")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        url_row = QHBoxLayout()
+        self.url_input = QLineEdit()
+        self.url_input.setPlaceholderText("https://example.com")
+        self.url_input.setMinimumHeight(36)
+        url_row.addWidget(self.url_input, 1)
+        self.scan_button = QPushButton("Scan website")
+        self.scan_button.clicked.connect(self.start_scan)
+        url_row.addWidget(self.scan_button)
+        layout.addLayout(url_row)
+
+        options = QHBoxLayout()
+        options.addWidget(QLabel("Scan scope:"))
+        self.scope = QComboBox()
+        self.scope.addItem("Only this domain", False)
+        self.scope.addItem("Include linked external domains / CDN", True)
+        self.scope.setMinimumWidth(280)
+        options.addWidget(self.scope)
+        options.addWidget(QLabel("Max pages:"))
+        self.max_pages = QComboBox()
+        self.max_pages.addItems(["100", "250", "500", "1000"])
+        self.max_pages.setCurrentText("500")
+        options.addWidget(self.max_pages)
+        options.addStretch(1)
+        layout.addLayout(options)
+
+        self.status = QLabel("No scan started.")
+        layout.addWidget(self.status)
+        self.results = QTableWidget(0, 4)
+        self.results.setHorizontalHeaderLabels(["Download", "File name", "Type", "URL"])
+        self.results.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.results.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.results.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.results.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.results.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.results.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        layout.addWidget(self.results, 1)
+
+        buttons = QHBoxLayout()
+        self.select_all_button = QPushButton("Select all")
+        self.select_all_button.clicked.connect(lambda: self.set_all_checked(True))
+        self.clear_button = QPushButton("Clear selection")
+        self.clear_button.clicked.connect(lambda: self.set_all_checked(False))
+        self.download_button = QPushButton("Download selected")
+        self.download_button.clicked.connect(self.download_selected)
+        self.download_button.setEnabled(False)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.close)
+        buttons.addWidget(self.select_all_button)
+        buttons.addWidget(self.clear_button)
+        buttons.addStretch(1)
+        buttons.addWidget(self.download_button)
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+
+    def start_scan(self):
+        url = self.url_input.text().strip()
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            QMessageBox.warning(self, "Invalid address", "Enter a valid website URL beginning with http:// or https://.")
+            return
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(1500)
+        self.results.setRowCount(0)
+        self.download_button.setEnabled(False)
+        self.scan_button.setEnabled(False)
+        self.status.setText("Starting scan…")
+        self.worker = WebsiteScanWorker(url, self.scope.currentData(), int(self.max_pages.currentText()))
+        self.worker.found.connect(self.add_result)
+        self.worker.progress.connect(self.status.setText)
+        self.worker.finished_scan.connect(self.scan_finished)
+        self.worker.failed_scan.connect(self.scan_failed)
+        self.worker.start()
+
+    def add_result(self, url, name, content_type):
+        row = self.results.rowCount()
+        self.results.insertRow(row)
+        check = QTableWidgetItem()
+        check.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        check.setCheckState(Qt.Unchecked)
+        check.setData(Qt.UserRole, url)
+        self.results.setItem(row, 0, check)
+        self.results.setItem(row, 1, QTableWidgetItem(name))
+        self.results.setItem(row, 2, QTableWidgetItem(content_type))
+        self.results.setItem(row, 3, QTableWidgetItem(url))
+
+    def scan_finished(self, count):
+        self.scan_button.setEnabled(True)
+        self.download_button.setEnabled(count > 0)
+        self.status.setText(f"Scan complete: {count} unique downloadable links found. Select the files you want.")
+
+    def scan_failed(self, message):
+        self.scan_button.setEnabled(True)
+        self.status.setText(f"Scan error: {message}")
+
+    def set_all_checked(self, checked):
+        state = Qt.Checked if checked else Qt.Unchecked
+        for row in range(self.results.rowCount()):
+            self.results.item(row, 0).setCheckState(state)
+
+    def download_selected(self):
+        urls = []
+        for row in range(self.results.rowCount()):
+            item = self.results.item(row, 0)
+            if item and item.checkState() == Qt.Checked:
+                urls.append((item.data(Qt.UserRole), self.results.item(row, 1).text()))
+        if not urls:
+            QMessageBox.information(self, "Nothing selected", "Select at least one file to download.")
+            return
+        parsed = urllib.parse.urlsplit(self.url_input.text().strip())
+        site_name = re.sub(r"[^A-Za-z0-9._-]+", "_", parsed.hostname or "website").strip("._-") or "website"
+        base_folder = self.main_window.folder.text().strip() or os.path.join(os.path.expanduser("~"), "Downloads")
+        site_folder = os.path.join(base_folder, site_name)
+        os.makedirs(site_folder, exist_ok=True)
+        added = self.main_window.add_website_downloads(urls, site_folder)
+        self.status.setText(f"Queued {added} selected files in: {site_folder}")
+        self.main_window.status.setText(f"Website files queued: {added} → {site_folder}")
+        self.main_window.tabs.setCurrentIndex(0)
+        self.accept()
+
+    def closeEvent(self, event):
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(1500)
+        super().closeEvent(event)
+
+
+
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
 
@@ -1000,6 +1267,7 @@ class FDMX(QWidget):
 
         tools_menu = self.menu_bar.addMenu("Tools")
         tools_menu.addAction("Add torrent file…", self.add_torrent_file)
+        tools_menu.addAction("Website Downloader…", self.open_website_downloader)
         tools_menu.addAction("Read URL from clipboard", self.paste_clipboard_url)
         tools_menu.addAction("Calculate SHA-256", self.calculate_hash)
         settings_menu = self.menu_bar.addMenu("Settings")
@@ -1559,6 +1827,37 @@ class FDMX(QWidget):
         """Queue a browser-submitted URL using the current download folder."""
         self.url.setText(url)
         self.add_download()
+
+    def open_website_downloader(self):
+        dialog = WebsiteDownloaderDialog(self)
+        dialog.exec()
+
+    def add_website_downloads(self, urls_and_names, destination_folder):
+        """Queue reviewed website resources in the site's dedicated folder."""
+        os.makedirs(destination_folder, exist_ok=True)
+        added = 0
+        for url, suggested_name in urls_and_names:
+            parsed = urllib.parse.urlsplit(url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                continue
+            task_id = uuid.uuid4().hex
+            name = os.path.basename(urllib.parse.unquote(parsed.path)) or suggested_name or "Download"
+            self._session_task_ids.add(task_id)
+            self.tasks[task_id] = {
+                "id": task_id, "url": url, "folder": destination_folder,
+                "name": name, "status": "Queued", "downloaded": 0, "total": 0,
+                "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
+                "history": False, "scheduled_at": "",
+                "category": category_for_filename(name)
+            }
+            added += 1
+        if added:
+            self._post_action_armed = True
+            self._post_action_done = False
+            self.save_tasks()
+            self.refresh_table()
+            self.start_queue()
+        return added
 
     def add_download(self):
         url = self.url.text().strip()
