@@ -14,6 +14,7 @@ import shutil
 import datetime
 import urllib.request
 import urllib.parse
+import socket
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
@@ -26,12 +27,12 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
     QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
-    QDateTimeEdit, QCheckBox, QComboBox, QMenuBar, QTabWidget, QVBoxLayout as VBoxLayout
+    QDateTimeEdit, QCheckBox, QComboBox, QMenuBar, QTabWidget, QTextEdit, QVBoxLayout as VBoxLayout
 )
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.15"
+APP_VERSION = "6.16"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -1175,14 +1176,233 @@ class WebsiteScanWorker(QThread):
         self.found.emit(url, name, content_type or mimetypes.guess_type(name)[0] or "Unknown", size)
 
 
+class AdminLoginFinderWorker(QThread):
+    """Low-impact discovery of public login routes and exposed server metadata."""
+    result_ready = Signal(dict)
+    progress = Signal(str)
+    LOGIN_PATHS = (
+        "/login", "/login/", "/signin", "/sign-in", "/auth/login",
+        "/account/login", "/admin", "/admin/", "/admin/login",
+        "/administrator", "/administrator/", "/admin.php", "/dashboard",
+        "/user/login", "/wp-login.php", "/wp-admin/", "/joomla/administrator/",
+        "/phpmyadmin/", "/pma/", "/manager/html", "/cpanel", "/webmail", "/backend/"
+    )
+
+    def __init__(self, start_url):
+        super().__init__()
+        self.start_url = WebsiteScanWorker.prepare_url(start_url)
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        }
+
+    def _request(self, url, method="GET", limit=262144):
+        request = urllib.request.Request(url, headers=self.headers, method=method)
+        response = urllib.request.urlopen(request, timeout=9)
+        body = response.read(limit) if method == "GET" else b""
+        result = {"status": getattr(response, "status", response.getcode()),
+                  "url": response.geturl(), "headers": dict(response.headers.items()), "body": body}
+        response.close()
+        return result
+
+    @staticmethod
+    def _server_family(server):
+        value = (server or "").lower()
+        for token, name in (("nginx", "Nginx"), ("apache", "Apache HTTP Server"),
+                            ("microsoft-iis", "Microsoft IIS"), ("iis", "Microsoft IIS"),
+                            ("openresty", "OpenResty"), ("caddy", "Caddy"),
+                            ("lighttpd", "Lighttpd"), ("litespeed", "LiteSpeed"),
+                            ("cloudflare", "Cloudflare proxy")):
+            if token in value:
+                return name
+        return "Not disclosed / unidentified"
+
+    @staticmethod
+    def _detect_stack(html, headers):
+        text = (html or "").lower()
+        header_text = " ".join(f"{k}:{v}" for k, v in headers.items()).lower()
+        checks = (
+            ("WordPress", ("wp-content/", "wp-includes/", "wp-json")),
+            ("Drupal", ("drupal.settings", "/sites/default/")),
+            ("Joomla", ("content=\"joomla!", "/media/system/js/")),
+            ("Magento", ("mage/cookies", "magento_")),
+            ("Shopify", ("cdn.shopify.com", "shopify.theme")),
+            ("Laravel", ("laravel_session", "csrf-token")),
+            ("Django", ("csrftoken", "django")),
+            ("ASP.NET", ("asp.net", "__viewstate", "asp.net_sessionid")),
+            ("Next.js", ("__next_data__", "/_next/static/")),
+            ("React", ("react-dom", "data-reactroot")),
+            ("Vue.js", ("vue.js", "__vue__")),
+            ("Angular", ("ng-version", "angular"))
+        )
+        found = [name for name, markers in checks if any(m in text or m in header_text for m in markers)]
+        generator = re.search(r'<meta[^>]+name=["\\']generator["\\'][^>]+content=["\\']([^"\\']+)', html or "", re.I)
+        return found, generator.group(1) if generator else ""
+
+    def run(self):
+        report = {"target": self.start_url, "server": "Unknown", "server_family": "Unknown",
+                  "powered_by": "Not disclosed", "os": "Not reliably identifiable",
+                  "status": "Unknown", "final_url": self.start_url, "content_type": "Unknown",
+                  "ip_addresses": [], "security_headers": {}, "cookies": [], "technologies": [],
+                  "generator": "", "login_pages": [], "notes": []}
+        try:
+            if not self.start_url:
+                raise ValueError("Invalid website address.")
+            parsed = urllib.parse.urlsplit(self.start_url)
+            host = parsed.hostname or ""
+            try:
+                report["ip_addresses"] = sorted({x[4][0] for x in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)})
+            except Exception:
+                report["notes"].append("DNS address lookup was unavailable.")
+            self.progress.emit("Reading public server headers and website fingerprints…")
+            try:
+                home = self._request(self.start_url, "GET", 512 * 1024)
+            except Exception:
+                home = self._request(self.start_url, "HEAD", 0)
+            headers = home["headers"]
+            report["status"] = str(home["status"])
+            report["final_url"] = home["url"]
+            report["server"] = headers.get("Server", "Not disclosed")
+            report["server_family"] = self._server_family(report["server"])
+            report["powered_by"] = headers.get("X-Powered-By", "Not disclosed")
+            report["content_type"] = headers.get("Content-Type", "Not disclosed")
+            security_names = ("Strict-Transport-Security", "Content-Security-Policy",
+                              "X-Frame-Options", "X-Content-Type-Options",
+                              "Referrer-Policy", "Permissions-Policy", "Cross-Origin-Opener-Policy")
+            report["security_headers"] = {n: headers.get(n, "Not present") for n in security_names}
+            report["cookies"] = [v.split("=", 1)[0].strip() for k, v in headers.items()
+                                 if k.lower() == "set-cookie" and v]
+            html = home.get("body", b"").decode("utf-8", errors="replace")
+            report["technologies"], generator = self._detect_stack(html, headers)
+            report["generator"] = generator or "Not detected"
+            combined = (report["server"] + " " + report["powered_by"] + " " + generator).lower()
+            if "win" in combined or "iis" in combined or "asp.net" in combined:
+                report["os"] = "Windows (hint only; not confirmed)"
+            elif "ubuntu" in combined:
+                report["os"] = "Ubuntu/Linux (hint only; not confirmed)"
+            elif "debian" in combined:
+                report["os"] = "Debian/Linux (hint only; not confirmed)"
+            elif any(x in combined for x in ("centos", "rhel", "fedora", "red hat")):
+                report["os"] = "RHEL-family Linux (hint only; not confirmed)"
+            elif any(x in combined for x in ("linux", "unix")):
+                report["os"] = "Linux/Unix (hint only; not confirmed)"
+            report["notes"].append("Operating-system detection is a weak fingerprint, not a verified server OS.")
+            report["notes"].append("Only public unauthenticated HTTP requests were made; no passwords or exploit tests.")
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+            for index, path in enumerate(self.LOGIN_PATHS, 1):
+                self.progress.emit(f"Checking common login routes {index}/{len(self.LOGIN_PATHS)}…")
+                target = urllib.parse.urljoin(origin + "/", path.lstrip("/"))
+                try:
+                    result = self._request(target, "HEAD", 0)
+                except Exception:
+                    try:
+                        result = self._request(target, "GET", 64 * 1024)
+                    except Exception:
+                        continue
+                if (urllib.parse.urlsplit(result["url"]).hostname or "").lower() != host.lower():
+                    continue
+                code = int(result["status"])
+                if code not in (200, 201, 202, 204, 301, 302, 303, 307, 308, 401, 403, 405):
+                    continue
+                body = result.get("body", b"").decode("utf-8", errors="ignore").lower()
+                location = result["headers"].get("Location", "")
+                looks_login = any(x in body for x in ("password", "log in", "login", "sign in", "username", "wp-login"))
+                if code in (200, 201, 202) and not looks_login and not location:
+                    continue
+                report["login_pages"].append({"url": result["url"], "status": code,
+                    "classification": "Login/admin candidate" if looks_login or code in (401, 403) else "Possible management route",
+                    "redirect": location})
+            self.result_ready.emit(report)
+        except Exception as exc:
+            report["notes"].append("Scan error: " + str(exc))
+            self.result_ready.emit(report)
+
+
+class AdminLoginFinderDialog(QDialog):
+    def __init__(self, parent=None, initial_url=""):
+        super().__init__(parent)
+        self.setWindowTitle("FDMX — Admin / Login Finder & Server Profiler")
+        self.resize(900, 680)
+        self.worker = None
+        layout = QVBoxLayout(self)
+        note = QLabel("For websites you own or are authorized to assess. Checks public login routes and exposed server metadata only.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        row = QHBoxLayout()
+        self.url_input = QLineEdit(initial_url)
+        self.url_input.setPlaceholderText("https://example.com")
+        row.addWidget(self.url_input, 1)
+        self.scan_button = QPushButton("Start discovery")
+        self.scan_button.clicked.connect(self.start_scan)
+        row.addWidget(self.scan_button)
+        layout.addLayout(row)
+        self.status = QLabel("Ready.")
+        layout.addWidget(self.status)
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setPlaceholderText("Server profile and discovered login routes will appear here.")
+        layout.addWidget(self.output, 1)
+        buttons = QHBoxLayout()
+        self.copy_button = QPushButton("Copy report")
+        self.copy_button.clicked.connect(lambda: QApplication.clipboard().setText(self.output.toPlainText()))
+        buttons.addWidget(self.copy_button)
+        buttons.addStretch(1)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.close)
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+
+    def start_scan(self):
+        url = WebsiteScanWorker.prepare_url(self.url_input.text())
+        if not url or not urllib.parse.urlsplit(url).netloc:
+            QMessageBox.warning(self, "Invalid address", "Enter a valid website URL.")
+            return
+        self.url_input.setText(url)
+        self.output.clear()
+        self.scan_button.setEnabled(False)
+        self.status.setText("Starting…")
+        self.worker = AdminLoginFinderWorker(url)
+        self.worker.progress.connect(self.status.setText)
+        self.worker.result_ready.connect(self.show_report)
+        self.worker.start()
+
+    def show_report(self, report):
+        lines = ["FDMX ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
+                 f"Target: {report.get('target')}", f"Final URL: {report.get('final_url')}",
+                 f"HTTP status: {report.get('status')}",
+                 f"Public IP address(es): {', '.join(report.get('ip_addresses', [])) or 'Unknown'}",
+                 "", "SERVER / PLATFORM", f"Web server: {report.get('server_family')}",
+                 f"Server header: {report.get('server')}", f"X-Powered-By: {report.get('powered_by')}",
+                 f"Operating system: {report.get('os')}", f"Content-Type: {report.get('content_type')}",
+                 f"CMS / frameworks: {', '.join(report.get('technologies', [])) or 'Not detected'}",
+                 f"HTML generator: {report.get('generator')}", "", "SECURITY-RELATED RESPONSE HEADERS"]
+        for name, value in report.get("security_headers", {}).items():
+            lines.append(f"{name}: {value}")
+        lines += ["", "COOKIE NAMES (values are not collected)"]
+        lines += report.get("cookies", []) or ["No Set-Cookie header observed."]
+        lines += ["", f"LOGIN / ADMIN ROUTES ({len(report.get('login_pages', []))})"]
+        for item in report.get("login_pages", []):
+            lines.append(f"[HTTP {item['status']}] {item['classification']} — {item['url']}")
+            if item.get("redirect"):
+                lines.append(f"    Redirect: {item['redirect']}")
+        if not report.get("login_pages"):
+            lines.append("No common login/admin routes were confirmed.")
+        lines += ["", "NOTES"] + ["• " + note for note in report.get("notes", [])]
+        self.output.setPlainText("\n".join(lines))
+        self.status.setText("Discovery complete.")
+        self.scan_button.setEnabled(True)
+
+
 class WebsiteDownloaderDialog(QWidget):
     """Scan a website, review discovered files, and queue only user-selected items."""
     def __init__(self, parent):
         super().__init__(parent)
         self.main_window = parent
         self.worker = None
+        self.recon_worker = None
+        self.recon_dialog = None
         layout = QVBoxLayout(self)
-        intro = QLabel("Scan accessible pages and resources. Review the results and select only the files you want.")
+        intro = QLabel("Scan accessible pages and resources. You can also discover public login/admin routes and profile server technologies. Use only on sites you own or are authorized to assess.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -1198,6 +1418,9 @@ class WebsiteDownloaderDialog(QWidget):
         self.stop_button.clicked.connect(self.stop_scan)
         self.stop_button.setEnabled(False)
         url_row.addWidget(self.stop_button)
+        self.finder_button = QPushButton("Admin / Login Finder")
+        self.finder_button.clicked.connect(self.open_finder)
+        url_row.addWidget(self.finder_button)
         layout.addLayout(url_row)
 
         options = QHBoxLayout()
@@ -1214,6 +1437,13 @@ class WebsiteDownloaderDialog(QWidget):
         options.addWidget(self.max_pages)
         options.addStretch(1)
         layout.addLayout(options)
+        recon_options = QHBoxLayout()
+        self.find_admin_checkbox = QCheckBox("Find admin/login pages")
+        self.profile_checkbox = QCheckBox("Profile server / OS / technologies")
+        recon_options.addWidget(self.find_admin_checkbox)
+        recon_options.addWidget(self.profile_checkbox)
+        recon_options.addStretch(1)
+        layout.addLayout(recon_options)
 
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("File category:"))
@@ -1285,10 +1515,29 @@ class WebsiteDownloaderDialog(QWidget):
         self.status.setText("Starting scan…")
         self.worker = WebsiteScanWorker(url, self.scope.currentData(), int(self.max_pages.currentText()))
         self.worker.found.connect(self.add_result)
+        if self.find_admin_checkbox.isChecked() or self.profile_checkbox.isChecked():
+            self.start_recon(url)
         self.worker.progress.connect(self.status.setText)
         self.worker.finished_scan.connect(self.scan_finished)
         self.worker.failed_scan.connect(self.scan_failed)
         self.worker.start()
+
+    def open_finder(self):
+        dialog = AdminLoginFinderDialog(self, self.url_input.text().strip())
+        dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+        dialog.show()
+        self.recon_dialog = dialog
+
+    def start_recon(self, url):
+        if self.recon_worker and self.recon_worker.isRunning():
+            return
+        self.recon_dialog = AdminLoginFinderDialog(self, url)
+        self.recon_dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.recon_dialog.show()
+        self.recon_worker = AdminLoginFinderWorker(url)
+        self.recon_worker.progress.connect(self.recon_dialog.status.setText)
+        self.recon_worker.result_ready.connect(self.recon_dialog.show_report)
+        self.recon_worker.start()
 
     def copy_result_url(self, position=None):
         row = self.results.currentRow()
