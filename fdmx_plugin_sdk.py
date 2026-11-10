@@ -267,10 +267,47 @@ class PluginManager:
         self.plugin_dir = Path(plugin_dir).expanduser()
         self.plugin_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.plugin_dir.parent / "plugin_state.json"
+        self.trust_file = self.plugin_dir.parent / "trusted_publishers.json"
+        self.trusted_publishers = self._read_trusted_publishers()
         self.logger = logger or (lambda message: None)
         self.notifier = notifier or (lambda title, message: None)
         self.records, self._workers = {}, {}
         self._state = self._read_state()
+
+    def _read_trusted_publishers(self):
+        try:
+            data = json.loads(self.trust_file.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def trust_publisher(self, public_key_pem):
+        _require_crypto()
+        public = serialization.load_pem_public_key(public_key_pem.encode("ascii"))
+        if not isinstance(public, Ed25519PublicKey):
+            raise TypeError("Publisher key must be Ed25519")
+        raw = public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        fingerprint = hashlib.sha256(raw).hexdigest()
+        canonical = public.public_bytes(serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo).decode("ascii")
+        previous = dict(self.trusted_publishers)
+        self.trusted_publishers[fingerprint] = canonical
+        temp = self.trust_file.with_name(self.trust_file.name + "." + uuid.uuid4().hex + ".tmp")
+        try:
+            self.trust_file.parent.mkdir(parents=True, exist_ok=True)
+            temp.write_text(json.dumps(self.trusted_publishers, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            os.replace(temp, self.trust_file)
+        except Exception:
+            self.trusted_publishers = previous
+            temp.unlink(missing_ok=True)
+            raise
+        self.scan()
+        return fingerprint
+
+    def trust_plugin_publisher(self, plugin_id):
+        rec = self.records[plugin_id]
+        envelope = json.loads((rec.folder / SIGNATURE_FILE).read_text(encoding="utf-8"))
+        return self.trust_publisher(envelope["public_key_pem"])
 
     def _read_state(self):
         try:
@@ -319,8 +356,8 @@ class PluginManager:
             self._state = previous
             raise
 
-    def install_plugin(self, source_folder):
-        """Install a trusted plugin directory atomically after manifest validation."""
+    def install_plugin(self, source_folder, *, allow_untrusted=False):
+        """Install a signed plugin; untrusted packages require explicit opt-in."""
         source = Path(source_folder).expanduser().resolve()
         if not source.is_dir():
             raise NotADirectoryError(f"Plugin source folder does not exist: {source}")
@@ -330,6 +367,10 @@ class PluginManager:
         for item in source.rglob("*"):
             if item.is_symlink():
                 raise ValueError(f"Plugin packages may not contain symbolic links: {item}")
+        verification = verify_plugin_folder(source, self.trusted_publishers)
+        if verification["status"] != "trusted" and not allow_untrusted:
+            raise PermissionError("Plugin signature status is " + verification["status"] + ": " +
+                verification["detail"] + ". Explicitly allow untrusted installation only if you accept the risk.")
         data = json.loads(manifest.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("Plugin manifest must be a JSON object")
@@ -416,7 +457,9 @@ class PluginManager:
                     str(data.get("description", ""))[:500], manifest_path.parent, entry, perms,
                     bool(self._state.get(pid, {}).get("enabled", False)),
                     loaded=pid in self._workers,
-                    error=previous.error if previous else "")
+                    error=previous.error if previous else "",
+                    signature_status=(verification := verify_plugin_folder(manifest_path.parent, self.trusted_publishers))["status"],
+                    publisher_fingerprint=verification["fingerprint"])
             except Exception as exc: self.logger(f"Skipped {manifest_path}: {exc}")
         self.records = found
         return list(found.values())
@@ -434,8 +477,16 @@ class PluginManager:
             raise
         if not rec.enabled: self.unload(plugin_id)
 
-    def load(self, plugin_id):
+    def load(self, plugin_id, *, allow_untrusted=False):
         rec = self.records[plugin_id]
+        verification = verify_plugin_folder(rec.folder, self.trusted_publishers)
+        rec.signature_status = verification["status"]
+        rec.publisher_fingerprint = verification["fingerprint"]
+        if verification["status"] == "invalid":
+            raise PermissionError("Plugin signature verification failed: " + verification["detail"])
+        if verification["status"] != "trusted" and not allow_untrusted:
+            raise PermissionError("Plugin publisher is not trusted (" + verification["status"] +
+                "). Trust the publisher or explicitly allow this plugin.")
         if not rec.enabled: raise RuntimeError("Enable this plugin before loading it")
         if rec.loaded: return
         if not (rec.folder / rec.entrypoint).is_file(): raise FileNotFoundError(f"Plugin entrypoint not found: {rec.entrypoint}")
