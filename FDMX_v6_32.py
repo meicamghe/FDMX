@@ -2695,6 +2695,9 @@ class FDMX(QWidget):
         self.nav_buttons = {}
         for label in ("All downloads", "In progress", "Queue", "Completed", "Failed"):
             filter_menu.addAction(label, lambda checked=False, name=label: self.set_filter(name))
+        category_menu = view_menu.addMenu("File category")
+        for label in ("Video", "Audio", "Documents", "Compressed", "Python", "Programs", "Images", "Spreadsheets", "Code", "Other"):
+            category_menu.addAction(label, lambda checked=False, name=label: self.set_filter("Category:" + name))
 
         tools_menu = self.menu_bar.addMenu("Tools")
         tools_menu.addAction("Add torrent file…", self.add_torrent_file)
@@ -3644,6 +3647,8 @@ class FDMX(QWidget):
         for task_id, task in self.tasks.items():
             status = task.get("status", "")
             category = self.current_filter
+            if category.startswith("Category:") and (task.get("category") or category_for_filename(task.get("name", ""))) != category.split(":", 1)[1]:
+                continue
             if category == "In progress" and status not in ("Downloading", "Checking server", "Retrying", "Paused"):
                 continue
             if category == "Queue" and status != "Queued":
