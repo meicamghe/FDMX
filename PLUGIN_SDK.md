@@ -15,3 +15,13 @@ Plugins run in separate Python processes. IPC uses JSON Lines with a 1 MiB messa
 
 ## Security model
 Separate processes improve crash containment and keep plugin callbacks outside the GUI process. This is **not an OS security sandbox**. A plugin still runs as the current user and can access files, network resources, and subprocesses permitted to that account. SDK permissions restrict only FDMX RPC methods, not arbitrary Python code. Install only trusted plugins. Strong isolation requires OS-level controls (for example Windows AppContainer or Linux namespaces/seccomp), which are not implemented here.
+
+
+## Automated tests
+The repository includes cross-platform worker tests in `tests/test_plugin_sdk.py`. GitHub Actions runs them on Windows and Ubuntu with Python 3.11 and 3.12. Run locally with:
+
+```bash
+python -m pip install PySide6
+python -m py_compile fdmx_plugin_sdk.py fdmx_plugin_host.py tests/test_plugin_sdk.py
+python -m unittest discover -s tests -v
+```
