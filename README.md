@@ -1,14 +1,14 @@
-# FDMX — Download Manager
+# GNS Downloader — Download Manager
 
-FDMX is a desktop download manager built with **Python** and **PySide6 (Qt for Python)**. It provides multi-connection HTTP/HTTPS downloads, task controls, download history, browser hand-off, and an extensible plugin system.
+GNS Downloader is a desktop download manager built with **Python** and **PySide6 (Qt for Python)**. It provides multi-connection HTTP/HTTPS downloads, task controls, download history, scheduling, analytics, and browser hand-off.
 
 **زبان فارسی:** [راهنمای فارسی نصب، اجرا و ساخت فایل EXE](docs/README_FA.md)
 
-> **Development status:** This repository contains multiple historical versions. The current development-branch desktop entry point is `FDMX_v6_36.py` (application version 6.36). The Ubuntu-themed variant is `ubuntu.py`. Plugin SDK 1.7 work is present on the development branch, but its latest integration-test CI run failed; treat that SDK revision as under development, not as a stable production release. No installer or signed end-user release is currently published.
+> **Development status:** The current desktop application is **GNS Downloader 6.37**, built from `FDMX_v6_36.py`. The Windows CI workflow builds a branded installer and portable ZIP as GitHub Actions artifacts. The separate Plugin SDK source remains in the repository for development/testing but is not included in the GNS Downloader application.
 
 ## Project overview
 
-FDMX has evolved from a basic downloader into a desktop application with download management, browser integration, and a plugin platform. The repository preserves earlier numbered scripts for development history; use the current entry point rather than launching an old numbered file.
+The repository preserves earlier numbered scripts for development history; use the current entry point rather than launching an old numbered file.
 
 ### Main capabilities
 
@@ -19,10 +19,7 @@ FDMX has evolved from a basic downloader into a desktop application with downloa
 - Destination selection and automatic file-type categorization.
 - Browser integration through local loopback communication.
 - Chrome and Firefox extension source code.
-- Plugin Manager with plugin install, enable/disable, load/unload, and uninstall workflows.
-- Plugin SDK with manifest and permission validation, worker-process execution, and plugin settings/data storage.
-- Ed25519 plugin signatures, publisher trust, and HTTPS plugin repository/update support.
-- Plugin update history and signed-version rollback support in the current SDK development work.
+- A separate Plugin SDK codebase is retained for development and automated tests; it is not exposed in the GNS Downloader 6.37 user interface or packaged with the desktop application.
 
 Some features depend on the remote server, browser, plugin dependencies, or the selected application build. Browser media extraction and torrent-related workflows should be considered experimental unless separately validated.
 
@@ -30,9 +27,9 @@ Some features depend on the remote server, browser, plugin dependencies, or the 
 
 | Path | Purpose |
 |---|---|
-| `FDMX_v6_36.py` | Current development-branch Windows/desktop application entry point (v6.36) |
+| `FDMX_v6_36.py` | Current GNS Downloader Windows/desktop application entry point (v6.37) |
 | `ubuntu.py` | Ubuntu-themed desktop variant; separate build with its own compatibility testing |
-| `fdmx_plugin_sdk.py` | Plugin manager, validation, signing/trust, update history and rollback |
+| `fdmx_plugin_sdk.py` | Separate Plugin SDK development code; not shipped in GNS Downloader |
 | `fdmx_plugin_host.py` | Separate plugin worker process |
 | `fdmx_plugin_repository.py` | HTTPS plugin catalog and package/update client |
 | `plugins/example_hello_world/` | Example plugin |
