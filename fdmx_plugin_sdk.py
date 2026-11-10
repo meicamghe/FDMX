@@ -1,4 +1,4 @@
-"""FDMX Plugin SDK 1.3 - plugin lifecycle and isolated worker manager.
+"""FDMX Plugin SDK 1.5 - signed plugins, lifecycle, and atomic updates.
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ except ImportError:
     serialization = Ed25519PrivateKey = Ed25519PublicKey = None
     CRYPTO_AVAILABLE = False
 
-SDK_VERSION = "1.4"
+SDK_VERSION = "1.5"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
 PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
 MAX_MESSAGE_BYTES = 1024 * 1024
