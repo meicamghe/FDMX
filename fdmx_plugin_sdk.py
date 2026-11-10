@@ -1,4 +1,4 @@
-"""FDMX Plugin SDK 1.2 - isolated plugin worker manager.
+"""FDMX Plugin SDK 1.3 - plugin lifecycle and isolated worker manager.
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox, QFileDialog
 
-SDK_VERSION = "1.2"
+SDK_VERSION = "1.3"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
 PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
 MAX_MESSAGE_BYTES = 1024 * 1024
