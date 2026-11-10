@@ -1,29 +1,17 @@
-"""FDMX Plugin SDK - first stable API surface.
-
-Plugins execute in the FDMX process. Exceptions are contained per plugin, but this
-is NOT a security sandbox: install and enable only plugins from trusted sources.
+"""FDMX Plugin SDK 1.1 - isolated plugin worker manager.
+Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
-
-import importlib.util
-import json
-import os
-import re
-import sys
-import traceback
+import json, os, re, subprocess, sys, threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton,
-    QLabel, QTextEdit, QMessageBox
-)
-
-SDK_VERSION = "1.0"
+SDK_VERSION = "1.1"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
 PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
-
+MAX_MESSAGE_BYTES = 1024 * 1024
+ALLOWED_EVENTS = {"app.started", "download.completed", "download.failed"}
 
 @dataclass
 class PluginRecord:
@@ -38,197 +26,208 @@ class PluginRecord:
     loaded: bool = False
     error: str = ""
 
+class _Worker:
+    def __init__(self, record, logger, notifier):
+        self.record, self.logger, self.notifier = record, logger, notifier
+        self.process = None
+        self.ready = threading.Event()
+        self.start_error = None
+        self.write_lock = threading.Lock()
 
-class PluginAPI:
-    """Capability-limited API exposed to a plugin."""
-    def __init__(self, record: PluginRecord, granted: set[str], logger: Callable[[str], None],
-                 notifier: Callable[[str, str], None]):
-        self.plugin_id = record.plugin_id
-        self.plugin_name = record.name
-        self._granted = granted
-        self._logger = logger
-        self._notifier = notifier
-        self._hooks: dict[str, list[Callable]] = {}
+    def _send(self, message):
+        raw = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+        if len(raw.encode("utf-8")) > MAX_MESSAGE_BYTES:
+            raise ValueError("Plugin IPC message exceeds 1 MiB")
+        if not self.process or self.process.poll() is not None:
+            raise RuntimeError("Plugin worker is not running")
+        with self.write_lock:
+            self.process.stdin.write(raw + "\n")
+            self.process.stdin.flush()
 
-    def _require(self, permission: str):
-        if permission not in self._granted:
-            raise PermissionError(f"Plugin '{self.plugin_id}' lacks permission: {permission}")
+    def start(self):
+        host = Path(__file__).with_name("fdmx_plugin_host.py")
+        if not host.is_file():
+            raise FileNotFoundError("fdmx_plugin_host.py is missing beside fdmx_plugin_sdk.py")
+        self.process = subprocess.Popen(
+            [sys.executable, "-u", str(host), str(self.record.folder), self.record.entrypoint,
+             self.record.plugin_id, json.dumps(list(self.record.permissions))],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", errors="replace", bufsize=1
+        )
+        threading.Thread(target=self._read_loop, name=f"FDMXPlugin-{self.record.plugin_id}", daemon=True).start()
+        if not self.ready.wait(8.0):
+            self.stop()
+            raise TimeoutError("Plugin worker startup exceeded 8 seconds")
+        if self.start_error:
+            self.stop()
+            raise RuntimeError(self.start_error)
+        if self.process.poll() is not None:
+            raise RuntimeError("Plugin worker exited during startup")
 
-    def log(self, message: str):
-        self._require("app.log")
-        self._logger(f"[{self.plugin_id}] {str(message)[:1000]}")
+    def _read_loop(self):
+        try:
+            for line in self.process.stdout:
+                if len(line.encode("utf-8", errors="replace")) > MAX_MESSAGE_BYTES:
+                    self.start_error = "Worker sent an oversized IPC message"
+                    break
+                try:
+                    msg = json.loads(line)
+                except Exception:
+                    self.start_error = "Worker sent invalid JSON"
+                    continue
+                kind = msg.get("type")
+                if kind == "ready":
+                    self.ready.set()
+                elif kind == "startup_error":
+                    self.start_error = str(msg.get("message", "Plugin startup failed"))[:1000]
+                    self.ready.set()
+                elif kind == "rpc":
+                    self._handle_rpc(msg)
+                elif kind == "fatal":
+                    self.start_error = str(msg.get("message", "Worker failed"))[:1000]
+                    self.ready.set()
+                    self.logger(f"Plugin {self.record.plugin_id}: {self.start_error}")
+                elif kind == "log":
+                    self.logger(f"[{self.record.plugin_id}] {str(msg.get('message', ''))[:1000]}")
+        finally:
+            self.ready.set()
 
-    def notify(self, title: str, message: str):
-        self._require("ui.notifications")
-        self._notifier(str(title)[:120], str(message)[:1000])
+    def _handle_rpc(self, msg):
+        result = {"type": "rpc_result", "id": msg.get("id"), "ok": True}
+        try:
+            method = msg.get("method")
+            if method == "log" and "app.log" in self.record.permissions:
+                self.logger(f"[{self.record.plugin_id}] {str(msg.get('message', ''))[:1000]}")
+            elif method == "notify" and "ui.notifications" in self.record.permissions:
+                self.notifier(str(msg.get("title", ""))[:120], str(msg.get("message", ""))[:1000])
+            else:
+                raise PermissionError(f"RPC method not permitted: {method}")
+        except Exception as exc:
+            result.update(ok=False, error=str(exc)[:500])
+        try:
+            self._send(result)
+        except Exception as exc:
+            self.logger(f"Plugin IPC response failed: {exc}")
 
-    def on(self, event_name: str, callback: Callable):
-        self._require("app.events")
-        if not isinstance(event_name, str) or not event_name or len(event_name) > 80:
-            raise ValueError("Invalid event name")
-        if not callable(callback):
-            raise TypeError("Event callback must be callable")
-        self._hooks.setdefault(event_name, []).append(callback)
+    def emit(self, event_name, payload):
+        if "app.events" in self.record.permissions and event_name in ALLOWED_EVENTS:
+            self._send({"type": "event", "name": event_name, "payload": payload})
 
-    def _dispatch(self, event_name: str, payload: dict):
-        for callback in tuple(self._hooks.get(event_name, ())):
-            callback(dict(payload))
-
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            try:
+                self._send({"type": "shutdown"})
+                self.process.wait(timeout=2.0)
+            except Exception:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+        if self.process:
+            for stream in (self.process.stdin, self.process.stdout):
+                try: stream.close()
+                except Exception: pass
 
 class PluginManager:
-    def __init__(self, plugin_dir: str | Path, logger: Callable[[str], None] | None = None,
-                 notifier: Callable[[str, str], None] | None = None):
+    def __init__(self, plugin_dir, logger=None, notifier=None):
         self.plugin_dir = Path(plugin_dir).expanduser()
         self.plugin_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.plugin_dir.parent / "plugin_state.json"
         self.logger = logger or (lambda message: None)
         self.notifier = notifier or (lambda title, message: None)
-        self.records: dict[str, PluginRecord] = {}
-        self._modules = {}
-        self._apis: dict[str, PluginAPI] = {}
+        self.records, self._workers = {}, {}
         self._state = self._read_state()
 
     def _read_state(self):
         try:
             data = json.loads(self.state_file.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
-        except (OSError, ValueError, TypeError):
-            return {}
+        except (OSError, ValueError, TypeError): return {}
 
     def _save_state(self):
         temp = self.state_file.with_suffix(".tmp")
         try:
             temp.write_text(json.dumps(self._state, ensure_ascii=False, indent=2), encoding="utf-8")
             os.replace(temp, self.state_file)
-        except OSError as exc:
-            self.logger(f"Could not save plugin settings: {exc}")
+        except OSError as exc: self.logger(f"Could not save plugin settings: {exc}")
 
     def scan(self):
         found = {}
         for manifest_path in self.plugin_dir.glob("*/plugin.json"):
             try:
                 data = json.loads(manifest_path.read_text(encoding="utf-8"))
-                plugin_id = str(data.get("id", manifest_path.parent.name))
-                if not PLUGIN_ID_RE.fullmatch(plugin_id) or plugin_id in found:
-                    raise ValueError("Invalid or duplicate plugin id")
-                name = str(data.get("name", plugin_id))[:100]
-                version = str(data.get("version", "0.0.0"))[:40]
-                entrypoint = str(data.get("entrypoint", "plugin.py"))
-                if Path(entrypoint).name != entrypoint or not entrypoint.endswith(".py"):
-                    raise ValueError("Entrypoint must be a Python file in the plugin folder")
-                permissions = tuple(sorted(set(data.get("permissions", []))))
-                unknown = set(permissions) - ALLOWED_PERMISSIONS
-                if unknown:
-                    raise ValueError("Unknown permission(s): " + ", ".join(sorted(unknown)))
-                found[plugin_id] = PluginRecord(
-                    plugin_id, name, version, str(data.get("description", ""))[:500],
-                    manifest_path.parent, entrypoint, permissions,
-                    bool(self._state.get(plugin_id, {}).get("enabled", False))
-                )
-            except Exception as exc:
-                self.logger(f"Skipped {manifest_path}: {exc}")
+                pid = str(data.get("id", manifest_path.parent.name))
+                if not PLUGIN_ID_RE.fullmatch(pid) or pid in found: raise ValueError("Invalid or duplicate plugin id")
+                entry = str(data.get("entrypoint", "plugin.py"))
+                if Path(entry).name != entry or not entry.endswith(".py"): raise ValueError("Entrypoint must be a Python file in plugin folder")
+                perms = tuple(sorted(set(data.get("permissions", []))))
+                unknown = set(perms) - ALLOWED_PERMISSIONS
+                if unknown: raise ValueError("Unknown permission(s): " + ", ".join(sorted(unknown)))
+                found[pid] = PluginRecord(pid, str(data.get("name", pid))[:100], str(data.get("version", "0.0.0"))[:40],
+                    str(data.get("description", ""))[:500], manifest_path.parent, entry, perms,
+                    bool(self._state.get(pid, {}).get("enabled", False)))
+            except Exception as exc: self.logger(f"Skipped {manifest_path}: {exc}")
         self.records = found
         return list(found.values())
 
-    def set_enabled(self, plugin_id: str, enabled: bool):
-        record = self.records[plugin_id]
-        record.enabled = bool(enabled)
-        state = self._state.setdefault(plugin_id, {})
-        state["enabled"] = record.enabled
+    def set_enabled(self, plugin_id, enabled):
+        rec = self.records[plugin_id]
+        rec.enabled = bool(enabled)
+        self._state.setdefault(plugin_id, {})["enabled"] = rec.enabled
         self._save_state()
-        if not record.enabled:
-            self.unload(plugin_id)
+        if not rec.enabled: self.unload(plugin_id)
 
-    def load(self, plugin_id: str):
-        record = self.records[plugin_id]
-        if not record.enabled:
-            raise RuntimeError("Enable this plugin before loading it")
-        if record.loaded:
-            return
-        entry = record.folder / record.entrypoint
-        if not entry.is_file():
-            raise FileNotFoundError(f"Plugin entrypoint not found: {entry.name}")
-        module_name = f"fdmx_plugin_{plugin_id.replace('-', '_').replace('.', '_')}"
-        spec = importlib.util.spec_from_file_location(module_name, entry)
-        if spec is None or spec.loader is None:
-            raise ImportError("Could not create plugin loader")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        api = PluginAPI(record, set(record.permissions), self.logger, self.notifier)
+    def load(self, plugin_id):
+        rec = self.records[plugin_id]
+        if not rec.enabled: raise RuntimeError("Enable this plugin before loading it")
+        if rec.loaded: return
+        if not (rec.folder / rec.entrypoint).is_file(): raise FileNotFoundError(f"Plugin entrypoint not found: {rec.entrypoint}")
+        worker = _Worker(rec, self.logger, self.notifier)
         try:
-            spec.loader.exec_module(module)
-            register = getattr(module, "register", None)
-            if not callable(register):
-                raise TypeError("Plugin must define register(api)")
-            register(api)
-            self._modules[plugin_id] = module
-            self._apis[plugin_id] = api
-            record.loaded = True
-            record.error = ""
-            self.logger(f"Loaded {record.name} v{record.version}")
+            worker.start()
+            self._workers[plugin_id] = worker
+            rec.loaded, rec.error = True, ""
+            self.logger(f"Started isolated worker: {rec.name} v{rec.version}")
         except Exception as exc:
-            sys.modules.pop(module_name, None)
-            record.error = f"{type(exc).__name__}: {exc}"
-            record.loaded = False
-            self.logger(f"Plugin {plugin_id} failed to load: {record.error}")
-            self.logger(traceback.format_exc(limit=5))
+            worker.stop()
+            rec.error, rec.loaded = f"{type(exc).__name__}: {exc}", False
             raise
 
-    def unload(self, plugin_id: str):
-        module = self._modules.pop(plugin_id, None)
-        self._apis.pop(plugin_id, None)
-        record = self.records.get(plugin_id)
-        if module:
-            shutdown = getattr(module, "shutdown", None)
-            if callable(shutdown):
-                try:
-                    shutdown()
-                except Exception as exc:
-                    self.logger(f"Plugin {plugin_id} shutdown error: {exc}")
-            sys.modules.pop(module.__name__, None)
-        if record:
-            record.loaded = False
+    def unload(self, plugin_id):
+        worker = self._workers.pop(plugin_id, None)
+        if worker: worker.stop()
+        if plugin_id in self.records: self.records[plugin_id].loaded = False
 
-    def emit(self, event_name: str, **payload):
-        failed = []
-        for plugin_id, api in tuple(self._apis.items()):
+    def emit(self, event_name, **payload):
+        if event_name not in ALLOWED_EVENTS: return
+        for pid, worker in tuple(self._workers.items()):
             try:
-                api._dispatch(event_name, payload)
+                worker.emit(event_name, payload)
+                if worker.process and worker.process.poll() is not None: raise RuntimeError("Worker exited unexpectedly")
             except Exception as exc:
-                failed.append((plugin_id, exc))
-        for plugin_id, exc in failed:
-            record = self.records.get(plugin_id)
-            if record:
-                record.error = f"Hook error: {type(exc).__name__}: {exc}"
-            self.logger(f"Disabled faulty plugin {plugin_id}: {exc}")
-            self.unload(plugin_id)
+                if pid in self.records: self.records[pid].error = f"Worker error: {type(exc).__name__}: {exc}"
+                self.logger(f"Stopping faulty plugin worker {pid}: {exc}")
+                self.unload(pid)
 
+    def shutdown(self):
+        for pid in tuple(self._workers): self.unload(pid)
 
 class PluginManagerDialog(QDialog):
-    def __init__(self, manager: PluginManager, parent=None):
+    def __init__(self, manager, parent=None):
         super().__init__(parent)
         self.manager = manager
         self.setWindowTitle("FDMX Plugin Manager")
         self.resize(650, 440)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Plugins are trusted Python code and run inside FDMX. Review their source before enabling."))
-        self.items = QListWidget()
-        layout.addWidget(self.items, 1)
-        self.details = QTextEdit()
-        self.details.setReadOnly(True)
-        self.details.setMaximumHeight(110)
-        layout.addWidget(self.details)
+        layout.addWidget(QLabel("Plugins run in separate processes. This is crash isolation, not an OS sandbox; plugins retain your user-account permissions."))
+        self.items = QListWidget(); layout.addWidget(self.items, 1)
+        self.details = QTextEdit(); self.details.setReadOnly(True); self.details.setMaximumHeight(110); layout.addWidget(self.details)
         buttons = QHBoxLayout()
-        self.scan_button = QPushButton("Refresh")
-        self.enable_button = QPushButton("Enable")
-        self.load_button = QPushButton("Load")
-        self.disable_button = QPushButton("Disable")
-        self.close_button = QPushButton("Close")
-        for button in (self.scan_button, self.enable_button, self.load_button, self.disable_button):
-            buttons.addWidget(button)
-        buttons.addStretch(1)
-        buttons.addWidget(self.close_button)
-        layout.addLayout(buttons)
+        self.scan_button, self.enable_button = QPushButton("Refresh"), QPushButton("Enable")
+        self.load_button, self.disable_button, self.close_button = QPushButton("Load"), QPushButton("Disable"), QPushButton("Close")
+        for button in (self.scan_button, self.enable_button, self.load_button, self.disable_button): buttons.addWidget(button)
+        buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
         self.enable_button.clicked.connect(lambda: self._set_enabled(True))
         self.disable_button.clicked.connect(lambda: self._set_enabled(False))
@@ -242,46 +241,27 @@ class PluginManagerDialog(QDialog):
         return item.data(256) if item else None
 
     def refresh(self):
-        self.manager.scan()
-        self.items.clear()
-        for record in sorted(self.manager.records.values(), key=lambda r: r.name.lower()):
-            state = "Loaded" if record.loaded else ("Enabled" if record.enabled else "Disabled")
-            item = QListWidgetItem(f"{record.name}  v{record.version}  [{state}]")
-            item.setData(256, record.plugin_id)
-            self.items.addItem(item)
-        if self.items.count():
-            self.items.setCurrentRow(0)
-        else:
-            self.details.setPlainText("No plugins found. Place each plugin in its own folder under the FDMX plugins directory with a plugin.json manifest.")
+        self.manager.scan(); self.items.clear()
+        for rec in sorted(self.manager.records.values(), key=lambda r: r.name.lower()):
+            state = "Running" if rec.loaded else ("Enabled" if rec.enabled else "Disabled")
+            item = QListWidgetItem(f"{rec.name}  v{rec.version}  [{state}]")
+            item.setData(256, rec.plugin_id); self.items.addItem(item)
+        if self.items.count(): self.items.setCurrentRow(0)
+        else: self.details.setPlainText("No plugins found. Add a plugin folder containing plugin.json and its Python entrypoint.")
 
     def _show_details(self, _row):
-        plugin_id = self._selected()
-        record = self.manager.records.get(plugin_id) if plugin_id else None
-        if not record:
-            self.details.clear()
-            return
-        self.details.setPlainText(
-            f"{record.description}\nID: {record.plugin_id}\nPermissions: {', '.join(record.permissions) or 'none'}\n"
-            f"Status: {'Loaded' if record.loaded else ('Enabled' if record.enabled else 'Disabled')}\n"
-            f"Error: {record.error or 'None'}"
-        )
+        pid = self._selected(); rec = self.manager.records.get(pid) if pid else None
+        if not rec: self.details.clear(); return
+        self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nError: {rec.error or 'None'}")
 
     def _set_enabled(self, enabled):
-        plugin_id = self._selected()
-        if not plugin_id:
-            return
-        try:
-            self.manager.set_enabled(plugin_id, enabled)
-            self.refresh()
-        except Exception as exc:
-            QMessageBox.warning(self, "Plugin Manager", str(exc))
+        pid = self._selected()
+        if not pid: return
+        try: self.manager.set_enabled(pid, enabled); self.refresh()
+        except Exception as exc: QMessageBox.warning(self, "Plugin Manager", str(exc))
 
     def _load_selected(self):
-        plugin_id = self._selected()
-        if not plugin_id:
-            return
-        try:
-            self.manager.load(plugin_id)
-            self.refresh()
-        except Exception as exc:
-            QMessageBox.warning(self, "Plugin load failed", str(exc))
+        pid = self._selected()
+        if not pid: return
+        try: self.manager.load(pid); self.refresh()
+        except Exception as exc: QMessageBox.warning(self, "Plugin load failed", str(exc))
