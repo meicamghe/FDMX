@@ -368,6 +368,8 @@ class PluginManager:
             if item.is_symlink():
                 raise ValueError(f"Plugin packages may not contain symbolic links: {item}")
         verification = verify_plugin_folder(source, self.trusted_publishers)
+        if verification["status"] == "invalid":
+            raise PermissionError("Plugin signature verification failed: " + verification["detail"])
         if verification["status"] != "trusted" and not allow_untrusted:
             raise PermissionError("Plugin signature status is " + verification["status"] + ": " +
                 verification["detail"] + ". Explicitly allow untrusted installation only if you accept the risk.")
@@ -479,6 +481,7 @@ class PluginManager:
 
     def load(self, plugin_id, *, allow_untrusted=False):
         rec = self.records[plugin_id]
+        if not rec.enabled: raise RuntimeError("Enable this plugin before loading it")
         verification = verify_plugin_folder(rec.folder, self.trusted_publishers)
         rec.signature_status = verification["status"]
         rec.publisher_fingerprint = verification["fingerprint"]
@@ -487,7 +490,6 @@ class PluginManager:
         if verification["status"] != "trusted" and not allow_untrusted:
             raise PermissionError("Plugin publisher is not trusted (" + verification["status"] +
                 "). Trust the publisher or explicitly allow this plugin.")
-        if not rec.enabled: raise RuntimeError("Enable this plugin before loading it")
         if rec.loaded: return
         if not (rec.folder / rec.entrypoint).is_file(): raise FileNotFoundError(f"Plugin entrypoint not found: {rec.entrypoint}")
         worker = _Worker(rec, self.logger, self.notifier)
