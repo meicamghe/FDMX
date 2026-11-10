@@ -219,7 +219,7 @@ class PluginSDKTests(unittest.TestCase):
         finally:
             self.manager._save_state = original_save
         self.assertTrue((self.plugin_root / "test_plugin" / "plugin.json").is_file())
-        self.assertIn("test_plugin", self.manager.scan())
+        self.assertTrue(any(record.plugin_id == "test_plugin" for record in self.manager.scan()))
 
     def test_shutdown_callback_runs(self):
         marker = self.root / "shutdown.marker"
