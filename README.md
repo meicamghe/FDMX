@@ -93,61 +93,21 @@ python ubuntu.py
 
 Linux package/runtime requirements can vary by distribution and desktop environment. This source-run procedure is not a claim that a Linux installer or AppImage is currently published.
 
-## Create a standalone Windows EXE
+## Windows installer and portable package
 
-A standalone executable can be built locally with PyInstaller. Build on Windows for Windows; PyInstaller is not a cross-compiler.
+The current Windows application is **GNS Downloader 6.37**. Its packaged build removes the Theme Studio tab and Plugin Manager integration. The separate Plugin SDK source remains in the repository but is not bundled with the application.
 
-### 1. Prepare the build environment
+The recommended build path is GitHub Actions:
 
-```powershell
-py -3.12 -m venv .build-venv
-.\.build-venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install PySide6 cryptography pyinstaller
-```
+1. Open **Actions → Build GNS Downloader Windows packages**.
+2. Run the workflow on the development branch.
+3. Download the `GNS-Downloader-Windows-v6.37` artifact after the workflow succeeds.
 
-### 2. Build the plugin worker
+The workflow generates the red **G** application icon, builds the onedir Windows application, compiles the Inno Setup installer, installs it silently on the runner, verifies that the main window appears, and creates a portable ZIP. The desktop shortcut and executable use the same icon and product name.
 
-The plugin SDK launches its worker as a separate process. Package it as a **console** executable so its JSON-lines standard-output protocol remains intact:
+For a local Windows build, install Python 3.12, PySide6 Essentials, cryptography, PyInstaller, Pillow, and Inno Setup. Generate the icon with `python installer/create_icon.py`, build the application with PyInstaller using `--name "GNS Downloader"` and `--icon installer/gns-downloader.ico`, then compile `installer/FDMX.iss` with Inno Setup.
 
-```powershell
-pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker fdmx_plugin_host.py
-```
-
-### 3. Build the graphical application
-
-```powershell
-pyinstaller --noconfirm --clean --onefile --windowed --name FDMX --collect-all PySide6 --collect-all cryptography FDMX_v6_36.py
-```
-
-### 4. Put the worker beside the application
-
-```powershell
-Copy-Item .\dist\fdmx_plugin_worker.exe .\dist\ -Force
-```
-
-The worker build already creates `dist\\fdmx_plugin_worker.exe`. Building the main application afterward creates `dist\\FDMX.exe`; both files should remain in the same `dist` folder. Do not copy a file onto itself. The distribution should contain at least:
-
-```text
-dist/
-  FDMX.exe
-  fdmx_plugin_worker.exe
-```
-
-Run `dist\FDMX.exe`. Test the EXE on a clean Windows 10/11 machine that does not have Python installed. Verify normal downloads, persistence, browser bridge, Plugin Manager, and a plugin install/enable/disable cycle. If PyInstaller reports a missing module or Qt plugin, adjust the build spec/hidden imports based on the actual traceback; do not assume a build succeeded just because PyInstaller created an EXE.
-
-**Important:** Rebuild both executables whenever the plugin SDK/worker code changes. Keep `fdmx_plugin_worker.exe` next to `FDMX.exe`; do not rename or remove it. The worker is a helper process, not a second application users should launch manually.
-
-## Create a Windows setup installer (Setup.exe)
-
-An EXE and an installer are different deliverables:
-
-- **Portable EXE:** the user runs `FDMX.exe` from a folder; the worker executable must remain beside it.
-- **Setup installer:** a setup package copies both executables and any required resources into Program Files, creates shortcuts, and optionally registers an uninstaller.
-
-The repository does **not yet contain a maintained Inno Setup script or a published Setup.exe**. After successfully building and testing the two executables above, install [Inno Setup](https://jrsoftware.org/isinfo.php), create an installer script that includes both files, and compile it. The installer must install `FDMX.exe` and `fdmx_plugin_worker.exe` into the same application directory. Keep user data in the user's profile (for example `%USERPROFILE%\.fdmx`), not inside Program Files, so updates and uninstalling the application do not unexpectedly erase download history or plugin data.
-
-Do not distribute a setup package until it has been tested on a clean Windows machine, including install, launch, upgrade, uninstall, and preservation of user data.
+User data remains under `%USERPROFILE%\\.fdmx` so existing download history and preferences are preserved when the application is renamed or upgraded. The application supports canceling stale paused/retrying tasks and removes task-specific temporary download fragments when canceled.
 
 ## Browser extensions
 
