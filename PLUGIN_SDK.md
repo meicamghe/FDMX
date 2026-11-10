@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.3
+# FDMX Plugin SDK 1.4
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
@@ -32,6 +32,52 @@ persistence fails, the plugin directory is restored.
 
 Only install plugins from sources you trust. Process separation is not a
 security sandbox and does not make untrusted Python code safe.
+
+## Plugin signing and publisher trust
+
+SDK 1.4 supports detached Ed25519 signatures in `plugin.sig`. The signature
+covers a deterministic manifest of SHA-256 hashes for every regular package
+file except `plugin.sig` itself. Symbolic links and special files are rejected.
+Changing the manifest, entrypoint, or any other packaged file invalidates the
+signature.
+
+Install the optional signing dependency with `python -m pip install cryptography`.
+The publisher generates an Ed25519 key pair and keeps the private key offline:
+
+```python
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+
+key = Ed25519PrivateKey.generate()
+private_pem = key.private_bytes(serialization.Encoding.PEM,
+    serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+public_pem = key.public_key().public_bytes(serialization.Encoding.PEM,
+    serialization.PublicFormat.SubjectPublicKeyInfo)
+open("publisher-private.pem", "wb").write(private_pem)  # keep private; never distribute
+open("publisher-public.pem", "wb").write(public_pem)
+```
+
+Sign a completed plugin folder before distributing it:
+
+```python
+from pathlib import Path
+from fdmx_plugin_sdk import sign_plugin_folder
+fingerprint = sign_plugin_folder(Path("my_plugin"), Path("publisher-private.pem").read_bytes())
+print(fingerprint)
+```
+
+The plugin folder now contains `plugin.sig`. Distribute the public key or its
+fingerprint through a separate trusted channel. In FDMX Plugin Manager, inspect
+the fingerprint and choose **Trust Publisher** only after independently
+verifying it. Trust is stored locally in `trusted_publishers.json`.
+
+Status meanings: `trusted` = valid signature from a locally trusted key;
+`unknown_publisher` = valid signature but key not trusted yet; `unsigned` =
+no signature; `invalid` = signature or package hash mismatch; `unavailable` =
+cryptography is not installed. Invalid signatures are always blocked. Unsigned
+and unknown packages require explicit confirmation to install and load. A
+signature verifies package integrity and publisher-key possession; it does
+not prove that the plugin is benign or safe.
 
 ## Plugin contract
 Define `register(api)`; optional `shutdown()` runs when the worker is stopped. API: `api.log(message)`, `api.notify(title, message)`, `api.on(event_name, callback)`. Events: `app.started`, `download.completed`, `download.failed`.
