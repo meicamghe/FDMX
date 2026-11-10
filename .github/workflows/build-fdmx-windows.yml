@@ -1,4 +1,4 @@
-name: Build FDMX Windows packages
+name: Build GNS Downloader Windows packages
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   package-windows:
-    name: Build compact Windows EXE and Setup
+    name: Build compact GNS Downloader EXE and Setup
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -40,6 +40,15 @@ jobs:
       - name: Compile application
         run: |
           python -m py_compile FDMX_v6_36.py
+
+      - name: Run application regression tests
+        run: |
+          python tests/test_gns_downloader_regressions.py
+
+      - name: Verify generated icon
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "installer/gns-downloader.ico")) { throw "GNS Downloader icon was not generated." }
 
       - name: Build GNS Downloader as an onedir application
         shell: pwsh
