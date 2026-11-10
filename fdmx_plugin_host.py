@@ -14,9 +14,14 @@ def send(message):
 class WorkerAPI:
     def __init__(self, plugin_id, permissions):
         self.plugin_id, self.permissions, self.hooks, self.next_id = plugin_id, set(permissions), {}, 1
+        self.pending_responses = {}
     def _rpc(self, method, **values):
         rid = self.next_id; self.next_id += 1
         send({"type":"rpc","id":rid,"method":method,**values})
+        if rid in self.pending_responses:
+            response = self.pending_responses.pop(rid)
+            if not response.get("ok"): raise PermissionError(response.get("error", "RPC denied"))
+            return
         while True:
             line = sys.stdin.readline()
             if not line: raise EOFError("FDMX closed plugin IPC")
@@ -29,9 +34,13 @@ class WorkerAPI:
                 continue
             if response.get("type") == "shutdown":
                 raise EOFError("Plugin worker is shutting down")
-            if response.get("type") == "rpc_result" and response.get("id") == rid:
-                if not response.get("ok"): raise PermissionError(response.get("error","RPC denied"))
-                return
+            if response.get("type") == "rpc_result":
+                response_id = response.get("id")
+                if response_id == rid:
+                    if not response.get("ok"): raise PermissionError(response.get("error", "RPC denied"))
+                    return
+                if isinstance(response_id, int):
+                    self.pending_responses[response_id] = response
     def log(self, message):
         if "app.log" not in self.permissions: raise PermissionError("Missing app.log")
         self._rpc("log", message=str(message)[:1000])
