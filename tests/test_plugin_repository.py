@@ -99,6 +99,30 @@ class RepositoryTests(unittest.TestCase):
                                    "sha256": hashlib.sha256(archive.getvalue()).hexdigest()},
                                   self.root / "extract")
 
+    def test_update_keeps_history_and_signed_rollback_restores_previous_version(self):
+        old = self.make_package("1.0")
+        self.manager.install_plugin(old)
+        new = self.make_package("2.0")
+        self.fake_repository(self.archive(new)).update(self.manager, "repo_plugin")
+        history = self.manager.list_plugin_versions("repo_plugin")
+        self.assertEqual([item["version"] for item in history], ["1.0"])
+        record = self.manager.rollback_plugin("repo_plugin", history[0]["folder"])
+        self.assertEqual(record.version, "1.0")
+        self.assertEqual(record.signature_status, "trusted")
+        remaining = self.manager.list_plugin_versions("repo_plugin")
+        self.assertEqual([item["version"] for item in remaining], ["2.0"])
+
+    def test_rollback_rejects_modified_historical_package(self):
+        old = self.make_package("1.0")
+        self.manager.install_plugin(old)
+        new = self.make_package("2.0")
+        self.fake_repository(self.archive(new)).update(self.manager, "repo_plugin")
+        history = self.manager.list_plugin_versions("repo_plugin")
+        (history[0]["folder"] / "plugin.py").write_text("def register(api): pass\\n", encoding="utf-8")
+        with self.assertRaises(PermissionError):
+            self.manager.rollback_plugin("repo_plugin", history[0]["folder"])
+        self.assertEqual(self.manager.records["repo_plugin"].version, "2.0")
+
     def test_repository_requires_https(self):
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             PluginRepository("http://repo.example/catalog.json")
