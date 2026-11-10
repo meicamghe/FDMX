@@ -2,11 +2,11 @@
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
-import json, os, re, subprocess, sys, threading
+import json, os, re, shutil, subprocess, sys, threading, uuid
 
 from dataclasses import dataclass
 from pathlib import Path
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox, QFileDialog
 
 SDK_VERSION = "1.2"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
@@ -173,11 +173,125 @@ class PluginManager:
         except (OSError, ValueError, TypeError): return {}
 
     def _save_state(self):
-        temp = self.state_file.with_suffix(".tmp")
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        temp = self.state_file.with_name(self.state_file.name + "." + uuid.uuid4().hex + ".tmp")
         try:
-            temp.write_text(json.dumps(self._state, ensure_ascii=False, indent=2), encoding="utf-8")
+            with temp.open("w", encoding="utf-8") as stream:
+                json.dump(self._state, stream, ensure_ascii=False, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
             os.replace(temp, self.state_file)
-        except OSError as exc: self.logger(f"Could not save plugin settings: {exc}")
+        except OSError:
+            try: temp.unlink(missing_ok=True)
+            except OSError: pass
+            raise
+
+    def plugin_data_dir(self, plugin_id):
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        return self.plugin_dir.parent / "plugin_data" / plugin_id
+
+    def get_plugin_settings(self, plugin_id):
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        entry = self._state.get(plugin_id, {})
+        settings = entry.get("settings", {}) if isinstance(entry, dict) else {}
+        return dict(settings) if isinstance(settings, dict) else {}
+
+    def set_plugin_settings(self, plugin_id, settings):
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        if not isinstance(settings, dict):
+            raise TypeError("Plugin settings must be a JSON object")
+        # Validate JSON compatibility before mutating persistent state.
+        clean = json.loads(json.dumps(settings, ensure_ascii=False))
+        previous = json.loads(json.dumps(self._state))
+        self._state.setdefault(plugin_id, {})["settings"] = clean
+        try:
+            self._save_state()
+        except Exception:
+            self._state = previous
+            raise
+
+    def install_plugin(self, source_folder):
+        """Install a trusted plugin directory atomically after manifest validation."""
+        source = Path(source_folder).expanduser().resolve()
+        if not source.is_dir():
+            raise NotADirectoryError(f"Plugin source folder does not exist: {source}")
+        manifest = source / "plugin.json"
+        if not manifest.is_file() or manifest.is_symlink():
+            raise ValueError("Plugin folder must contain a regular plugin.json file")
+        for item in source.rglob("*"):
+            if item.is_symlink():
+                raise ValueError(f"Plugin packages may not contain symbolic links: {item}")
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Plugin manifest must be a JSON object")
+        plugin_id = str(data.get("id", source.name))
+        if not PLUGIN_ID_RE.fullmatch(plugin_id):
+            raise ValueError("Invalid plugin id in manifest")
+        entry = str(data.get("entrypoint", "plugin.py"))
+        if Path(entry).name != entry or not entry.endswith(".py"):
+            raise ValueError("Entrypoint must be a Python file directly inside the plugin folder")
+        permissions = data.get("permissions", [])
+        if not isinstance(permissions, list) or any(not isinstance(p, str) for p in permissions):
+            raise ValueError("Plugin permissions must be a list of strings")
+        unknown = set(permissions) - ALLOWED_PERMISSIONS
+        if unknown:
+            raise ValueError("Unknown permission(s): " + ", ".join(sorted(unknown)))
+        if not (source / entry).is_file():
+            raise FileNotFoundError(f"Plugin entrypoint not found: {entry}")
+        target = self.plugin_dir / plugin_id
+        if target.exists():
+            raise FileExistsError(f"Plugin is already installed: {plugin_id}")
+        staging = self.plugin_dir / (".install-" + uuid.uuid4().hex)
+        try:
+            shutil.copytree(source, staging)
+            # Re-validate the staged copy before making it visible to scan().
+            staged_manifest = json.loads((staging / "plugin.json").read_text(encoding="utf-8"))
+            if str(staged_manifest.get("id", staging.name)) != plugin_id:
+                raise ValueError("Plugin manifest changed during installation")
+            os.replace(staging, target)
+            self.scan()
+            if plugin_id not in self.records:
+                raise RuntimeError("Installed plugin failed manager validation")
+            self.logger(f"Installed plugin: {plugin_id}")
+            return self.records[plugin_id]
+        except Exception:
+            if staging.exists(): shutil.rmtree(staging, ignore_errors=True)
+            if target.exists() and plugin_id not in self.records:
+                shutil.rmtree(target, ignore_errors=True)
+            raise
+
+    def uninstall(self, plugin_id, *, remove_data=False):
+        """Remove plugin code; preserve user settings/data unless explicitly requested."""
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        rec = self.records.get(plugin_id)
+        target = self.plugin_dir / plugin_id
+        if rec is None or not target.is_dir():
+            raise KeyError(f"Plugin is not installed: {plugin_id}")
+        self.unload(plugin_id)
+        backup = self.plugin_dir / (".remove-" + uuid.uuid4().hex)
+        previous = json.loads(json.dumps(self._state))
+        os.replace(target, backup)
+        try:
+            if remove_data:
+                self._state.pop(plugin_id, None)
+            else:
+                state = self._state.setdefault(plugin_id, {})
+                state["enabled"] = False
+            self._save_state()
+        except Exception:
+            self._state = previous
+            os.replace(backup, target)
+            self.scan()
+            raise
+        shutil.rmtree(backup)
+        if remove_data:
+            shutil.rmtree(self.plugin_data_dir(plugin_id), ignore_errors=True)
+        self.scan()
+        self.logger(f"Uninstalled plugin: {plugin_id}")
 
     def scan(self):
         found = {}
@@ -203,9 +317,15 @@ class PluginManager:
 
     def set_enabled(self, plugin_id, enabled):
         rec = self.records[plugin_id]
+        previous = bool(rec.enabled)
         rec.enabled = bool(enabled)
         self._state.setdefault(plugin_id, {})["enabled"] = rec.enabled
-        self._save_state()
+        try:
+            self._save_state()
+        except Exception:
+            rec.enabled = previous
+            self._state.setdefault(plugin_id, {})["enabled"] = previous
+            raise
         if not rec.enabled: self.unload(plugin_id)
 
     def load(self, plugin_id):
@@ -255,10 +375,14 @@ class PluginManagerDialog(QDialog):
         self.details = QTextEdit(); self.details.setReadOnly(True); self.details.setMaximumHeight(110); layout.addWidget(self.details)
         buttons = QHBoxLayout()
         self.scan_button, self.enable_button = QPushButton("Refresh"), QPushButton("Enable")
-        self.load_button, self.disable_button, self.close_button = QPushButton("Load"), QPushButton("Disable"), QPushButton("Close")
-        for button in (self.scan_button, self.enable_button, self.load_button, self.disable_button): buttons.addWidget(button)
+        self.load_button, self.disable_button = QPushButton("Load"), QPushButton("Disable")
+        self.install_button, self.uninstall_button = QPushButton("Install Folder"), QPushButton("Uninstall")
+        self.close_button = QPushButton("Close")
+        for button in (self.scan_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.uninstall_button): buttons.addWidget(button)
         buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
+        self.install_button.clicked.connect(self._install_plugin)
+        self.uninstall_button.clicked.connect(self._uninstall_plugin)
         self.enable_button.clicked.connect(lambda: self._set_enabled(True))
         self.disable_button.clicked.connect(lambda: self._set_enabled(False))
         self.load_button.clicked.connect(self._load_selected)
@@ -283,6 +407,31 @@ class PluginManagerDialog(QDialog):
         pid = self._selected(); rec = self.manager.records.get(pid) if pid else None
         if not rec: self.details.clear(); return
         self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nError: {rec.error or 'None'}")
+
+    def _install_plugin(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select plugin folder")
+        if not folder: return
+        try:
+            rec = self.manager.install_plugin(folder)
+            self.refresh()
+            QMessageBox.information(self, "Plugin installed", f"{rec.name} v{rec.version} installed and remains disabled until enabled.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Plugin installation failed", str(exc))
+
+    def _uninstall_plugin(self):
+        pid = self._selected()
+        if not pid: return
+        answer = QMessageBox.question(
+            self, "Uninstall plugin",
+            "Remove this plugin's code? Its settings and plugin data will be preserved.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if answer != QMessageBox.Yes: return
+        try:
+            self.manager.uninstall(pid, remove_data=False)
+            self.refresh()
+        except Exception as exc:
+            QMessageBox.warning(self, "Plugin uninstall failed", str(exc))
 
     def _set_enabled(self, enabled):
         pid = self._selected()
