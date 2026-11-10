@@ -427,7 +427,10 @@ class PluginManager:
         parts = str(value).split(".")
         if not parts or len(parts) > 4 or any(not p.isdigit() for p in parts):
             raise ValueError("Plugin versions must use numeric dot-separated versions")
-        return tuple(int(p) for p in parts)
+        normalized = [int(p) for p in parts]
+        while len(normalized) > 1 and normalized[-1] == 0:
+            normalized.pop()
+        return tuple(normalized)
 
     def update_plugin(self, source_folder):
         """Atomically replace an installed plugin with a newer, trusted signed build."""
@@ -527,6 +530,7 @@ class PluginManager:
                 versions.append({"version": version, "folder": folder})
             except Exception:
                 continue
+        versions.sort(key=lambda item: self._version_tuple(item["version"]), reverse=True)
         return versions
 
     def rollback_plugin(self, plugin_id, historical_folder):
@@ -766,7 +770,7 @@ class PluginManagerDialog(QDialog):
             if not versions:
                 QMessageBox.information(self, "Plugin rollback", "No verified previous versions are available.")
                 return
-            labels = [f"v{item['version']}" for item in versions]
+            labels = [f"v{item['version']} — {item['folder'].name[-8:]}" for item in versions]
             selected, ok = QInputDialog.getItem(self, "Plugin rollback", "Restore version:", labels, 0, False)
             if not ok:
                 return
