@@ -164,9 +164,12 @@ class PluginManager:
                 perms = tuple(sorted(set(data.get("permissions", []))))
                 unknown = set(perms) - ALLOWED_PERMISSIONS
                 if unknown: raise ValueError("Unknown permission(s): " + ", ".join(sorted(unknown)))
+                previous = self.records.get(pid)
                 found[pid] = PluginRecord(pid, str(data.get("name", pid))[:100], str(data.get("version", "0.0.0"))[:40],
                     str(data.get("description", ""))[:500], manifest_path.parent, entry, perms,
-                    bool(self._state.get(pid, {}).get("enabled", False)))
+                    bool(self._state.get(pid, {}).get("enabled", False)),
+                    loaded=pid in self._workers,
+                    error=previous.error if previous else "")
             except Exception as exc: self.logger(f"Skipped {manifest_path}: {exc}")
         self.records = found
         return list(found.values())
