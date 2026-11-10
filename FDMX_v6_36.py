@@ -958,7 +958,7 @@ class DownloadDetailsDialog(QDialog):
         self.start_btn.setEnabled(status == "Ready")
         self.pause_btn.setEnabled(status in active_states)
         self.resume_btn.setEnabled(status == "Paused")
-        self.cancel_btn.setEnabled(status in active_states or status in ("Paused", "Queued"))
+        self.cancel_btn.setEnabled(status in active_states or status in ("Paused", "Queued", "Ready", "Canceling"))
         self.retry_btn.setEnabled(status in ("Failed", "Canceled"))
         downloaded = int(task.get("downloaded") or 0)
         total = int(task.get("total") or 0)
@@ -3957,15 +3957,20 @@ remove plugin methods    def open_settings_dialog(self):
         worker = FileInfoWorker(task["url"])
         task["metadata_worker"] = worker
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
+        worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
         worker.start()
         self.show_download_details(task_id)
         self.refresh_table()
+
+    def _metadata_worker_finished(self, task_id, worker):
+        task = self.tasks.get(task_id)
+        if task and task.get("metadata_worker") is worker:
+            task["metadata_worker"] = None
 
     def on_file_info_ready(self, task_id, info):
         task = self.tasks.get(task_id)
         if not task:
             return
-        task["metadata_worker"] = None
         if task.get("status") in ("Canceled", "Canceling"):
             return
         if info.get("error"):
@@ -4147,6 +4152,13 @@ remove plugin methods    def open_settings_dialog(self):
             shutil.rmtree(parts_dir, ignore_errors=True)
         worker = task.get("worker")
         partials = (getattr(worker, "temp_path", None), task.get("temp_path"))
+        suffix = f".{task_id}.fdmx.tmp"
+        try:
+            for name in os.listdir(folder):
+                if name.endswith(suffix):
+                    partials += (os.path.join(folder, name),)
+        except OSError:
+            pass
         for partial in partials:
             if partial and os.path.isfile(partial):
                 try:
@@ -4165,7 +4177,6 @@ remove plugin methods    def open_settings_dialog(self):
                 metadata_worker.cancel()
             except Exception:
                 pass
-            task["metadata_worker"] = None
         if worker is not None and worker.isRunning():
             task["status"] = "Canceling"
             self.save_tasks()
@@ -4297,6 +4308,7 @@ remove plugin methods    def open_settings_dialog(self):
             attempts += 1
             task["retry_attempts"] = attempts
             task["status"] = "Retrying"
+            self.save_tasks()
             delay = min(60, 5 * (2 ** (attempts - 1)))
             self.status.setText(f"Network error. Automatic retry {attempts}/3 in {delay}s…")
             QTimer.singleShot(delay * 1000, lambda tid=task_id: self._auto_retry_task(tid))
