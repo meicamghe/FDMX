@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.1
+# FDMX Plugin SDK 1.2
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
