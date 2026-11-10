@@ -699,8 +699,8 @@ class PluginManagerDialog(QDialog):
                     answer = QMessageBox.warning(
                         self, "Untrusted repository plugin",
                         "Signature status: " + verification["status"] +
-                        "\\nPublisher fingerprint: " + (verification["fingerprint"] or "—") +
-                        "\\n\\nOnly continue if you independently verified the publisher fingerprint.",
+                        "\nPublisher fingerprint: " + (verification["fingerprint"] or "—") +
+                        "\n\nOnly continue if you independently verified the publisher fingerprint.",
                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No
                     )
                     if answer != QMessageBox.Yes:
