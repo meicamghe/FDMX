@@ -452,6 +452,7 @@ class DownloadWorker(QThread):
                     self.register_socket(sock)
                     mode = "ab" if received else "wb"
                     with open(path, mode) as output:
+                        last_sync = time.monotonic()
                         while True:
                             self.wait_if_paused()
                             chunk = self.read_chunk(response)
@@ -464,6 +465,12 @@ class DownloadWorker(QThread):
                             output.flush()
                             received += len(chunk)
                             self.update_progress(len(chunk))
+                            # Make partial data durable without forcing a disk sync per chunk.
+                            if time.monotonic() - last_sync >= 1.0:
+                                os.fsync(output.fileno())
+                                last_sync = time.monotonic()
+                        output.flush()
+                        os.fsync(output.fileno())
                 failures = 0
             except InterruptedError:
                 raise
@@ -554,11 +561,22 @@ class DownloadWorker(QThread):
             ranges.append((index, start, end))
 
         with PersistentTempDirectory(os.path.join(self.folder, f".fdmx_{self.task_id}.parts")) as temp_folder:
-            existing_bytes = sum(
-                min(os.path.getsize(os.path.join(temp_folder, f"part_{i:02d}.tmp")), end - start + 1)
-                for i, start, end in ranges
-                if os.path.isfile(os.path.join(temp_folder, f"part_{i:02d}.tmp"))
-            )
+            # Reject impossible oversized fragments before calculating resume offsets.
+            # A truncated fragment is safe to continue; an oversized one is discarded.
+            existing_bytes = 0
+            for index, start, end in ranges:
+                part_path = os.path.join(temp_folder, f"part_{index:02d}.tmp")
+                expected = end - start + 1
+                if not os.path.isfile(part_path):
+                    continue
+                try:
+                    received = os.path.getsize(part_path)
+                    if received > expected:
+                        os.remove(part_path)
+                        received = 0
+                    existing_bytes += received
+                except OSError:
+                    continue
             with self.lock:
                 self.downloaded = existing_bytes
                 self.last_bytes = existing_bytes
