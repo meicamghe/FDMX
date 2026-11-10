@@ -1,4 +1,4 @@
-"""FDMX Plugin SDK 1.5 - signed plugins, lifecycle, and atomic updates.
+"""FDMX Plugin SDK 1.7 - signed plugins, lifecycle, history, and rollback.
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
