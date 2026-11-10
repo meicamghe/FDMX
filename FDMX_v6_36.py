@@ -787,12 +787,12 @@ class FileInfoWorker(QThread):
         try:
             request = urllib.request.Request(self.url, headers=headers, method="HEAD")
             try:
-                response = urllib.request.urlopen(request, timeout=8)
+                response = urllib.request.urlopen(request, timeout=4)
             except Exception:
                 if self.cancel_event.is_set():
                     return
                 request = urllib.request.Request(self.url, headers={**headers, "Range": "bytes=0-0"})
-                response = urllib.request.urlopen(request, timeout=8)
+                response = urllib.request.urlopen(request, timeout=4)
             with self._response_lock:
                 self._active_response = response
             if self.cancel_event.is_set():
@@ -4722,11 +4722,17 @@ class FDMX(QWidget):
         self.schedule_downloads()
 
     def closeEvent(self, event):
+        metadata_pending = [
+            task for task in self.tasks.values()
+            if task.get("metadata_worker") and task["metadata_worker"].isRunning()
+        ]
         active = [
             task for task in self.tasks.values()
-            if (task.get("worker") or task.get("metadata_worker"))
+            if task.get("worker")
             and task.get("status") in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
         ]
+        for task in metadata_pending:
+            task["metadata_worker"].cancel()
         if active:
             answer = QMessageBox.question(
                 self, "Downloads running",
@@ -4748,6 +4754,10 @@ class FDMX(QWidget):
                     task.update({"status": "Canceled", "worker": None, "speed": 0.0, "eta": -1.0})
                     self._cleanup_task_artifacts(task.get("id"), task)
                     self.save_history_entry(task)
+        for task in metadata_pending:
+            worker = task.get("metadata_worker")
+            if worker:
+                worker.wait(5000)
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):
