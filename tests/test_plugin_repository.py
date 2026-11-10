@@ -123,6 +123,24 @@ class RepositoryTests(unittest.TestCase):
             self.manager.rollback_plugin("repo_plugin", history[0]["folder"])
         self.assertEqual(self.manager.records["repo_plugin"].version, "2.0")
 
+    def test_numeric_versions_ignore_trailing_zero_components(self):
+        self.assertEqual(PluginManager._version_tuple("1.2"), PluginManager._version_tuple("1.2.0"))
+        self.assertGreater(PluginManager._version_tuple("1.2.1"), PluginManager._version_tuple("1.2"))
+        self.assertGreater(PluginManager._version_tuple("2.0"), PluginManager._version_tuple("1.99.9"))
+
+    def test_catalog_rejects_oversized_or_non_text_release_notes(self):
+        repo = PluginRepository("https://repo.example/catalog.json")
+        catalog = {
+            "format": "FDMX-PLUGIN-REPOSITORY-V1",
+            "plugins": [{
+                "id": "test", "version": "1.0", "archive_url": "https://repo.example/test.zip",
+                "sha256": "a" * 64, "release_notes": "x" * 10001
+            }]
+        }
+        repo._fetch = lambda url, limit: json.dumps(catalog).encode()
+        with self.assertRaisesRegex(PluginRepositoryError, "release_notes"):
+            repo.list_plugins()
+
     def test_repository_requires_https(self):
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             PluginRepository("http://repo.example/catalog.json")
