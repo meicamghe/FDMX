@@ -38,7 +38,7 @@ def _plugin_file_hashes(folder):
     for path in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
         if path.is_symlink():
             raise ValueError("Plugin packages may not contain symbolic links: " + str(path))
-        if path.is_file() and path.name != SIGNATURE_FILE:
+        if path.is_file() and path.relative_to(root).as_posix() != SIGNATURE_FILE:
             hashes[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
         elif not path.is_dir() and not path.is_file():
             raise ValueError("Unsupported special file in plugin package: " + str(path))
@@ -396,7 +396,13 @@ class PluginManager:
         staging = self.plugin_dir / (".install-" + uuid.uuid4().hex)
         try:
             shutil.copytree(source, staging)
-            # Re-validate the staged copy before making it visible to scan().
+            # Verify the copied bytes too, closing the source-to-staging modification window.
+            staged_verification = verify_plugin_folder(staging, self.trusted_publishers)
+            if staged_verification["status"] == "invalid":
+                raise PermissionError("Staged plugin signature verification failed: " + staged_verification["detail"])
+            if (staged_verification["status"], staged_verification["fingerprint"]) != (verification["status"], verification["fingerprint"]):
+                raise RuntimeError("Plugin package changed during installation")
+            # Re-validate the staged manifest before making it visible to scan().
             staged_manifest = json.loads((staging / "plugin.json").read_text(encoding="utf-8"))
             if str(staged_manifest.get("id", staging.name)) != plugin_id:
                 raise ValueError("Plugin manifest changed during installation")
