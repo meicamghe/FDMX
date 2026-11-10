@@ -277,6 +277,8 @@ class DownloadWorker(QThread):
         self.last_bytes = 0
         self.current_speed = 0.0
         self.limiter = RateLimiter(speed_limit_kbps * 1024)
+        self.destination_path = None
+        self.temp_path = None
 
     def _interrupt_active_sockets(self):
         with self._socket_lock:
@@ -375,7 +377,7 @@ class DownloadWorker(QThread):
         if start is not None:
             headers["Range"] = f"bytes={start}-{end}"
         req = urllib.request.Request(self.url, headers=headers)
-        return urllib.request.urlopen(req, timeout=60)
+        return urllib.request.urlopen(req, timeout=15)
         
     def get_response_socket(self, response):
         """Return urllib's underlying socket for readiness polling."""
@@ -499,7 +501,8 @@ class DownloadWorker(QThread):
 
     def download_single(self, destination):
         """Single-stream fallback. Pause interrupts the socket; resume restarts safely."""
-        temp_path = destination + ".fdmx.tmp"
+        temp_path = destination + f".{self.task_id}.fdmx.tmp"
+        self.temp_path = temp_path
         self.reset_progress(0)
         failures = 0
         while True:
@@ -614,16 +617,23 @@ class DownloadWorker(QThread):
             self.state.emit("Checking server")
             self.wait_if_paused()
             with self.request(0, 0) as probe:
-                filename = get_filename(probe)
-                content_range = probe.headers.get("Content-Range", "")
-                match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
-                supported = probe.status == 206 and match is not None
-                total = int(match.group(1)) if match else 0
-                probe.read(1)
+                probe_socket = self.get_response_socket(probe)
+                self.register_socket(probe_socket)
+                try:
+                    self.wait_if_paused()
+                    filename = get_filename(probe)
+                    content_range = probe.headers.get("Content-Range", "")
+                    match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
+                    supported = probe.status == 206 and match is not None
+                    total = int(match.group(1)) if match else 0
+                    probe.read(1)
+                finally:
+                    self.unregister_socket(probe_socket)
             self.wait_if_paused()
 
             os.makedirs(self.folder, exist_ok=True)
             destination = unique_path(self.folder, filename)
+            self.destination_path = destination
 
             last_error = None
             for attempt in range(3):
@@ -650,6 +660,15 @@ class DownloadWorker(QThread):
                         time.sleep(1.0 + attempt)
             raise RuntimeError(str(last_error))
         except InterruptedError:
+            parts_dir = os.path.join(self.folder, f".fdmx_{self.task_id}.parts")
+            if os.path.isdir(parts_dir):
+                shutil.rmtree(parts_dir, ignore_errors=True)
+            for partial in (self.temp_path, destination + ".fdmx.tmp" if destination else None):
+                if partial and os.path.isfile(partial):
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
             self.state.emit("Canceled")
             self.canceled.emit()
         except Exception as exc:
@@ -915,12 +934,7 @@ class DownloadDetailsDialog(QDialog):
 
     def cancel_download(self):
         task = self.task
-        if task.get("status") in ("Queued", "Ready", "Checking metadata"):
-            task["status"] = "Canceled"
-            self.parent_window.save_history_entry(task)
-        elif task.get("worker"):
-            task["worker"].cancel()
-        self.parent_window.refresh_table()
+        self.parent_window.cancel_task(task.get("id"))
         self.refresh_data()
 
     def retry_download(self):
@@ -3952,7 +3966,14 @@ remove plugin methods    def open_settings_dialog(self):
         if not task:
             return
         task["metadata_worker"] = None
-        if task.get("status") == "Canceled":
+        if task.get("status") in ("Canceled", "Canceling"):
+            return
+        if info.get("error"):
+            task.update({"status": "Failed", "speed": 0.0, "eta": -1.0})
+            self.save_history_entry(task, error=info["error"])
+            self.save_tasks()
+            self.refresh_table()
+            self.status.setText(f"Could not read download information: {info['error']}")
             return
         if info.get("name"):
             task["name"] = info["name"]
@@ -4114,14 +4135,47 @@ remove plugin methods    def open_settings_dialog(self):
 
     def cancel_selected(self):
         task_id = self.selected_task()
+        self.cancel_task(task_id)
+
+    def _cleanup_task_artifacts(self, task_id, task=None):
+        task = task or self.tasks.get(task_id, {})
+        folder = task.get("folder", "")
+        if not folder:
+            return
+        parts_dir = os.path.join(folder, f".fdmx_{task_id}.parts")
+        if os.path.isdir(parts_dir):
+            shutil.rmtree(parts_dir, ignore_errors=True)
+        worker = task.get("worker")
+        partials = (getattr(worker, "temp_path", None), task.get("temp_path"))
+        for partial in partials:
+            if partial and os.path.isfile(partial):
+                try:
+                    os.remove(partial)
+                except OSError:
+                    pass
+
+    def cancel_task(self, task_id):
         task = self.tasks.get(task_id)
         if not task:
             return
-        if task["status"] == "Queued":
-            task["status"] = "Canceled"
+        metadata_worker = task.get("metadata_worker")
+        worker = task.get("worker")
+        if metadata_worker is not None:
+            try:
+                metadata_worker.cancel()
+            except Exception:
+                pass
+            task["metadata_worker"] = None
+        if worker is not None and worker.isRunning():
+            task["status"] = "Canceling"
+            self.save_tasks()
+            worker.cancel()
+        else:
+            task.update({"status": "Canceled", "worker": None, "speed": 0.0, "eta": -1.0})
+            self._cleanup_task_artifacts(task_id, task)
             self.save_history_entry(task)
-        elif task.get("worker"):
-            task["worker"].cancel()
+            self.save_tasks()
+            self.schedule_downloads()
         self.refresh_table()
 
     def retry_selected(self):
@@ -4141,9 +4195,12 @@ remove plugin methods    def open_settings_dialog(self):
         if not task_id:
             return
         task = self.tasks.get(task_id)
-        if task and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding"):
-            QMessageBox.information(self, "Download active", "Cancel the active download before removing it.")
-            return
+        if task and (task.get("worker") is not None or task.get("metadata_worker") is not None):
+            worker = task.get("worker") or task.get("metadata_worker")
+            if worker.isRunning():
+                QMessageBox.information(self, "Download active", "Cancel the active download before removing it.")
+                return
+        self._cleanup_task_artifacts(task_id, task)
         self.tasks.pop(task_id, None)
         self.save_tasks()
         self.refresh_table()
@@ -4262,11 +4319,14 @@ remove plugin methods    def open_settings_dialog(self):
         self.schedule_downloads()
 
     def on_canceled(self):
-        task_id = self.sender().task_id
+        worker = self.sender()
+        task_id = worker.task_id
         task = self.tasks.get(task_id)
         if task:
             task.update({"status": "Canceled", "speed": 0.0, "eta": -1.0, "worker": None})
+            self._cleanup_task_artifacts(task_id, task)
             self.save_history_entry(task)
+            self.save_tasks()
             self.refresh_table()
         self.cleanup_worker(task_id)
         self.schedule_downloads()
@@ -4387,7 +4447,7 @@ remove plugin methods    def open_settings_dialog(self):
                 saved = []
 
         self.recovered_task_ids = set()
-        interrupted_states = ("Downloading", "Paused", "Checking server", "Retrying", "Seeding")
+        interrupted_states = ("Downloading", "Checking server", "Retrying", "Seeding")
         for entry in saved:
             if not isinstance(entry, dict) or not entry.get("url") or not entry.get("folder"):
                 continue
@@ -4440,7 +4500,7 @@ remove plugin methods    def open_settings_dialog(self):
         os.makedirs(os.path.dirname(TASKS_FILE), exist_ok=True)
         saved = []
         for task in self.tasks.values():
-            if task.get("status") in ("Completed", "Failed", "Canceled"):
+            if task.get("status") in ("Completed", "Failed", "Canceled", "Canceling"):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
@@ -4651,7 +4711,8 @@ remove plugin methods    def open_settings_dialog(self):
     def closeEvent(self, event):
         active = [
             task for task in self.tasks.values()
-            if task.get("worker") and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
+            if (task.get("worker") or task.get("metadata_worker"))
+            and task.get("status") in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
         ]
         if active:
             answer = QMessageBox.question(
@@ -4663,9 +4724,13 @@ remove plugin methods    def open_settings_dialog(self):
                 event.ignore()
                 return
             for task in active:
-                task["worker"].cancel()
+                worker = task.get("worker") or task.get("metadata_worker")
+                if worker:
+                    worker.cancel()
             for task in active:
-                task["worker"].wait(3000)
+                worker = task.get("worker") or task.get("metadata_worker")
+                if worker:
+                    worker.wait(3000)
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):
