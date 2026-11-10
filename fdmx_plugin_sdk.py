@@ -3,6 +3,7 @@ Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
 import json, os, re, subprocess, sys, threading
+
 from dataclasses import dataclass
 from pathlib import Path
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox
@@ -26,6 +27,32 @@ class PluginRecord:
     loaded: bool = False
     error: str = ""
 
+def _build_worker_command(record, host_script, *, frozen=None, executable=None, bundle_dir=None, platform=None):
+    """Build a worker launch command for source and PyInstaller deployments."""
+    frozen = getattr(sys, "frozen", False) if frozen is None else frozen
+    executable = executable or sys.executable
+    platform = platform or sys.platform
+    arguments = [str(record.folder), record.entrypoint, record.plugin_id,
+                 json.dumps(list(record.permissions))]
+    if not frozen:
+        return [executable, "-u", str(host_script), *arguments]
+
+    worker_name = "fdmx_plugin_worker.exe" if platform.startswith("win") else "fdmx_plugin_worker"
+    candidates = [Path(executable).resolve().parent / worker_name]
+    if bundle_dir:
+        bundled = Path(bundle_dir) / worker_name
+        if bundled not in candidates:
+            candidates.append(bundled)
+    for candidate in candidates:
+        if candidate.is_file():
+            return [str(candidate), *arguments]
+    searched = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        f"Packaged plugin worker '{worker_name}' was not found. "
+        f"Place it beside the FDMX executable or bundle it with the application. Searched: {searched}"
+    )
+
+
 class _Worker:
     def __init__(self, record, logger, notifier):
         self.record, self.logger, self.notifier = record, logger, notifier
@@ -48,9 +75,9 @@ class _Worker:
         host = Path(__file__).with_name("fdmx_plugin_host.py")
         if not host.is_file():
             raise FileNotFoundError("fdmx_plugin_host.py is missing beside fdmx_plugin_sdk.py")
+        command = _build_worker_command(self.record, host)
         self.process = subprocess.Popen(
-            [sys.executable, "-u", str(host), str(self.record.folder), self.record.entrypoint,
-             self.record.plugin_id, json.dumps(list(self.record.permissions))],
+            command,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace", bufsize=1
         )
