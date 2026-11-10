@@ -2579,6 +2579,7 @@ class FDMX(QWidget):
         self._post_action_armed = False
         self._post_action_done = False
         self._session_task_ids = set()
+        self._speed_samples = []  # Rolling speed samples used by the Analytics panel.
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray.setToolTip("FDMX Download Manager")
         if QSystemTrayIcon.isSystemTrayAvailable():
