@@ -591,6 +591,9 @@ class PluginManager:
                 os.replace(backup, history_dir / (current.version + "__" + uuid.uuid4().hex))
             except OSError as exc:
                 self.logger(f"Rollback succeeded but current version archival failed; backup retained at {backup}: {exc}")
+            # The selected historical package is now active; remove its archived
+            # duplicate so history contains only alternate rollback points.
+            shutil.rmtree(source, ignore_errors=True)
             self.logger(f"Rolled back plugin {plugin_id}: {current.version} -> {version}")
             return self.records[plugin_id]
         finally:
