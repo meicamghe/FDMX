@@ -716,11 +716,13 @@ class PluginManagerDialog(QDialog):
         self.install_button, self.uninstall_button = QPushButton("Install Folder"), QPushButton("Uninstall")
         self.trust_button = QPushButton("Trust Publisher")
         self.repository_button = QPushButton("Plugin Repository")
+        self.rollback_button = QPushButton("Rollback")
         self.close_button = QPushButton("Close")
-        for button in (self.scan_button, self.repository_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.uninstall_button): buttons.addWidget(button)
+        for button in (self.scan_button, self.repository_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.rollback_button, self.uninstall_button): buttons.addWidget(button)
         buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
         self.repository_button.clicked.connect(self._open_repository)
+        self.rollback_button.clicked.connect(self._rollback_selected)
         self.install_button.clicked.connect(self._install_plugin)
         self.uninstall_button.clicked.connect(self._uninstall_plugin)
         self.trust_button.clicked.connect(self._trust_selected_publisher)
@@ -749,6 +751,34 @@ class PluginManagerDialog(QDialog):
         if not rec: self.details.clear(); return
         self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nSignature: {rec.signature_status}\nPublisher fingerprint: {rec.publisher_fingerprint or '—'}\nError: {rec.error or 'None'}")
 
+    def _rollback_selected(self):
+        plugin_id = self._selected()
+        if not plugin_id:
+            return
+        try:
+            versions = self.manager.list_plugin_versions(plugin_id)
+            if not versions:
+                QMessageBox.information(self, "Plugin rollback", "No verified previous versions are available.")
+                return
+            labels = [f"v{item['version']}" for item in versions]
+            selected, ok = QInputDialog.getItem(self, "Plugin rollback", "Restore version:", labels, 0, False)
+            if not ok:
+                return
+            chosen = versions[labels.index(selected)]
+            answer = QMessageBox.warning(
+                self, "Confirm rollback",
+                f"Replace {plugin_id} v{self.manager.records[plugin_id].version} with v{chosen['version']}?\\n"
+                "The current version will be kept in history. The plugin will remain stopped.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if answer != QMessageBox.Yes:
+                return
+            record = self.manager.rollback_plugin(plugin_id, chosen["folder"])
+            self.refresh()
+            QMessageBox.information(self, "Rollback complete", f"{record.name} restored to v{record.version}. It remains stopped.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Plugin rollback failed", str(exc))
+
     def _open_repository(self):
         catalog_url, accepted = QInputDialog.getText(
             self, "Plugin Repository", "HTTPS catalog URL:"
@@ -762,11 +792,19 @@ class PluginManagerDialog(QDialog):
             if not entries:
                 QMessageBox.information(self, "Plugin Repository", "No plugins are listed in this catalog.")
                 return
-            labels = [
-                f"{item['id']}  v{item['version']}" +
-                ("  [Installed]" if item["id"] in self.manager.records else "  [Available]")
-                for item in entries
-            ]
+            labels = []
+            for item in entries:
+                installed = self.manager.records.get(item["id"])
+                if installed:
+                    try:
+                        newer = self.manager._version_tuple(item["version"]) > self.manager._version_tuple(installed.version)
+                    except ValueError:
+                        newer = False
+                    state = f"[Update available; installed v{installed.version}]" if newer else f"[Installed v{installed.version}]"
+                else:
+                    state = "[Available]"
+                notes = str(item.get("release_notes", item.get("changelog", ""))).strip().replace("\\n", " ")
+                labels.append(f"{item['id']}  v{item['version']}  {state}" + (f" — {notes[:90]}" if notes else ""))
             selected, ok = QInputDialog.getItem(
                 self, "Plugin Repository", "Select a plugin:", labels, 0, False
             )
@@ -774,7 +812,25 @@ class PluginManagerDialog(QDialog):
                 return
             entry = entries[labels.index(selected)]
             plugin_id = entry["id"]
+            notes = str(entry.get("release_notes", entry.get("changelog", ""))).strip()
             if plugin_id in self.manager.records:
+                current_version = self.manager.records[plugin_id].version
+                try:
+                    if self.manager._version_tuple(entry["version"]) <= self.manager._version_tuple(current_version):
+                        QMessageBox.information(self, "Plugin Repository", f"{plugin_id} is already at the catalog version (v{current_version}).")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Plugin Repository", "The installed or catalog version is not a valid numeric version.")
+                    return
+                answer = QMessageBox.question(
+                    self, "Confirm plugin update",
+                    f"Update {plugin_id} from v{current_version} to v{entry['version']}?\\n\\n"
+                    + (notes[:3000] if notes else "No release notes supplied.") +
+                    "\\n\\nThe plugin will remain stopped after updating.",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                )
+                if answer != QMessageBox.Yes:
+                    return
                 record = repository.update(self.manager, plugin_id)
                 self.refresh()
                 QMessageBox.information(
