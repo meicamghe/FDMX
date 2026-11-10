@@ -1,178 +1,201 @@
 # FDMX — Download Manager
 
-**FDMX** is a Python desktop download manager built with **PySide6**. [راهنمای فارسی نصب و استفاده](docs/README_FA.md) is also available. The project includes a Windows-focused desktop application, an Ubuntu-themed interface variant, and browser extensions for Chrome and Firefox.
+FDMX is a desktop download manager built with **Python** and **PySide6 (Qt for Python)**. It provides multi-connection HTTP/HTTPS downloads, task controls, download history, browser hand-off, and an extensible plugin system.
 
-> Project status: actively developed. Some capabilities and browser-integration workflows may depend on the selected script version. This repository currently contains multiple historical builds; for the latest tested Windows build use **FDMX_v6_11.py**. The Ubuntu-themed build is **ubuntu.py** and should be treated as experimental until tested on your system.
+**زبان فارسی:** [راهنمای فارسی نصب، اجرا و ساخت فایل EXE](docs/README_FA.md)
 
-## Highlights
+> **Development status:** This repository contains multiple historical versions. The current development-branch desktop entry point is `FDMX_v6_36.py` (application version 6.36). The Ubuntu-themed variant is `ubuntu.py`. Plugin SDK 1.7 work is present on the development branch, but its latest integration-test CI run failed; treat that SDK revision as under development, not as a stable production release. No installer or signed end-user release is currently published.
 
-- Multi-connection HTTP/HTTPS downloads with configurable connection count.
-- Pause, resume, cancel and retry controls.
-- Per-download details window with progress and transfer information.
-- Download history and task persistence between application sessions.
-- Download scheduling with date and time controls.
-- Clipboard URL support and browser hand-off through local loopback bridge.
-- Speed limiting and download destination selection.
-- Categorization of common file types.
-- Chrome and Firefox extensions for sending links to FDMX.
-- Ubuntu-inspired aubergine and orange interface in `ubuntu.py`.
+## Project overview
 
-Feature availability can differ between builds. Torrent support and media URL scanning are experimental and may have limitations; DRM-protected streams and browser blob URLs are not guaranteed to work.
+FDMX has evolved from a basic downloader into a desktop application with download management, browser integration, and a plugin platform. The repository preserves earlier numbered scripts for development history; use the current entry point rather than launching an old numbered file.
 
-## Repository layout
+### Main capabilities
 
-| Path | Description |
+- HTTP and HTTPS downloads with configurable multi-connection transfers.
+- Pause, resume, cancel, and retry controls for downloads.
+- Download queue/task persistence and download history.
+- Download scheduling and transfer speed controls.
+- Destination selection and automatic file-type categorization.
+- Browser integration through local loopback communication.
+- Chrome and Firefox extension source code.
+- Plugin Manager with plugin install, enable/disable, load/unload, and uninstall workflows.
+- Plugin SDK with manifest and permission validation, worker-process execution, and plugin settings/data storage.
+- Ed25519 plugin signatures, publisher trust, and HTTPS plugin repository/update support.
+- Plugin update history and signed-version rollback support in the current SDK development work.
+
+Some features depend on the remote server, browser, plugin dependencies, or the selected application build. Browser media extraction and torrent-related workflows should be considered experimental unless separately validated.
+
+## Current repository structure
+
+| Path | Purpose |
 |---|---|
-| `FDMX_v6_11.py` | Latest tested Windows desktop build |
-| `ubuntu.py` | Ubuntu-themed UI variant; experimental |
-| `FDMX_v6_*.py` | Earlier development builds kept for reference |
-| `browser-extensions/chrome/` | Chrome extension source |
-| `browser-extensions/firefox/` | Firefox extension source |
-| `browser-extensions/README.md` | Browser extension installation notes |
+| `FDMX_v6_36.py` | Current development-branch Windows/desktop application entry point (v6.36) |
+| `ubuntu.py` | Ubuntu-themed desktop variant; separate build with its own compatibility testing |
+| `fdmx_plugin_sdk.py` | Plugin manager, validation, signing/trust, update history and rollback |
+| `fdmx_plugin_host.py` | Separate plugin worker process |
+| `fdmx_plugin_repository.py` | HTTPS plugin catalog and package/update client |
+| `plugins/example_hello_world/` | Example plugin |
+| `tests/` | Plugin SDK, repository and worker tests |
+| `browser-extensions/chrome/` | Chrome extension |
+| `browser-extensions/firefox/` | Firefox extension |
+| `PLUGIN_SDK.md` | Plugin SDK technical documentation |
+| `docs/README_FA.md` | Persian user guide |
 
 ## Requirements
 
-- Windows 10/11 (primary tested environment); Ubuntu/Linux may work with the Ubuntu variant but is not yet fully validated.
-- Python 3.10 or newer.
-- PySide6.
-- Internet access for downloading files and installing Python packages.
+- Windows 10/11 is the primary desktop target.
+- Python 3.11 or 3.12 is recommended for development and SDK test parity.
+- PySide6 for the graphical interface.
+- `cryptography` for Ed25519 plugin signature verification/signing features.
+- PyInstaller only when creating standalone executables.
+- Inno Setup only when creating a traditional Windows setup installer.
 
-The desktop script uses Python standard-library modules plus PySide6; no separate third-party downloader package is required by the current source.
+## Run from source on Windows
 
-## Install and run on Windows
+Open PowerShell in the repository directory:
 
-1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/). During setup, enable **Add Python to PATH**.
-2. Download this repository using **Code → Download ZIP**, then extract it; or clone it:
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install PySide6 cryptography
+python FDMX_v6_36.py
+```
 
-   ```powershell
-   git clone https://github.com/meicamghe/FDMX.git
-   cd FDMX
-   ```
+If PowerShell blocks virtual-environment activation, use Command Prompt:
 
-3. (Recommended) Create and activate a virtual environment:
+```bat
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+python -m pip install PySide6 cryptography
+python FDMX_v6_36.py
+```
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+To try the Ubuntu-themed variant:
 
-   If PowerShell blocks activation, use Command Prompt:
+```powershell
+python ubuntu.py
+```
 
-   ```bat
-   .venv\Scripts\activate.bat
-   ```
+The Ubuntu-themed variant has a separate code path and should be tested on the target Linux distribution before being treated as a supported Linux release.
 
-4. Install the UI dependency:
-
-   ```powershell
-   py -m pip install --upgrade pip
-   py -m pip install PySide6
-   ```
-
-5. Run the tested Windows build:
-
-   ```powershell
-   py FDMX_v6_11.py
-   ```
-
-   To try the Ubuntu-themed variant on Windows:
-
-   ```powershell
-   py ubuntu.py
-   ```
-
-## Run on Ubuntu / Linux
-
-The Ubuntu-themed script is provided as a development build, not a promise of full Linux compatibility.
+## Run from source on Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
+sudo apt install -y python3 python3-venv python3-pip git
 git clone https://github.com/meicamghe/FDMX.git
 cd FDMX
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install PySide6
+python -m pip install PySide6 cryptography
 python ubuntu.py
 ```
 
-If the virtual environment cannot access system Qt libraries or the display server, check the PySide6 installation and your desktop environment. See the [official Qt for Python getting-started guide](https://doc.qt.io/qtforpython-6/quickstart.html).
+Linux package/runtime requirements can vary by distribution and desktop environment. This source-run procedure is not a claim that a Linux installer or AppImage is currently published.
 
-## Using FDMX
+## Create a standalone Windows EXE
 
-1. Start the application.
-2. Paste an HTTP or HTTPS download URL into the URL field (or use the clipboard feature if available in that build).
-3. Choose the destination folder and adjust connection/speed options as needed.
-4. Start the download.
-5. Open a download's details window to inspect progress and use Pause, Resume, Cancel or Retry when available.
-6. Use the scheduling section to configure a future start time. Keep the application running for scheduled tasks to execute.
+A standalone executable can be built locally with PyInstaller. Build on Windows for Windows; PyInstaller is not a cross-compiler.
 
-Downloads depend on the remote server. Some servers block parallel connections, require authentication, expire signed URLs, or do not support resuming. In those cases, a download may use fewer connections or need to be restarted.
+### 1. Prepare the build environment
 
-## Browser integration
+```powershell
+py -3.12 -m venv .build-venv
+.\.build-venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install PySide6 cryptography pyinstaller
+```
 
-The browser extensions communicate with the desktop application through a local-only bridge at **127.0.0.1:38471**.
+### 2. Build the plugin worker
 
-### Chrome
+The plugin SDK launches its worker as a separate process. Package it as a **console** executable so its JSON-lines standard-output protocol remains intact:
 
-1. Start the FDMX desktop application with browser bridge support.
+```powershell
+pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker fdmx_plugin_host.py
+```
+
+### 3. Build the graphical application
+
+```powershell
+pyinstaller --noconfirm --clean --onefile --windowed --name FDMX --collect-all PySide6 --collect-all cryptography FDMX_v6_36.py
+```
+
+### 4. Put the worker beside the application
+
+```powershell
+Copy-Item .\dist\fdmx_plugin_worker.exe .\dist\ -Force
+```
+
+The distribution should contain at least:
+
+```text
+dist/
+  FDMX.exe
+  fdmx_plugin_worker.exe
+```
+
+Run `dist\FDMX.exe`. Test the EXE on a clean Windows 10/11 machine that does not have Python installed. Verify normal downloads, persistence, browser bridge, Plugin Manager, and a plugin install/enable/disable cycle. If PyInstaller reports a missing module or Qt plugin, adjust the build spec/hidden imports based on the actual traceback; do not assume a build succeeded just because PyInstaller created an EXE.
+
+**Important:** Rebuild both executables whenever the plugin SDK/worker code changes. Keep `fdmx_plugin_worker.exe` next to `FDMX.exe`; do not rename or remove it. The worker is a helper process, not a second application users should launch manually.
+
+## Create a Windows setup installer (Setup.exe)
+
+An EXE and an installer are different deliverables:
+
+- **Portable EXE:** the user runs `FDMX.exe` from a folder; the worker executable must remain beside it.
+- **Setup installer:** a setup package copies both executables and any required resources into Program Files, creates shortcuts, and optionally registers an uninstaller.
+
+The repository does **not yet contain a maintained Inno Setup script or a published Setup.exe**. After successfully building and testing the two executables above, install [Inno Setup](https://jrsoftware.org/isinfo.php), create an installer script that includes both files, and compile it. The installer must install `FDMX.exe` and `fdmx_plugin_worker.exe` into the same application directory. Keep user data in the user's profile (for example `%USERPROFILE%\.fdmx`), not inside Program Files, so updates and uninstalling the application do not unexpectedly erase download history or plugin data.
+
+Do not distribute a setup package until it has been tested on a clean Windows machine, including install, launch, upgrade, uninstall, and preservation of user data.
+
+## Browser extensions
+
+The extension sources are under `browser-extensions/`. Load them in developer mode for testing:
+
+**Chrome**
+1. Start FDMX.
 2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Click **Load unpacked**.
-5. Select the repository folder `browser-extensions/chrome`.
-6. Right-click a link and choose **Download link with FDMX**, or open the extension popup and send the current page URL.
+3. Enable Developer mode.
+4. Select **Load unpacked** and choose `browser-extensions/chrome`.
 
-### Firefox
-
-1. Start the FDMX desktop application with browser bridge support.
+**Firefox**
+1. Start FDMX.
 2. Open `about:debugging#/runtime/this-firefox`.
-3. Click **Load Temporary Add-on**.
-4. Select `browser-extensions/firefox/manifest.json`.
-5. Right-click a link and choose **Download link with FDMX**, or use the popup.
+3. Select **Load Temporary Add-on**.
+4. Choose `browser-extensions/firefox/manifest.json`.
 
-Firefox temporary add-ons are removed when Firefox closes. Permanent distribution requires Mozilla review/signing. An unsigned XPI normally cannot be installed permanently in standard Firefox release builds.
+The desktop bridge uses loopback networking at `127.0.0.1:38471`. It is intended for the same computer only; do not expose it on a LAN or public interface. Firefox temporary add-ons are removed when Firefox closes; permanent distribution requires Mozilla signing.
 
-### Browser connection troubleshooting
+## Plugin system and security notes
 
-- Confirm FDMX is running before sending a URL.
-- The local bridge listens on `127.0.0.1:38471`; it is not intended to be exposed to the LAN or public internet.
-- If the extension reports that it cannot connect, verify that the desktop build includes the bridge and that the port is not blocked or occupied.
-- Do not change the bridge to listen on `0.0.0.0` or expose it publicly.
+The plugin platform includes manifest/permission validation, separate worker-process execution, plugin settings/data, Ed25519 package signatures, local publisher trust, HTTPS repository metadata, update history, and rollback support.
 
-## Data and privacy
+- Newly installed or updated plugins are not automatically started.
+- Invalid signatures are rejected.
+- Publisher fingerprints should be verified through an independent trusted channel before trusting a publisher.
+- A separate process is **not** an OS security sandbox. A plugin still runs with the current user's operating-system permissions. Install only plugins from sources you trust.
+- See [PLUGIN_SDK.md](PLUGIN_SDK.md) for package format, signing, repository catalog, rollback, and worker build details.
 
-FDMX stores local task/history data under the user's home directory in `.fdmx` (including `history.json` and `tasks.json`). Browser integration uses loopback networking on the same computer. Download URLs may contain private tokens; avoid sharing logs, screenshots, or exported task files that expose signed URLs.
+## Tests and CI
 
-## Troubleshooting
+Run the SDK test suite from the repository root:
 
-| Problem | Things to check |
-|---|---|
-| `No module named PySide6` | Activate the environment and run `py -m pip install PySide6`. |
-| App does not start | Run it from PowerShell/Terminal and copy the full traceback. |
-| Browser says it cannot connect | Start FDMX first; verify local bridge support and port 38471. |
-| Download stops or cannot resume | The server may not support byte ranges, or the URL may have expired. |
-| Firefox says the add-on is unverified | Use temporary loading for testing, or submit it to Mozilla for signing. |
+```powershell
+python -m pip install PySide6 cryptography
+python -m py_compile FDMX_v6_36.py fdmx_plugin_sdk.py fdmx_plugin_host.py fdmx_plugin_repository.py
+python -m unittest discover -s tests -v
+```
 
-## Development notes
+GitHub Actions includes a four-way SDK test matrix (Windows/Ubuntu × Python 3.11/3.12) and a separate plugin-worker build/smoke-test workflow. The latest SDK integration-test run on this development branch is currently failing; inspect and fix that run before declaring the SDK 1.7 work stable or publishing a release. The historical Windows build workflows target older application versions and are not a verified release pipeline for v6.36.
 
-- Main application: Python + PySide6 (Qt Widgets).
-- Networking and HTTP handling use Python's standard library.
-- Please report reproducible bugs with OS version, Python version, selected script/build, steps to reproduce, and the full error output. Remove credentials and private URL tokens before posting.
-- Contributions and feature suggestions are welcome through GitHub Issues.
+## Data location
 
-## Roadmap
-
-- Consolidate historical scripts into a cleaner package structure.
-- Add automated tests for download workers and browser bridge.
-- Publish versioned releases and signed browser packages.
-- Improve Linux testing and packaging.
-- Document supported torrent and media-download workflows once they are stable.
+Application task/history data is stored under the user's home directory in `.fdmx` (including `history.json` and `tasks.json`). Keep this user-data directory separate from the application installation directory. Download URLs can contain private tokens; remove them from logs and bug reports before sharing.
 
 ## License
 
-The repository does not currently grant an open-source license. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md). Viewing the source does not by itself grant permission to redistribute, modify, or use it commercially.
-
-## Acknowledgements
-
-Built with Python and [Qt for Python / PySide6](https://doc.qt.io/qtforpython-6/).
+The repository currently includes [LICENSE-NOTICE.md](LICENSE-NOTICE.md). Review that notice before redistributing binaries or source code; the presence of source code on GitHub does not by itself grant permission for redistribution or commercial use.
