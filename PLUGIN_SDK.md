@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.4
+# FDMX Plugin SDK 1.5
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
@@ -78,6 +78,58 @@ cryptography is not installed. Invalid signatures are always blocked. Unsigned
 and unknown packages require explicit confirmation to install and load. A
 signature verifies package integrity and publisher-key possession; it does
 not prove that the plugin is benign or safe.
+
+
+## HTTPS plugin repository and secure updates
+
+The optional repository client is in `fdmx_plugin_repository.py`. A catalog is
+UTF-8 JSON using this structure:
+
+```json
+{
+  "format": "FDMX-PLUGIN-REPOSITORY-V1",
+  "plugins": [
+    {
+      "id": "example_hello_world",
+      "version": "1.2.0",
+      "archive_url": "https://downloads.example/plugins/example_hello_world-1.2.0.zip",
+      "sha256": "64-character-lowercase-hex-archive-digest"
+    }
+  ]
+}
+```
+
+Each ZIP must contain `plugin.json`, the entrypoint, and `plugin.sig` directly
+at its root. The catalog digest detects transport/corruption errors; the
+Ed25519 package signature remains the publisher-authentication mechanism.
+Catalogs and archives must use HTTPS. Downloads and expanded archives have
+size/file-count limits, and path traversal, symbolic links, and malformed ZIPs
+are rejected.
+
+Example:
+
+```python
+from fdmx_plugin_repository import PluginRepository
+
+repository = PluginRepository("https://downloads.example/fdmx/plugins.json")
+available = repository.list_plugins()
+updated = repository.update(plugin_manager, "example_hello_world")
+print(updated.version, updated.signature_status)
+```
+
+Updates require a valid signature from an already trusted publisher, the same
+publisher key as the installed plugin, a matching catalog/manifest identity,
+and a strictly newer numeric version. The new package is staged and verified
+again before replacement. The old plugin directory is retained as a rollback
+copy until the new version passes post-install validation. Plugin settings and
+data are preserved; the updated plugin is not automatically started. Publisher
+key rotation is deliberately not automatic and requires a separate trust
+workflow.
+
+The repository client is an SDK/API foundation in this release; a hosted public
+catalog service and in-app repository browser are not included yet. Only add
+catalog URLs from sources you trust. HTTPS and SHA-256 alone do not establish
+publisher trust.
 
 ## Plugin contract
 Define `register(api)`; optional `shutdown()` runs when the worker is stopped. API: `api.log(message)`, `api.notify(title, message)`, `api.on(event_name, callback)`. Events: `app.started`, `download.completed`, `download.failed`.
