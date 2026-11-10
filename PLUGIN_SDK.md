@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.5
+# FDMX Plugin SDK 1.6
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
@@ -79,6 +79,18 @@ and unknown packages require explicit confirmation to install and load. A
 signature verifies package integrity and publisher-key possession; it does
 not prove that the plugin is benign or safe.
 
+
+
+## In-app plugin repository browser
+
+Plugin Manager includes a **Plugin Repository** action. Enter an HTTPS catalog
+URL, choose an available package, then install it or update an existing plugin.
+New packages remain disabled after installation. Existing plugins update only
+when the archive digest matches, the Ed25519 signature is valid and trusted,
+the publisher key matches the installed publisher, and the version increases.
+The UI asks for explicit confirmation before installing a package whose
+publisher is not yet trusted. Never trust a publisher fingerprint solely
+because it appears in the catalog; verify it independently.
 
 ## HTTPS plugin repository and secure updates
 
