@@ -26,6 +26,12 @@ RestartApplications=no
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
 
+[InstallDelete]
+Type: files; Name: "{app}\FDMX.exe"
+Type: files; Name: "{app}\fdmx_plugin_worker.exe"
+Type: files; Name: "{autodesktop}\FDMX.lnk"
+Type: files; Name: "{autoprograms}\FDMX.lnk"
+
 [Files]
 Source: "..\dist\GNS Downloader\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
