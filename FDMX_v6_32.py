@@ -886,7 +886,7 @@ class DownloadDetailsDialog(QDialog):
         if task.get("status") not in ("Failed", "Canceled"):
             return
         task.update({
-            "status": "Queued", "downloaded": 0, "total": 0,
+            "status": "Queued", "downloaded": 0, "total": 0, "retry_attempts": 0,
             "speed": 0.0, "eta": -1.0, "path": "", "worker": None
         })
         self.parent_window.schedule_downloads()
@@ -2956,6 +2956,10 @@ class FDMX(QWidget):
             card_layout.addWidget(value_label)
             analytics_cards.addWidget(card, 0, col)
         analytics_layout.addLayout(analytics_cards)
+        self.analytics_speed = QLabel("Live speed history: waiting for download activity")
+        self.analytics_speed.setMinimumHeight(36)
+        self.analytics_speed.setStyleSheet("font-family: Consolas, monospace; font-size: 11pt; padding: 6px;")
+        analytics_layout.addWidget(self.analytics_speed)
         analytics_layout.addWidget(QLabel("Downloads by file category"))
         self.analytics_table = QTableWidget(0, 2)
         self.analytics_table.setHorizontalHeaderLabels(["Category", "Files"])
@@ -3599,6 +3603,12 @@ class FDMX(QWidget):
         self.analytics_completed.setText(str(completed))
         self.analytics_active.setText(str(active_queued))
         self.analytics_volume.setText(format_bytes(volume))
+        samples = [max(0.0, value) for _, value in self._speed_samples[-36:]]
+        if samples:
+            peak = max(samples)
+            bars = "▁▂▃▄▅▆▇█"
+            spark = "".join(bars[min(7, int((value / peak) * 7))] if peak else "▁" for value in samples)
+            self.analytics_speed.setText(f"Recent speed  {spark}    Peak: {format_bytes(peak)}/s")
         counts = {}
         for task in tasks:
             category = task.get("category") or category_for_filename(task.get("name", ""))
@@ -3879,8 +3889,10 @@ class FDMX(QWidget):
         name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or "Download"
         normalized_url = urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, ""))
         for existing in self.tasks.values():
-            if existing.get("url") == normalized_url and existing.get("status") not in ("Failed", "Canceled"):
-                QMessageBox.information(self, "Duplicate download", "This URL is already in the download list: " + existing.get("name", "Download"))
+            same_url = existing.get("url") == normalized_url
+            same_target = (existing.get("folder") == folder and existing.get("name", "").casefold() == name.casefold())
+            if (same_url or same_target) and existing.get("status") not in ("Failed", "Canceled"):
+                QMessageBox.information(self, "Duplicate download", "This URL or target filename is already in the download list: " + existing.get("name", "Download"))
                 return
         self.tasks[task_id] = {
             "id": task_id, "url": url, "folder": folder, "name": name,
