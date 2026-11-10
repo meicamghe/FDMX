@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.6
+# FDMX Plugin SDK 1.7
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
@@ -132,8 +132,12 @@ print(updated.version, updated.signature_status)
 Updates require a valid signature from an already trusted publisher, the same
 publisher key as the installed plugin, a matching catalog/manifest identity,
 and a strictly newer numeric version. The new package is staged and verified
-again before replacement. The old plugin directory is retained as a rollback
-copy until the new version passes post-install validation. Plugin settings and
+again before replacement. The previous signed package is retained under
+`<plugin-root>/.history/<plugin-id>/` after a successful update. Plugin Manager
+can list verified historical versions and restore one with **Rollback**. Each
+rollback re-verifies the Ed25519 signature, trusted publisher fingerprint,
+plugin identity, entrypoint, and permissions before atomically replacing the
+current version. The displaced current version is retained in history too. Plugin settings and
 data are preserved; the updated plugin is not automatically started. Publisher
 key rotation is deliberately not automatic and requires a separate trust
 workflow.
