@@ -75,6 +75,23 @@ jobs:
           & $compiler "installer/FDMX.iss"
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
+      - name: Install and launch-test the packaged application
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $setup = (Resolve-Path "dist/installer/FDMX-Setup-6.36.exe").Path
+          $installDir = Join-Path $env:ProgramFiles "FDMX"
+          $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
+          $app = Join-Path $installDir "FDMX.exe"
+          if (-not (Test-Path $app)) { throw "Installed application not found: $app" }
+          $process = Start-Process -FilePath $app -PassThru
+          Start-Sleep -Seconds 12
+          $process.Refresh()
+          if ($process.HasExited) { throw "Installed FDMX exited during startup (exit code $($process.ExitCode))" }
+          Stop-Process -Id $process.Id -Force
+          Write-Host "Installed FDMX launch smoke test passed."
+
       - name: Create portable ZIP
         shell: pwsh
         run: |
