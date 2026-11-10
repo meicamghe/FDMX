@@ -6,7 +6,8 @@ import unittest
 import sys
 from pathlib import Path
 
-from fdmx_plugin_sdk import PluginManager, _build_worker_command
+from fdmx_plugin_sdk import (PluginManager, _build_worker_command, sign_plugin_folder,
+    verify_plugin_folder, CRYPTO_AVAILABLE)
 from fdmx_plugin_host import WorkerAPI
 
 class PluginWorkerPackagingTests(unittest.TestCase):
@@ -96,7 +97,7 @@ class PluginSDKTests(unittest.TestCase):
     def enable_and_load(self, plugin_id="test_plugin"):
         self.manager.scan()
         self.manager.set_enabled(plugin_id, True)
-        self.manager.load(plugin_id)
+        self.manager.load(plugin_id, allow_untrusted=True)
 
     def wait_for(self, predicate, timeout=4.0):
         deadline = time.monotonic() + timeout
@@ -145,7 +146,7 @@ class PluginSDKTests(unittest.TestCase):
         self.manager.scan()
         self.manager.set_enabled("test_plugin", True)
         with self.assertRaisesRegex(RuntimeError, "intentional startup failure"):
-            self.manager.load("test_plugin")
+            self.manager.load("test_plugin", allow_untrusted=True)
         self.assertFalse(self.manager.records["test_plugin"].loaded)
         self.assertIn("intentional startup failure", self.manager.records["test_plugin"].error)
 
@@ -170,7 +171,7 @@ class PluginSDKTests(unittest.TestCase):
             "entrypoint": "plugin.py", "permissions": ["app.log"]
         }), encoding="utf-8")
         (source / "plugin.py").write_text("def register(api):\n    api.log('installed')\n", encoding="utf-8")
-        rec = self.manager.install_plugin(source)
+        rec = self.manager.install_plugin(source, allow_untrusted=True)
         self.assertEqual(rec.plugin_id, "installed_plugin")
         self.assertFalse(rec.enabled)
         self.assertTrue((self.plugin_root / "installed_plugin" / "plugin.py").is_file())
@@ -181,7 +182,7 @@ class PluginSDKTests(unittest.TestCase):
         (source / "plugin.json").write_text('{"id":"bad","permissions":["root.access"]}', encoding="utf-8")
         (source / "plugin.py").write_text("def register(api): pass\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Unknown permission"):
-            self.manager.install_plugin(source)
+            self.manager.install_plugin(source, allow_untrusted=True)
         self.assertFalse((self.plugin_root / "bad" ).exists())
 
     def test_uninstall_preserves_settings_and_data_by_default(self):
@@ -220,6 +221,69 @@ class PluginSDKTests(unittest.TestCase):
             self.manager._save_state = original_save
         self.assertTrue((self.plugin_root / "test_plugin" / "plugin.json").is_file())
         self.assertTrue(any(record.plugin_id == "test_plugin" for record in self.manager.scan()))
+
+
+    @unittest.skipUnless(CRYPTO_AVAILABLE, "cryptography package is required")
+    def test_ed25519_sign_trust_and_install(self):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        source = self.root / "signed_plugin"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({
+            "id": "signed_plugin", "name": "Signed", "version": "1.0",
+            "entrypoint": "plugin.py", "permissions": ["app.log"]
+        }), encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api): pass\\n", encoding="utf-8")
+        key = Ed25519PrivateKey.generate()
+        private_pem = key.private_bytes(serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode("ascii")
+        public_pem = key.public_key().public_bytes(serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo).decode("ascii")
+        fingerprint = sign_plugin_folder(source, private_pem)
+        self.assertEqual(verify_plugin_folder(source)["status"], "unknown_publisher")
+        with self.assertRaises(PermissionError):
+            self.manager.install_plugin(source)
+        self.assertEqual(self.manager.trust_publisher(public_pem), fingerprint)
+        rec = self.manager.install_plugin(source)
+        self.assertEqual(rec.signature_status, "trusted")
+        self.assertEqual(rec.publisher_fingerprint, fingerprint)
+
+    @unittest.skipUnless(CRYPTO_AVAILABLE, "cryptography package is required")
+    def test_ed25519_detects_tampered_plugin_file(self):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        source = self.root / "tampered_plugin"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({
+            "id": "tampered_plugin", "entrypoint": "plugin.py", "permissions": []
+        }), encoding="utf-8")
+        entry = source / "plugin.py"
+        entry.write_text("def register(api): pass\\n", encoding="utf-8")
+        key = Ed25519PrivateKey.generate()
+        pem = key.private_bytes(serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode("ascii")
+        sign_plugin_folder(source, pem)
+        entry.write_text("def register(api): pass  # modified\\n", encoding="utf-8")
+        self.assertEqual(verify_plugin_folder(source)["status"], "invalid")
+        with self.assertRaises(PermissionError):
+            self.manager.install_plugin(source, allow_untrusted=True)
+
+    @unittest.skipUnless(CRYPTO_AVAILABLE, "cryptography package is required")
+    def test_unsigned_plugin_requires_explicit_install_and_load_opt_in(self):
+        source = self.root / "unsigned_plugin"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({
+            "id": "unsigned_plugin", "entrypoint": "plugin.py", "permissions": []
+        }), encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api): pass\\n", encoding="utf-8")
+        with self.assertRaises(PermissionError):
+            self.manager.install_plugin(source)
+        rec = self.manager.install_plugin(source, allow_untrusted=True)
+        self.manager.set_enabled(rec.plugin_id, True)
+        with self.assertRaises(PermissionError):
+            self.manager.load(rec.plugin_id)
+        self.manager.load(rec.plugin_id, allow_untrusted=True)
+        self.assertTrue(self.manager.records[rec.plugin_id].loaded)
 
     def test_shutdown_callback_runs(self):
         marker = self.root / "shutdown.marker"
