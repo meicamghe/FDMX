@@ -169,7 +169,7 @@ class PluginSDKTests(unittest.TestCase):
             "id": "installed_plugin", "name": "Installed", "version": "1.2",
             "entrypoint": "plugin.py", "permissions": ["app.log"]
         }), encoding="utf-8")
-        (source / "plugin.py").write_text("def register(api):\\n    api.log('installed')\\n", encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api):\n    api.log('installed')\n", encoding="utf-8")
         rec = self.manager.install_plugin(source)
         self.assertEqual(rec.plugin_id, "installed_plugin")
         self.assertFalse(rec.enabled)
@@ -179,7 +179,7 @@ class PluginSDKTests(unittest.TestCase):
         source = self.root / "bad_plugin"
         source.mkdir()
         (source / "plugin.json").write_text('{"id":"bad","permissions":["root.access"]}', encoding="utf-8")
-        (source / "plugin.py").write_text("def register(api): pass\\n", encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api): pass\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Unknown permission"):
             self.manager.install_plugin(source)
         self.assertFalse((self.plugin_root / "bad" ).exists())
