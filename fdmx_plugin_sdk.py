@@ -2,17 +2,121 @@
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
-import json, os, re, shutil, subprocess, sys, threading, uuid
+import json, os, re, shutil, subprocess, sys, threading, uuid, hashlib, base64
 
 from dataclasses import dataclass
 from pathlib import Path
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox, QFileDialog
 
-SDK_VERSION = "1.3"
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    serialization = Ed25519PrivateKey = Ed25519PublicKey = None
+    CRYPTO_AVAILABLE = False
+
+SDK_VERSION = "1.4"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
 PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
 MAX_MESSAGE_BYTES = 1024 * 1024
 ALLOWED_EVENTS = {"app.started", "download.completed", "download.failed"}
+
+
+SIGNATURE_FILE = "plugin.sig"
+SIGNATURE_FORMAT = "FDMX-PLUGIN-SIGNATURE-V1"
+
+
+def _require_crypto():
+    if not CRYPTO_AVAILABLE:
+        raise RuntimeError("Ed25519 signing and verification requires the 'cryptography' package")
+
+
+def _plugin_file_hashes(folder):
+    root = Path(folder)
+    hashes = {}
+    for path in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise ValueError("Plugin packages may not contain symbolic links: " + str(path))
+        if path.is_file() and path.name != SIGNATURE_FILE:
+            hashes[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+        elif not path.is_dir() and not path.is_file():
+            raise ValueError("Unsupported special file in plugin package: " + str(path))
+    return hashes
+
+
+def _signature_payload(fingerprint, files):
+    value = {"format": SIGNATURE_FORMAT, "fingerprint": fingerprint, "files": files}
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def sign_plugin_folder(folder, private_key_pem):
+    """Sign every regular package file (except plugin.sig) with an Ed25519 PEM key."""
+    _require_crypto()
+    root = Path(folder).expanduser().resolve()
+    if not root.is_dir() or not (root / "plugin.json").is_file():
+        raise ValueError("A plugin folder with plugin.json is required")
+    key_data = private_key_pem.encode("utf-8") if isinstance(private_key_pem, str) else private_key_pem
+    key = serialization.load_pem_private_key(key_data, password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        raise TypeError("Signing key must be Ed25519")
+    public = key.public_key()
+    raw = public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    fingerprint = hashlib.sha256(raw).hexdigest()
+    public_pem = public.public_bytes(serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo).decode("ascii")
+    files = _plugin_file_hashes(root)
+    signature = key.sign(_signature_payload(fingerprint, files))
+    envelope = {"format": SIGNATURE_FORMAT, "algorithm": "Ed25519",
+        "fingerprint": fingerprint, "public_key_pem": public_pem, "files": files,
+        "signature": base64.b64encode(signature).decode("ascii")}
+    target = root / SIGNATURE_FILE
+    temp = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
+    try:
+        temp.write_text(json.dumps(envelope, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        os.replace(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
+    return fingerprint
+
+
+def verify_plugin_folder(folder, trusted_publishers=None):
+    """Verify signature and package hashes; unknown keys are never implicitly trusted."""
+    root = Path(folder)
+    signature_path = root / SIGNATURE_FILE
+    if not signature_path.exists():
+        return {"status": "unsigned", "fingerprint": "", "detail": "No detached signature"}
+    if not CRYPTO_AVAILABLE:
+        return {"status": "unavailable", "fingerprint": "", "detail": "Install cryptography to verify Ed25519 signatures"}
+    try:
+        if signature_path.is_symlink() or not signature_path.is_file():
+            raise ValueError("Signature file must be a regular file")
+        envelope = json.loads(signature_path.read_text(encoding="utf-8"))
+        if not isinstance(envelope, dict) or envelope.get("format") != SIGNATURE_FORMAT:
+            raise ValueError("Unsupported signature format")
+        if envelope.get("algorithm") != "Ed25519":
+            raise ValueError("Unsupported signature algorithm")
+        public = serialization.load_pem_public_key(envelope["public_key_pem"].encode("ascii"))
+        if not isinstance(public, Ed25519PublicKey):
+            raise ValueError("Publisher key is not Ed25519")
+        raw = public.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        fingerprint = hashlib.sha256(raw).hexdigest()
+        if envelope.get("fingerprint") != fingerprint:
+            raise ValueError("Publisher fingerprint does not match public key")
+        files = envelope.get("files")
+        if not isinstance(files, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
+            raise ValueError("Invalid signed file manifest")
+        actual = _plugin_file_hashes(root)
+        if actual != files:
+            raise ValueError("Plugin files differ from the signed package")
+        signature = base64.b64decode(envelope["signature"], validate=True)
+        public.verify(signature, _signature_payload(fingerprint, files))
+        if (trusted_publishers or {}).get(fingerprint) == envelope["public_key_pem"]:
+            return {"status": "trusted", "fingerprint": fingerprint, "detail": "Signature valid; publisher trusted"}
+        return {"status": "unknown_publisher", "fingerprint": fingerprint, "detail": "Signature valid; publisher not yet trusted"}
+    except Exception as exc:
+        return {"status": "invalid", "fingerprint": "", "detail": type(exc).__name__ + ": " + str(exc)[:400]}
+
 
 @dataclass
 class PluginRecord:
@@ -26,6 +130,8 @@ class PluginRecord:
     enabled: bool = False
     loaded: bool = False
     error: str = ""
+    signature_status: str = "unsigned"
+    publisher_fingerprint: str = ""
 
 def _build_worker_command(record, host_script, *, frozen=None, executable=None, bundle_dir=None, platform=None):
     """Build a worker launch command for source and PyInstaller deployments."""
