@@ -39,7 +39,11 @@ def _plugin_file_hashes(folder):
         if path.is_symlink():
             raise ValueError("Plugin packages may not contain symbolic links: " + str(path))
         if path.is_file() and path.relative_to(root).as_posix() != SIGNATURE_FILE:
-            hashes[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            hashes[path.relative_to(root).as_posix()] = digest.hexdigest()
         elif not path.is_dir() and not path.is_file():
             raise ValueError("Unsupported special file in plugin package: " + str(path))
     return hashes
