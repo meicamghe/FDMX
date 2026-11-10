@@ -162,6 +162,65 @@ class PluginSDKTests(unittest.TestCase):
         self.assertFalse(self.manager.records["test_plugin"].loaded)
         self.assertIn("Worker error", self.manager.records["test_plugin"].error)
 
+    def test_install_plugin_from_folder_and_keep_disabled(self):
+        source = self.root / "incoming_plugin"
+        source.mkdir()
+        (source / "plugin.json").write_text(json.dumps({
+            "id": "installed_plugin", "name": "Installed", "version": "1.2",
+            "entrypoint": "plugin.py", "permissions": ["app.log"]
+        }), encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api):\\n    api.log('installed')\\n", encoding="utf-8")
+        rec = self.manager.install_plugin(source)
+        self.assertEqual(rec.plugin_id, "installed_plugin")
+        self.assertFalse(rec.enabled)
+        self.assertTrue((self.plugin_root / "installed_plugin" / "plugin.py").is_file())
+
+    def test_install_rejects_invalid_manifest_without_partial_folder(self):
+        source = self.root / "bad_plugin"
+        source.mkdir()
+        (source / "plugin.json").write_text('{"id":"bad","permissions":["root.access"]}', encoding="utf-8")
+        (source / "plugin.py").write_text("def register(api): pass\\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Unknown permission"):
+            self.manager.install_plugin(source)
+        self.assertFalse((self.plugin_root / "bad" ).exists())
+
+    def test_uninstall_preserves_settings_and_data_by_default(self):
+        self.add_plugin()
+        self.manager.scan()
+        self.manager.set_plugin_settings("test_plugin", {"theme": "dark", "count": 3})
+        data_dir = self.manager.plugin_data_dir("test_plugin")
+        data_dir.mkdir(parents=True)
+        (data_dir / "user.db").write_text("keep", encoding="utf-8")
+        self.manager.uninstall("test_plugin")
+        self.assertNotIn("test_plugin", self.manager.records)
+        self.assertEqual(self.manager.get_plugin_settings("test_plugin"), {"theme": "dark", "count": 3})
+        self.assertEqual((data_dir / "user.db").read_text(encoding="utf-8"), "keep")
+        self.assertFalse(self.manager._state["test_plugin"]["enabled"])
+
+    def test_uninstall_can_explicitly_remove_settings_and_data(self):
+        self.add_plugin()
+        self.manager.scan()
+        self.manager.set_plugin_settings("test_plugin", {"token_label": "sample"})
+        data_dir = self.manager.plugin_data_dir("test_plugin")
+        data_dir.mkdir(parents=True)
+        (data_dir / "cache.bin").write_bytes(b"cache")
+        self.manager.uninstall("test_plugin", remove_data=True)
+        self.assertNotIn("test_plugin", self.manager._state)
+        self.assertFalse(data_dir.exists())
+
+    def test_failed_uninstall_restores_plugin_folder_and_state(self):
+        self.add_plugin()
+        self.manager.scan()
+        original_save = self.manager._save_state
+        self.manager._save_state = lambda: (_ for _ in ()).throw(OSError("simulated state write failure"))
+        try:
+            with self.assertRaisesRegex(OSError, "simulated"):
+                self.manager.uninstall("test_plugin")
+        finally:
+            self.manager._save_state = original_save
+        self.assertTrue((self.plugin_root / "test_plugin" / "plugin.json").is_file())
+        self.assertIn("test_plugin", self.manager.scan())
+
     def test_shutdown_callback_runs(self):
         marker = self.root / "shutdown.marker"
         source = ("from pathlib import Path\n"
