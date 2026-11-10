@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton,
+    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton,
     QLabel, QTextEdit, QMessageBox
 )
 
