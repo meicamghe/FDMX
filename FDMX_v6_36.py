@@ -23,8 +23,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fdmx_plugin_sdk import PluginManager, PluginManagerDialog
-
 from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
 from PySide6.QtWidgets import (
@@ -38,7 +36,8 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.36"
+APP_VERSION = "6.37"
+_MODULE_STARTED_AT = time.perf_counter()
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -747,6 +746,19 @@ class FileInfoWorker(QThread):
     def __init__(self, url):
         super().__init__()
         self.url = url
+        self.cancel_event = threading.Event()
+        self._response_lock = threading.Lock()
+        self._active_response = None
+
+    def cancel(self):
+        self.cancel_event.set()
+        with self._response_lock:
+            response = self._active_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
     def run(self):
         info = {"size": -1, "name": "", "content_type": "", "accept_ranges": False, "error": ""}
@@ -755,10 +767,16 @@ class FileInfoWorker(QThread):
         try:
             request = urllib.request.Request(self.url, headers=headers, method="HEAD")
             try:
-                response = urllib.request.urlopen(request, timeout=12)
+                response = urllib.request.urlopen(request, timeout=8)
             except Exception:
+                if self.cancel_event.is_set():
+                    return
                 request = urllib.request.Request(self.url, headers={**headers, "Range": "bytes=0-0"})
-                response = urllib.request.urlopen(request, timeout=12)
+                response = urllib.request.urlopen(request, timeout=8)
+            with self._response_lock:
+                self._active_response = response
+            if self.cancel_event.is_set():
+                return
             content_range = response.headers.get("Content-Range", "")
             if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
                 info["size"] = int(content_range.rsplit("/", 1)[1])
@@ -781,7 +799,10 @@ class FileInfoWorker(QThread):
             if response is not None:
                 try: response.close()
                 except Exception: pass
-        self.info_ready.emit(info)
+            with self._response_lock:
+                self._active_response = None
+        if not self.cancel_event.is_set():
+            self.info_ready.emit(info)
 
 
 class DownloadDetailsDialog(QDialog):
@@ -1933,7 +1954,7 @@ class AdminLoginFinderWorker(QThread):
 class AdminLoginFinderDialog(QDialog):
     def __init__(self, parent=None, initial_url=""):
         super().__init__(parent)
-        self.setWindowTitle("FDMX — Admin / Login Finder & Server Profiler")
+        self.setWindowTitle(f"{APP_NAME} — Admin / Login Finder & Server Profiler")
         self.resize(900, 680)
         self.worker = None
         layout = QVBoxLayout(self)
@@ -2254,7 +2275,7 @@ class WebsiteDownloaderDialog(QWidget):
         dialog.stop_button.hide()
         dialog.url_input.hide()
         dialog.show_report(self.recon_report)
-        dialog.setWindowTitle("FDMX — Saved discovery results")
+        dialog.setWindowTitle(f"{APP_NAME} — Saved discovery results")
         dialog.exec()
 
     def skip_current_page(self):
@@ -2583,13 +2604,12 @@ class LinkGrabberWorker(QThread):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
-    plugin_log_signal = Signal(str)
-    plugin_notify_signal = Signal(str, str)
-
-    def __init__(self):
+remove plugin signals    def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
         self.setWindowFlags(Qt.Window)
+        self._startup_started = _MODULE_STARTED_AT
+        self._log_startup_stage("window construction started")
         self.setWindowTitle(f"{APP_NAME}  •  Download Manager {APP_VERSION}")
         self.setWindowIcon(self.create_app_icon())
         self.resize(1080, 680)
@@ -2604,7 +2624,7 @@ class FDMX(QWidget):
         self._session_task_ids = set()
         self._speed_samples = []  # Rolling speed samples used by the Analytics panel.
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
-        self.tray.setToolTip("FDMX Download Manager")
+        self.tray.setToolTip(APP_NAME)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
         self.current_filter = "All downloads"
@@ -2613,18 +2633,14 @@ class FDMX(QWidget):
         self.search_query = ""
         self.load_history()
         self.load_tasks()
+        self._log_startup_stage("task history restored")
         self.build_ui()
-        self.plugin_log_signal.connect(self.status.setText)
-        self.plugin_notify_signal.connect(self._show_plugin_notification)
-        self.plugin_manager = PluginManager(
-            os.path.join(os.path.expanduser("~"), ".fdmx", "plugins"),
-            logger=lambda message: self.plugin_log_signal.emit(str(message)),
-            notifier=lambda title, message: self.plugin_notify_signal.emit(str(title), str(message))
-        )
-        self.plugin_manager.scan()
+        self._log_startup_stage("interface built")
         self.load_preferences()
+        self._log_startup_stage("preferences loaded")
         self.browser_download_requested.connect(self.add_download_from_browser)
         self.start_browser_bridge()
+        self._log_startup_stage("browser bridge initialized")
         QApplication.clipboard().dataChanged.connect(self.on_clipboard_changed)
         self.refresh_table()
         self.scheduler_timer = self.startTimer(400)
@@ -2633,50 +2649,37 @@ class FDMX(QWidget):
         self.autosave_timer.start(5000)
         self.prompt_recovery()
         self.start_queue()
+        self._log_startup_stage("startup complete")
+
+    def _log_startup_stage(self, stage):
+        """Record startup timings to help diagnose slow first launches."""
+        try:
+            folder = os.path.join(os.path.expanduser("~"), ".fdmx")
+            os.makedirs(folder, exist_ok=True)
+            elapsed = time.perf_counter() - getattr(self, "_startup_started", _MODULE_STARTED_AT)
+            with open(os.path.join(folder, "startup.log"), "a", encoding="utf-8") as log:
+                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\\n")
+        except OSError:
+            pass
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_first_show_logged", False):
+            self._first_show_logged = True
+            self._log_startup_stage("main window shown")
 
     def create_app_icon(self):
+        """Create the red G brand mark used by the app window and tray."""
         pixmap = QPixmap(256, 256)
-        pixmap.fill(QColor("#030303"))
+        pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
-
-        # Deep black rounded tile with a subtle metallic edge.
-        tile = QLinearGradient(0, 0, 0, 256)
-        tile.setColorAt(0.0, QColor("#242424"))
-        tile.setColorAt(0.48, QColor("#090909"))
-        tile.setColorAt(1.0, QColor("#000000"))
-        painter.setBrush(tile)
-        painter.drawRoundedRect(8, 8, 240, 240, 48, 48)
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(QColor(110, 110, 110, 105))
-        painter.drawRoundedRect(9, 9, 238, 238, 47, 47)
-
-        font = QFont("Inter", 178, QFont.Black)
-        painter.setFont(font)
-        rect = pixmap.rect().adjusted(0, -5, 0, 0)
-
-        # Soft burgundy glow and depth behind the letter.
-        painter.setPen(QColor(255, 0, 0, 150))
-        for offset in (7, 5, 3):
-            painter.drawText(rect.translated(0, offset), Qt.AlignCenter, "G")
-        painter.setPen(QColor("#4a0000"))
-        painter.drawText(rect.translated(2, 4), Qt.AlignCenter, "G")
-
-        # Bright glossy burgundy-to-red face with a light-catching upper edge.
-        letter = QLinearGradient(0, 35, 0, 220)
-        letter.setColorAt(0.0, QColor("#fff0f0"))
-        letter.setColorAt(0.12, QColor("#ff5a5a"))
-        letter.setColorAt(0.38, QColor("#ff1010"))
-        letter.setColorAt(0.72, QColor("#d00000"))
-        letter.setColorAt(1.0, QColor("#780000"))
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(letter)
-        painter.drawText(rect, Qt.AlignCenter, "G")
-
-        # Narrow glossy highlight across the upper portion of the G.
-        painter.setPen(QColor(255, 220, 232, 175))
-        painter.drawText(rect.translated(0, -2), Qt.AlignCenter, "G")
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRoundedRect(8, 8, 240, 240, 44, 44)
+        painter.setPen(QColor("#e2231a"))
+        painter.setFont(QFont("Arial", 184, QFont.Bold))
+        painter.drawText(pixmap.rect().adjusted(0, -3, 0, 0), Qt.AlignCenter, "G")
         painter.end()
         return QIcon(pixmap)
 
@@ -2742,11 +2745,10 @@ class FDMX(QWidget):
         tools_menu.addAction("Export report (CSV / JSON)…", self.export_analytics_report)
         tools_menu.addAction("Verify SHA-256…", self.calculate_hash)
         tools_menu.addSeparator()
-        tools_menu.addAction("Plugin Manager…", self.open_plugin_manager)
         settings_menu = self.menu_bar.addMenu("Settings")
         settings_menu.addAction("Preferences…", self.open_settings_dialog)
         help_menu = self.menu_bar.addMenu("Help")
-        help_menu.addAction("About FDMX", self.show_about)
+        help_menu.addAction(f"About {APP_NAME}", self.show_about)
         root.setMenuBar(self.menu_bar)
 
         self.tabs = QTabWidget()
@@ -2813,7 +2815,7 @@ class FDMX(QWidget):
         downloads_layout.addLayout(entry)
 
         self.settings_dialog = QDialog(self)
-        self.settings_dialog.setWindowTitle("FDMX Preferences")
+        self.settings_dialog.setWindowTitle(f"{APP_NAME} Preferences")
         self.settings_dialog.setMinimumWidth(430)
         settings_layout = QVBoxLayout(self.settings_dialog)
         settings_grid = QGridLayout()
@@ -2939,7 +2941,7 @@ class FDMX(QWidget):
         grabber_page = QWidget()
         grabber_layout = QVBoxLayout(grabber_page)
         grabber_layout.setContentsMargins(10, 10, 10, 10)
-        grabber_layout.addWidget(QLabel("Enter a webpage URL. FDMX will find common downloadable file links; review the list before queueing."))
+        grabber_layout.addWidget(QLabel(f"Enter a webpage URL. {APP_NAME} will find common downloadable file links; review the list before queueing."))
         grabber_url_row = QHBoxLayout()
         self.grabber_url = QLineEdit()
         self.grabber_url.setPlaceholderText("https://example.com/downloads")
@@ -3024,28 +3026,10 @@ class FDMX(QWidget):
         analytics_layout.addLayout(export_row)
         self.tabs.addTab(analytics_page, "Analytics")
 
-        # Theme Studio stores a small preset name in QSettings.
-        theme_page = QWidget()
-        theme_layout = QVBoxLayout(theme_page)
-        theme_layout.setContentsMargins(18, 18, 18, 18)
-        theme_layout.addWidget(QLabel("Choose the appearance used by FDMX. Your selection is saved for the next launch."))
-        theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel("Theme preset:"))
+        # Keep one fixed visual preset; the separate Theme Studio tab was removed.
         self.theme_combo = QComboBox()
-        theme_presets = [("Windows 11 Fluent", "fluent")]
-        for label, key in theme_presets:
-            self.theme_combo.addItem(label, key)
-        theme_row.addWidget(self.theme_combo, 1)
-        apply_theme_button = QPushButton("Apply theme")
-        apply_theme_button.clicked.connect(self.apply_selected_theme)
-        theme_row.addWidget(apply_theme_button)
-        theme_layout.addLayout(theme_row)
-        self.theme_preview = QLabel("Preview: FDMX interface colors update immediately.")
-        self.theme_preview.setMinimumHeight(90)
-        self.theme_preview.setAlignment(Qt.AlignCenter)
-        theme_layout.addWidget(self.theme_preview)
-        theme_layout.addStretch(1)
-        self.tabs.addTab(theme_page, "Theme Studio")
+        self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_preview = QLabel()
 
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -3606,7 +3590,7 @@ class FDMX(QWidget):
             )
 
     def export_analytics_report(self):
-        path, selected = QFileDialog.getSaveFileName(self, "Export download report", "FDMX-report.csv", "CSV files (*.csv);;JSON files (*.json)")
+        path, selected = QFileDialog.getSaveFileName(self, "Export download report", "GNS-Downloader-report.csv", "CSV files (*.csv);;JSON files (*.json)")
         if not path:
             return
         fields = ("name", "url", "status", "category", "downloaded", "total", "speed", "eta", "path", "folder", "content_type")
@@ -3659,17 +3643,7 @@ class FDMX(QWidget):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
 
-    def _show_plugin_notification(self, title, message):
-        QMessageBox.information(self, title, message)
-
-    def open_plugin_manager(self):
-        """Open the trusted-plugin manager."""
-        dialog = PluginManagerDialog(self.plugin_manager, self)
-        dialog.exec()
-        # Deliver startup notification after the user has loaded plugins in the dialog.
-        self.plugin_manager.emit("app.started", version=APP_VERSION)
-
-    def open_settings_dialog(self):
+remove plugin methods    def open_settings_dialog(self):
         self.settings_dialog.exec()
 
     def save_and_close_settings(self):
@@ -3677,8 +3651,8 @@ class FDMX(QWidget):
         self.settings_dialog.accept()
 
     def show_about(self):
-        QMessageBox.about(self, "About FDMX",
-                          f"GNS Downloader / FDMX {APP_VERSION}\\nA lightweight download manager.")
+        QMessageBox.about(self, f"About {APP_NAME}",
+                          f"{APP_NAME} {APP_VERSION}\\nA lightweight download manager.")
 
     def set_filter(self, name):
         self.current_filter = name
@@ -3852,7 +3826,7 @@ class FDMX(QWidget):
 
             def do_GET(self):
                 if self.path == "/health":
-                    self._send(200, {"ok": True, "app": "FDMX", "version": APP_VERSION})
+                    self._send(200, {"ok": True, "app": APP_NAME, "version": APP_VERSION})
                 else:
                     self._send(404, {"ok": False, "error": "Not found"})
 
@@ -3870,7 +3844,7 @@ class FDMX(QWidget):
                     if parsed.scheme not in ("http", "https") or not parsed.netloc:
                         raise ValueError("Only HTTP and HTTPS links are supported")
                     window.browser_download_requested.emit(url)
-                    self._send(202, {"ok": True, "message": "Added to FDMX queue"})
+                    self._send(202, {"ok": True, "message": f"Added to {APP_NAME} queue"})
                 except Exception as exc:
                     self._send(400, {"ok": False, "error": str(exc)})
 
@@ -4246,15 +4220,10 @@ class FDMX(QWidget):
                 "speed": 0.0, "eta": 0.0, "worker": None
             })
             self.save_history_entry(task)
-            self.plugin_manager.emit(
-                "download.completed", task_id=task_id,
-                name=task.get("name", "Download"), path=path,
-                downloaded=task.get("downloaded", 0), total=task.get("total", 0)
-            )
             self.refresh_table()
             self.status.setText(f"Completed: {path}")
             if QSystemTrayIcon.isSystemTrayAvailable():
-                self.tray.showMessage("FDMX — Download complete", task.get("name", "Download"), QSystemTrayIcon.Information, 4000)
+                self.tray.showMessage(f"{APP_NAME} — Download complete", task.get("name", "Download"), QSystemTrayIcon.Information, 4000)
         self.cleanup_worker(task_id)
         self.schedule_downloads()
         self.check_after_download_action()
@@ -4265,10 +4234,6 @@ class FDMX(QWidget):
         if task:
             task.update({"status": "Failed", "speed": 0.0, "eta": -1.0, "worker": None})
             self.save_history_entry(task, error=message)
-            self.plugin_manager.emit(
-                "download.failed", task_id=task_id,
-                name=task.get("name", "Download"), error=str(message)
-            )
             self.refresh_table()
             attempts = int(task.get("retry_attempts", 0)) if task else 0
         if task and attempts < 3:
@@ -4281,7 +4246,7 @@ class FDMX(QWidget):
         else:
             self.status.setText(f"Download failed: {message}")
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray.showMessage("FDMX — Download failed", task.get("name", "Download") if task else message, QSystemTrayIcon.Warning, 5000)
+            self.tray.showMessage(f"{APP_NAME} — Download failed", task.get("name", "Download") if task else message, QSystemTrayIcon.Warning, 5000)
         self.cleanup_worker(task_id)
         self.schedule_downloads()
         self.check_after_download_action()
@@ -4457,7 +4422,7 @@ class FDMX(QWidget):
             return
         answer = QMessageBox.question(
             self, "Recover interrupted downloads",
-            f"FDMX found {len(recovered)} interrupted download(s). Resume them now?",
+            f"{APP_NAME} found {len(recovered)} interrupted download(s). Resume them now?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
@@ -4701,8 +4666,6 @@ class FDMX(QWidget):
                 task["worker"].cancel()
             for task in active:
                 task["worker"].wait(3000)
-        if hasattr(self, "plugin_manager"):
-            self.plugin_manager.shutdown()
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):
