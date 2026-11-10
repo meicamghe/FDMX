@@ -487,8 +487,101 @@ class PluginManager:
                 os.replace(backup, target)
                 self.scan()
                 raise
-            shutil.rmtree(backup, ignore_errors=True)
+            # Keep the previous signed package for an explicit, auditable rollback.
+            history_dir = self.plugin_dir / ".history" / plugin_id
+            history_dir.mkdir(parents=True, exist_ok=True)
+            history_copy = history_dir / (current.version + "__" + uuid.uuid4().hex)
+            try:
+                os.replace(backup, history_copy)
+            except OSError as exc:
+                self.logger(f"Update succeeded but history archival failed; backup retained at {backup}: {exc}")
             self.logger(f"Updated plugin {plugin_id}: {current.version} -> {new_version}")
+            return self.records[plugin_id]
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def list_plugin_versions(self, plugin_id):
+        """Return verified, trusted historical versions for an installed plugin."""
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        current = self.records.get(plugin_id)
+        if current is None:
+            raise KeyError(f"Plugin is not installed: {plugin_id}")
+        history = self.plugin_dir / ".history" / plugin_id
+        versions = []
+        if not history.is_dir():
+            return versions
+        for folder in sorted(history.iterdir(), key=lambda p: p.name, reverse=True):
+            if not folder.is_dir() or folder.is_symlink():
+                continue
+            try:
+                verification = verify_plugin_folder(folder, self.trusted_publishers)
+                if verification["status"] != "trusted" or verification["fingerprint"] != current.publisher_fingerprint:
+                    continue
+                manifest = json.loads((folder / "plugin.json").read_text(encoding="utf-8"))
+                if str(manifest.get("id", "")) != plugin_id:
+                    continue
+                version = str(manifest.get("version", ""))
+                self._version_tuple(version)
+                versions.append({"version": version, "folder": folder})
+            except Exception:
+                continue
+        return versions
+
+    def rollback_plugin(self, plugin_id, historical_folder):
+        """Restore a previously installed package after verifying its trusted publisher signature."""
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        current = self.records.get(plugin_id)
+        if current is None:
+            raise KeyError(f"Plugin is not installed: {plugin_id}")
+        history_root = (self.plugin_dir / ".history" / plugin_id).resolve()
+        source = Path(historical_folder).resolve()
+        if source.parent != history_root or not source.is_dir():
+            raise ValueError("Rollback source is not a managed history package")
+        verification = verify_plugin_folder(source, self.trusted_publishers)
+        if verification["status"] != "trusted" or verification["fingerprint"] != current.publisher_fingerprint:
+            raise PermissionError("Rollback requires a valid signature from the currently trusted publisher")
+        manifest = json.loads((source / "plugin.json").read_text(encoding="utf-8"))
+        if str(manifest.get("id", "")) != plugin_id:
+            raise ValueError("Rollback package plugin id does not match")
+        version = str(manifest.get("version", ""))
+        self._version_tuple(version)
+        entry = str(manifest.get("entrypoint", "plugin.py"))
+        if Path(entry).name != entry or not entry.endswith(".py") or not (source / entry).is_file():
+            raise ValueError("Rollback package has an invalid entrypoint")
+        for item in source.rglob("*"):
+            if item.is_symlink():
+                raise ValueError("Rollback package may not contain symbolic links")
+        staging = self.plugin_dir / (".rollback-stage-" + uuid.uuid4().hex)
+        backup = self.plugin_dir / (".rollback-current-" + uuid.uuid4().hex)
+        shutil.copytree(source, staging)
+        try:
+            staged = verify_plugin_folder(staging, self.trusted_publishers)
+            if staged["status"] != "trusted" or staged["fingerprint"] != current.publisher_fingerprint:
+                raise PermissionError("Staged rollback package failed signature verification")
+            self.unload(plugin_id)
+            target = self.plugin_dir / plugin_id
+            os.replace(target, backup)
+            try:
+                os.replace(staging, target)
+                self.scan()
+                if plugin_id not in self.records or self.records[plugin_id].version != version:
+                    raise RuntimeError("Rolled-back plugin failed post-install validation")
+            except Exception:
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                os.replace(backup, target)
+                self.scan()
+                raise
+            history_dir = self.plugin_dir / ".history" / plugin_id
+            history_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.replace(backup, history_dir / (current.version + "__" + uuid.uuid4().hex))
+            except OSError as exc:
+                self.logger(f"Rollback succeeded but current version archival failed; backup retained at {backup}: {exc}")
+            self.logger(f"Rolled back plugin {plugin_id}: {current.version} -> {version}")
             return self.records[plugin_id]
         finally:
             if staging.exists():
