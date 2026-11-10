@@ -6,7 +6,7 @@ import json, os, re, shutil, subprocess, sys, threading, uuid, hashlib, base64
 
 from dataclasses import dataclass
 from pathlib import Path
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox, QFileDialog
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QTextEdit, QMessageBox, QFileDialog, QInputDialog
 
 try:
     from cryptography.hazmat.primitives import serialization
@@ -16,7 +16,7 @@ except ImportError:
     serialization = Ed25519PrivateKey = Ed25519PublicKey = None
     CRYPTO_AVAILABLE = False
 
-SDK_VERSION = "1.5"
+SDK_VERSION = "1.6"
 ALLOWED_PERMISSIONS = {"app.events", "app.log", "ui.notifications"}
 PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
 MAX_MESSAGE_BYTES = 1024 * 1024
@@ -622,10 +622,12 @@ class PluginManagerDialog(QDialog):
         self.load_button, self.disable_button = QPushButton("Load"), QPushButton("Disable")
         self.install_button, self.uninstall_button = QPushButton("Install Folder"), QPushButton("Uninstall")
         self.trust_button = QPushButton("Trust Publisher")
+        self.repository_button = QPushButton("Plugin Repository")
         self.close_button = QPushButton("Close")
-        for button in (self.scan_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.uninstall_button): buttons.addWidget(button)
+        for button in (self.scan_button, self.repository_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.uninstall_button): buttons.addWidget(button)
         buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
+        self.repository_button.clicked.connect(self._open_repository)
         self.install_button.clicked.connect(self._install_plugin)
         self.uninstall_button.clicked.connect(self._uninstall_plugin)
         self.trust_button.clicked.connect(self._trust_selected_publisher)
@@ -653,6 +655,66 @@ class PluginManagerDialog(QDialog):
         pid = self._selected(); rec = self.manager.records.get(pid) if pid else None
         if not rec: self.details.clear(); return
         self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nSignature: {rec.signature_status}\nPublisher fingerprint: {rec.publisher_fingerprint or '—'}\nError: {rec.error or 'None'}")
+
+    def _open_repository(self):
+        catalog_url, accepted = QInputDialog.getText(
+            self, "Plugin Repository", "HTTPS catalog URL:"
+        )
+        if not accepted or not catalog_url.strip():
+            return
+        try:
+            from fdmx_plugin_repository import PluginRepository
+            repository = PluginRepository(catalog_url.strip())
+            entries = repository.list_plugins()
+            if not entries:
+                QMessageBox.information(self, "Plugin Repository", "No plugins are listed in this catalog.")
+                return
+            labels = [
+                f"{item['id']}  v{item['version']}" +
+                ("  [Installed]" if item["id"] in self.manager.records else "  [Available]")
+                for item in entries
+            ]
+            selected, ok = QInputDialog.getItem(
+                self, "Plugin Repository", "Select a plugin:", labels, 0, False
+            )
+            if not ok:
+                return
+            entry = entries[labels.index(selected)]
+            plugin_id = entry["id"]
+            if plugin_id in self.manager.records:
+                record = repository.update(self.manager, plugin_id)
+                self.refresh()
+                QMessageBox.information(
+                    self, "Plugin updated",
+                    f"{record.name} updated to v{record.version}. The plugin remains stopped."
+                )
+                return
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix="fdmx-plugin-install-") as temp:
+                package = repository.download_package(entry, temp)
+                verification = verify_plugin_folder(package, self.manager.trusted_publishers)
+                if verification["status"] == "invalid":
+                    raise PermissionError("Package signature is invalid: " + verification["detail"])
+                if verification["status"] != "trusted":
+                    answer = QMessageBox.warning(
+                        self, "Untrusted repository plugin",
+                        "Signature status: " + verification["status"] +
+                        "\\nPublisher fingerprint: " + (verification["fingerprint"] or "—") +
+                        "\\n\\nOnly continue if you independently verified the publisher fingerprint.",
+                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                    )
+                    if answer != QMessageBox.Yes:
+                        return
+                    record = self.manager.install_plugin(package, allow_untrusted=True)
+                else:
+                    record = self.manager.install_plugin(package)
+            self.refresh()
+            QMessageBox.information(
+                self, "Plugin installed",
+                f"{record.name} v{record.version} installed and remains disabled."
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Plugin Repository", str(exc))
 
     def _install_plugin(self):
         folder = QFileDialog.getExistingDirectory(self, "Select plugin folder")
