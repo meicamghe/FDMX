@@ -107,6 +107,14 @@ def create_file_type_icon(category):
         painter.drawRoundedRect(13, 13, 7, 5, 1, 1)
         painter.setBrush(QColor("#8b682e"))
         painter.drawRoundedRect(15, 14, 3, 3, 1, 1)
+    elif category not in ("Compressed", "Python"):
+        colors = {"Video":"#8b5cf6","Audio":"#0ea5e9","Documents":"#2563eb","Programs":"#64748b","Images":"#db2777","Spreadsheets":"#16a34a","Code":"#475569","Other":"#94a3b8"}
+        painter.setBrush(QColor(colors.get(category, "#94a3b8")))
+        painter.drawRoundedRect(5, 3, 22, 26, 3, 3)
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRect(10, 10, 12, 2)
+        painter.drawRect(10, 15, 12, 2)
+        painter.drawRect(10, 20, 8, 2)
     elif category == "Python":
         # Python's recognizable blue/yellow interlocking mark.
         painter.setBrush(QColor("#3776ab"))
