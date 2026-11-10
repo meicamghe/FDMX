@@ -22,6 +22,13 @@ class WorkerAPI:
             if not line: raise EOFError("FDMX closed plugin IPC")
             if len(line.encode("utf-8", errors="replace")) > MAX_MESSAGE_BYTES: raise ValueError("IPC message exceeds 1 MiB")
             response = json.loads(line)
+            if response.get("type") == "event":
+                event_name, payload = response.get("name"), response.get("payload", {})
+                if event_name in EVENTS and isinstance(payload, dict):
+                    self.dispatch(event_name, payload)
+                continue
+            if response.get("type") == "shutdown":
+                raise EOFError("Plugin worker is shutting down")
             if response.get("type") == "rpc_result" and response.get("id") == rid:
                 if not response.get("ok"): raise PermissionError(response.get("error","RPC denied"))
                 return
