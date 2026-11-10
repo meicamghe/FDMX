@@ -39,6 +39,15 @@ class PluginWorkerPackagingTests(unittest.TestCase):
         self.assertEqual(Path(command[0]), worker.resolve())
         self.assertEqual(command[1], str(self.folder))
 
+    def test_frozen_mode_does_not_require_python_host_script(self):
+        worker = self.root / "fdmx_plugin_worker"
+        worker.write_bytes(b"test executable placeholder")
+        self.host.unlink()
+        command = _build_worker_command(self.record, self.host, frozen=True,
+                                        executable=str(self.root / "FDMX"),
+                                        platform="linux")
+        self.assertEqual(Path(command[0]), worker.resolve())
+
     def test_frozen_mode_checks_bundle_directory(self):
         bundle = self.root / "bundle"
         bundle.mkdir()
