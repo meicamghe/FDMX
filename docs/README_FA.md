@@ -176,7 +176,7 @@ dist/
 - **نسخه Portable:** کاربر فایل `FDMX.exe` را از داخل یک پوشه اجرا می‌کند و فایل `fdmx_plugin_worker.exe` نیز باید کنار آن باشد.
 - **نسخه Installer:** فایل Setup برنامه را در مسیر نصب کپی می‌کند، میانبر Start Menu/Desktop می‌سازد و امکان حذف برنامه را فراهم می‌کند.
 
-یک اسکریپت اولیه نصب در مسیر `installer/FDMX.iss` به مخزن اضافه شده است. پس از ساخت و تست دو فایل EXE بالا:
+اسکریپت نصب `installer/FDMX.iss` در مخزن موجود است. پس از ساخت و تست دو فایل EXE بالا:
 
 ۱. نرم‌افزار [Inno Setup](https://jrsoftware.org/isinfo.php) را نصب کنید.
 ۲. فایل `installer/FDMX.iss` را در Inno Setup Compiler باز کنید.
@@ -205,6 +205,18 @@ dist/
 افزونه Firefox در این روش موقت است و با بستن مرورگر حذف می‌شود؛ انتشار دائمی نیازمند امضای Mozilla است.
 
 سرویس اتصال مرورگر فقط برای ارتباط روی همان سیستم و از طریق `127.0.0.1:38471` طراحی شده است. آن را روی شبکه عمومی یا آدرس `0.0.0.0` منتشر نکنید.
+
+## ساخت خودکار EXE و Setup از GitHub
+
+Workflow با نام **Build FDMX Windows packages** در مسیر `.github/workflows/build-fdmx-windows.yml` اضافه شده است. این Workflow فایل اصلی و Worker را می‌سازد، Worker را با تست Smoke بررسی می‌کند، نصب‌کننده Inno Setup را Compile می‌کند و خروجی‌ها را به‌صورت Artifact در GitHub Actions قرار می‌دهد.
+
+برای اجرا:
+۱. وارد مخزن GitHub شوید و تب **Actions** را باز کنید.
+۲. از فهرست سمت چپ **Build FDMX Windows packages** را انتخاب کنید.
+۳. روی **Run workflow** بزنید و شاخه توسعه را انتخاب کنید.
+۴. پس از پایان موفق، وارد اجرای Workflow شوید و Artifact با نام `FDMX-Windows-v6.36` را دانلود کنید.
+
+داخل Artifact فایل‌های `FDMX.exe`، `fdmx_plugin_worker.exe`، نسخه Portable ZIP و `FDMX-Setup-6.36.exe` قرار می‌گیرند. Artifact فعلاً ۱۴ روز نگهداری می‌شود. این Workflow تست ساخت و بسته‌بندی است و جایگزین تست‌های یکپارچه SDK نیست.
 
 ## اجرای تست‌ها
 
