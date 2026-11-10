@@ -3664,11 +3664,6 @@ class FDMX(QWidget):
             lambda checked=False, value=location: QApplication.clipboard().setText(value)
         )
 
-        menu.addSeparator()
-        remove_action = menu.addAction("Remove from list")
-        remove_action.setEnabled(not active)
-        remove_action.triggered.connect(self.remove_selected)
-
         menu.exec(self.table.viewport().mapToGlobal(position))
 
     def open_file(self):
