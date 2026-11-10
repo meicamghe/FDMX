@@ -35,6 +35,8 @@ def _build_worker_command(record, host_script, *, frozen=None, executable=None, 
     arguments = [str(record.folder), record.entrypoint, record.plugin_id,
                  json.dumps(list(record.permissions))]
     if not frozen:
+        if not Path(host_script).is_file():
+            raise FileNotFoundError(f"Plugin worker host script is missing: {host_script}")
         return [executable, "-u", str(host_script), *arguments]
 
     worker_name = "fdmx_plugin_worker.exe" if platform.startswith("win") else "fdmx_plugin_worker"
@@ -73,8 +75,6 @@ class _Worker:
 
     def start(self):
         host = Path(__file__).with_name("fdmx_plugin_host.py")
-        if not host.is_file():
-            raise FileNotFoundError("fdmx_plugin_host.py is missing beside fdmx_plugin_sdk.py")
         command = _build_worker_command(self.record, host)
         self.process = subprocess.Popen(
             command,
