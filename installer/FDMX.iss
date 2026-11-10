@@ -1,4 +1,4 @@
-; FDMX Windows installer — requires dist/FDMX.exe and dist/fdmx_plugin_worker.exe
+; FDMX Windows installer — compressed onedir distribution
 #define AppName "FDMX"
 #define AppVersion "6.36"
 #define AppPublisher "FDMX Project"
@@ -13,7 +13,7 @@ DefaultGroupName=FDMX
 DisableProgramGroupPage=yes
 OutputDir=..\dist\installer
 OutputBaseFilename=FDMX-Setup-{#AppVersion}
-Compression=lzma2
+Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
@@ -26,7 +26,7 @@ RestartApplications=no
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Files]
-Source: "..\dist\FDMX.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\FDMX\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\fdmx_plugin_worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
