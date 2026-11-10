@@ -3,10 +3,58 @@ import json
 import tempfile
 import time
 import unittest
+import sys
 from pathlib import Path
 
-from fdmx_plugin_sdk import PluginManager
+from fdmx_plugin_sdk import PluginManager, _build_worker_command
 from fdmx_plugin_host import WorkerAPI
+
+class PluginWorkerPackagingTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.folder = self.root / "plugin"
+        self.folder.mkdir()
+        self.host = self.root / "fdmx_plugin_host.py"
+        self.host.write_text("# worker host", encoding="utf-8")
+        from types import SimpleNamespace
+        self.record = SimpleNamespace(folder=self.folder, entrypoint="plugin.py",
+                                      plugin_id="packaging_test", permissions=("app.log",))
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_source_mode_uses_python_host_script(self):
+        command = _build_worker_command(self.record, self.host, frozen=False,
+                                        executable="python-test")
+        self.assertEqual(command[:3], ["python-test", "-u", str(self.host)])
+        self.assertEqual(command[3:], [str(self.folder), "plugin.py", "packaging_test", '["app.log"]'])
+
+    def test_frozen_mode_uses_companion_worker_next_to_app(self):
+        worker = self.root / "fdmx_plugin_worker.exe"
+        worker.write_bytes(b"test executable placeholder")
+        command = _build_worker_command(self.record, self.host, frozen=True,
+                                        executable=str(self.root / "FDMX.exe"),
+                                        platform="win32")
+        self.assertEqual(command[0], str(worker))
+        self.assertEqual(command[1], str(self.folder))
+
+    def test_frozen_mode_checks_bundle_directory(self):
+        bundle = self.root / "bundle"
+        bundle.mkdir()
+        worker = bundle / "fdmx_plugin_worker"
+        worker.write_bytes(b"test executable placeholder")
+        command = _build_worker_command(self.record, self.host, frozen=True,
+                                        executable=str(self.root / "FDMX"),
+                                        bundle_dir=str(bundle), platform="linux")
+        self.assertEqual(command[0], str(worker))
+
+    def test_frozen_mode_reports_missing_worker_clearly(self):
+        with self.assertRaisesRegex(FileNotFoundError, "Packaged plugin worker"):
+            _build_worker_command(self.record, self.host, frozen=True,
+                                  executable=str(self.root / "FDMX.exe"),
+                                  platform="win32")
+
 
 class PluginSDKTests(unittest.TestCase):
     def setUp(self):
