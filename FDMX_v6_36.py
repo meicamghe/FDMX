@@ -2583,6 +2583,8 @@ class LinkGrabberWorker(QThread):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
+    plugin_log_signal = Signal(str)
+    plugin_notify_signal = Signal(str, str)
 
     def __init__(self):
         super().__init__()
@@ -2612,10 +2614,12 @@ class FDMX(QWidget):
         self.load_history()
         self.load_tasks()
         self.build_ui()
+        self.plugin_log_signal.connect(self.status.setText)
+        self.plugin_notify_signal.connect(self._show_plugin_notification)
         self.plugin_manager = PluginManager(
             os.path.join(os.path.expanduser("~"), ".fdmx", "plugins"),
-            logger=lambda message: self.status.setText(str(message)) if hasattr(self, "status") else None,
-            notifier=lambda title, message: QMessageBox.information(self, title, message)
+            logger=lambda message: self.plugin_log_signal.emit(str(message)),
+            notifier=lambda title, message: self.plugin_notify_signal.emit(str(title), str(message))
         )
         self.plugin_manager.scan()
         self.load_preferences()
@@ -3654,6 +3658,9 @@ class FDMX(QWidget):
         for row, (category, count) in enumerate(sorted(counts.items(), key=lambda item: (-item[1], item[0]))):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
+
+    def _show_plugin_notification(self, title, message):
+        QMessageBox.information(self, title, message)
 
     def open_plugin_manager(self):
         """Open the trusted-plugin manager."""
@@ -4694,6 +4701,8 @@ class FDMX(QWidget):
                 task["worker"].cancel()
             for task in active:
                 task["worker"].wait(3000)
+        if hasattr(self, "plugin_manager"):
+            self.plugin_manager.shutdown()
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):
