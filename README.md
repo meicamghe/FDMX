@@ -180,6 +180,10 @@ The plugin platform includes manifest/permission validation, separate worker-pro
 - A separate process is **not** an OS security sandbox. A plugin still runs with the current user's operating-system permissions. Install only plugins from sources you trust.
 - See [PLUGIN_SDK.md](PLUGIN_SDK.md) for package format, signing, repository catalog, rollback, and worker build details.
 
+## Automated Windows packaging
+
+The workflow `.github/workflows/build-fdmx-windows.yml` builds the Windows application and plugin worker, smoke-tests the packaged worker, compiles the Inno Setup installer, and uploads a 14-day GitHub Actions artifact containing `FDMX.exe`, `fdmx_plugin_worker.exe`, `FDMX-Portable-v6.36-Windows-x64.zip`, and `FDMX-Setup-6.36.exe`. It runs on relevant pushes to the development branch or manually from **Actions → Build FDMX Windows packages → Run workflow**. Open the completed run and download the `FDMX-Windows-v6.36` artifact. This workflow performs packaging checks; it does not replace the separate plugin SDK integration-test matrix.
+
 ## Tests and CI
 
 Run the SDK test suite from the repository root:
