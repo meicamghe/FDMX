@@ -93,6 +93,7 @@ class RepositoryTests(unittest.TestCase):
         with zipfile.ZipFile(archive, "w") as zf:
             zf.writestr("../outside.txt", "bad")
         repo = PluginRepository("https://repo.example/catalog.json")
+        repo._fetch = lambda url, limit: archive.getvalue()
         with self.assertRaisesRegex(PluginRepositoryError, "Unsafe path"):
             repo.download_package({"archive_url": "https://repo.example/plugin.zip",
                                    "sha256": hashlib.sha256(archive.getvalue()).hexdigest()},
