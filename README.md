@@ -129,7 +129,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --name FDMX --collect-all P
 Copy-Item .\dist\fdmx_plugin_worker.exe .\dist\ -Force
 ```
 
-The distribution should contain at least:
+The worker build already creates `dist\\fdmx_plugin_worker.exe`. Building the main application afterward creates `dist\\FDMX.exe`; both files should remain in the same `dist` folder. Do not copy a file onto itself. The distribution should contain at least:
 
 ```text
 dist/
