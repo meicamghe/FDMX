@@ -1,4 +1,4 @@
-# FDMX Plugin SDK 1.2
+# FDMX Plugin SDK 1.3
 
 ## Install
 Create a folder per plugin under `%USERPROFILE%\\.fdmx\\plugins\\<plugin-id>\\` on Windows or `~/.fdmx/plugins/<plugin-id>/` on Linux. Place `plugin.json` and the Python entrypoint in that folder.
@@ -7,6 +7,31 @@ Keep `fdmx_plugin_sdk.py` and `fdmx_plugin_host.py` beside the FDMX main script.
 
 ## Manifest
 Required: `id`, `name`, `version`, `entrypoint`, `permissions`. Entrypoint must be a Python file directly inside the plugin folder. Supported permissions: `app.events`, `app.log`, `ui.notifications`.
+
+## Plugin lifecycle
+
+Open the Plugin Manager and use **Install Folder** to install a trusted plugin
+directory containing a valid `plugin.json` and its entrypoint. Installation
+validates the manifest and supported permissions, rejects symbolic links, stages
+the copy, and moves it into place only after validation. Newly installed plugins
+remain disabled until explicitly enabled.
+
+Use **Enable**, **Load**, and **Disable** to control execution. **Uninstall**
+removes plugin code but preserves per-plugin settings and data by default.
+Applications integrating the SDK can store JSON-compatible preferences with
+`manager.set_plugin_settings(plugin_id, settings)` and read them with
+`manager.get_plugin_settings(plugin_id)`. The default data directory is
+`<plugin-root-parent>/plugin_data/<plugin-id>/`.
+
+For an explicit full removal, call
+`manager.uninstall(plugin_id, remove_data=True)`; this also removes the
+plugin's saved settings and data directory. This operation is intentionally
+separate from the normal UI uninstall action to reduce accidental data loss.
+State writes use a temporary file and atomic replacement. If uninstall state
+persistence fails, the plugin directory is restored.
+
+Only install plugins from sources you trust. Process separation is not a
+security sandbox and does not make untrusted Python code safe.
 
 ## Plugin contract
 Define `register(api)`; optional `shutdown()` runs when the worker is stopped. API: `api.log(message)`, `api.notify(title, message)`, `api.on(event_name, callback)`. Events: `app.started`, `download.completed`, `download.failed`.
