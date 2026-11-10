@@ -3659,6 +3659,8 @@ class FDMX(QWidget):
         """Open the trusted-plugin manager."""
         dialog = PluginManagerDialog(self.plugin_manager, self)
         dialog.exec()
+        # Deliver startup notification after the user has loaded plugins in the dialog.
+        self.plugin_manager.emit("app.started", version=APP_VERSION)
 
     def open_settings_dialog(self):
         self.settings_dialog.exec()
@@ -4237,6 +4239,11 @@ class FDMX(QWidget):
                 "speed": 0.0, "eta": 0.0, "worker": None
             })
             self.save_history_entry(task)
+            self.plugin_manager.emit(
+                "download.completed", task_id=task_id,
+                name=task.get("name", "Download"), path=path,
+                downloaded=task.get("downloaded", 0), total=task.get("total", 0)
+            )
             self.refresh_table()
             self.status.setText(f"Completed: {path}")
             if QSystemTrayIcon.isSystemTrayAvailable():
@@ -4251,6 +4258,10 @@ class FDMX(QWidget):
         if task:
             task.update({"status": "Failed", "speed": 0.0, "eta": -1.0, "worker": None})
             self.save_history_entry(task, error=message)
+            self.plugin_manager.emit(
+                "download.failed", task_id=task_id,
+                name=task.get("name", "Download"), error=str(message)
+            )
             self.refresh_table()
             attempts = int(task.get("retry_attempts", 0)) if task else 0
         if task and attempts < 3:
