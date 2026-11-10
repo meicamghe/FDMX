@@ -422,6 +422,78 @@ class PluginManager:
                 shutil.rmtree(target, ignore_errors=True)
             raise
 
+    @staticmethod
+    def _version_tuple(value):
+        parts = str(value).split(".")
+        if not parts or len(parts) > 4 or any(not p.isdigit() for p in parts):
+            raise ValueError("Plugin versions must use numeric dot-separated versions")
+        return tuple(int(p) for p in parts)
+
+    def update_plugin(self, source_folder):
+        """Atomically replace an installed plugin with a newer, trusted signed build."""
+        source = Path(source_folder).expanduser().resolve()
+        verification = verify_plugin_folder(source, self.trusted_publishers)
+        if verification["status"] != "trusted":
+            raise PermissionError("Updates require a valid signature from a trusted publisher: " +
+                                  verification["status"] + " — " + verification["detail"])
+        manifest_path = source / "plugin.json"
+        if not manifest_path.is_file() or manifest_path.is_symlink():
+            raise ValueError("Update package must contain a regular plugin.json")
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Plugin manifest must be a JSON object")
+        plugin_id = str(data.get("id", ""))
+        if not PLUGIN_ID_RE.fullmatch(plugin_id) or plugin_id not in self.records:
+            raise KeyError("Update package does not match an installed plugin")
+        current = self.records[plugin_id]
+        if verification["fingerprint"] != current.publisher_fingerprint:
+            raise PermissionError("Publisher key changed; key rotation requires a separate explicit trust workflow")
+        new_version = str(data.get("version", ""))
+        if self._version_tuple(new_version) <= self._version_tuple(current.version):
+            raise ValueError("Update version must be newer than the installed version")
+        entry = str(data.get("entrypoint", "plugin.py"))
+        if Path(entry).name != entry or not entry.endswith(".py") or not (source / entry).is_file():
+            raise ValueError("Update package has an invalid entrypoint")
+        permissions = data.get("permissions", [])
+        if not isinstance(permissions, list) or any(not isinstance(p, str) for p in permissions):
+            raise ValueError("Plugin permissions must be a list of strings")
+        unknown = set(permissions) - ALLOWED_PERMISSIONS
+        if unknown:
+            raise ValueError("Unknown permission(s): " + ", ".join(sorted(unknown)))
+        for item in source.rglob("*"):
+            if item.is_symlink():
+                raise ValueError("Update package may not contain symbolic links")
+        target = self.plugin_dir / plugin_id
+        staging = self.plugin_dir / (".update-" + uuid.uuid4().hex)
+        backup = self.plugin_dir / (".rollback-" + uuid.uuid4().hex)
+        shutil.copytree(source, staging)
+        try:
+            staged = verify_plugin_folder(staging, self.trusted_publishers)
+            if staged["status"] != "trusted" or staged["fingerprint"] != verification["fingerprint"]:
+                raise PermissionError("Staged update failed signature verification")
+            staged_data = json.loads((staging / "plugin.json").read_text(encoding="utf-8"))
+            if str(staged_data.get("id", "")) != plugin_id or str(staged_data.get("version", "")) != new_version:
+                raise RuntimeError("Update package changed while being staged")
+            self.unload(plugin_id)
+            os.replace(target, backup)
+            try:
+                os.replace(staging, target)
+                self.scan()
+                if plugin_id not in self.records or self.records[plugin_id].version != new_version:
+                    raise RuntimeError("Updated plugin failed post-install validation")
+            except Exception:
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                os.replace(backup, target)
+                self.scan()
+                raise
+            shutil.rmtree(backup, ignore_errors=True)
+            self.logger(f"Updated plugin {plugin_id}: {current.version} -> {new_version}")
+            return self.records[plugin_id]
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
     def uninstall(self, plugin_id, *, remove_data=False):
         """Remove plugin code; preserve user settings/data unless explicitly requested."""
         if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
