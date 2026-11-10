@@ -4369,27 +4369,6 @@ class FDMX(QWidget):
         for worker in self.workers.values():
             if isinstance(worker, TorrentWorker):
                 worker.set_upload_limit(value)
-    def export_csv(self):
-        """Export the current download list as a UTF-8 CSV report."""
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export downloads", "GNS-Downloader-Report.csv",
-            "CSV files (*.csv)"
-        )
-        if not path:
-            return
-        fields = ["name", "category", "status", "downloaded", "total", "url", "path", "folder", "kind"]
-        try:
-            with open(path, "w", newline="", encoding="utf-8-sig") as output:
-                writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
-                writer.writeheader()
-                for task in self.tasks.values():
-                    row = {key: task.get(key, "") for key in fields}
-                    row["category"] = row["category"] or category_for_filename(row["name"])
-                    writer.writerow(row)
-            QMessageBox.information(self, "Export complete", f"CSV report saved to:\n{path}")
-        except OSError as exc:
-            QMessageBox.warning(self, "Export failed", str(exc))
-
     def calculate_hash(self):
         task_id = self.selected_task()
         task = self.tasks.get(task_id)
