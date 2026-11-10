@@ -31,38 +31,30 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography pyinstaller
+          python -m pip install PySide6-Essentials cryptography pyinstaller Pillow
 
-      - name: Compile application and plugin modules
+      - name: Generate red G application icon
         run: |
-          python -m py_compile FDMX_v6_36.py fdmx_plugin_sdk.py fdmx_plugin_host.py fdmx_plugin_repository.py
+          python installer/create_icon.py
 
-      - name: Build standalone plugin worker
+      - name: Compile application
         run: |
-          pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker --distpath dist --workpath build/worker --exclude-module PySide6 fdmx_plugin_host.py
+          python -m py_compile FDMX_v6_36.py
 
-      - name: Smoke-test packaged plugin worker
-        run: |
-          python tests/smoke_plugin_worker.py dist/fdmx_plugin_worker.exe
-
-      - name: Build FDMX as an onedir application
+      - name: Build GNS Downloader as an onedir application
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name FDMX --distpath dist --workpath build/app --contents-directory _internal FDMX_v6_36.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/app --contents-directory _internal FDMX_v6_36.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
       - name: Verify package inputs and report sizes
         shell: pwsh
         run: |
-          $app = "dist/FDMX/FDMX.exe"
-          $worker = "dist/fdmx_plugin_worker.exe"
+          $app = "dist/GNS Downloader/GNS Downloader.exe"
           if (-not (Test-Path $app)) { throw "Required build output is missing: $app" }
-          if (-not (Test-Path $worker)) { throw "Required build output is missing: $worker" }
-          $appBytes = (Get-ChildItem "dist/FDMX" -File -Recurse | Measure-Object -Property Length -Sum).Sum
-          $workerBytes = (Get-Item $worker).Length
-          "FDMX_DIRECTORY_MB=$([math]::Round($appBytes / 1MB, 2))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "PLUGIN_WORKER_MB=$([math]::Round($workerBytes / 1MB, 2))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Get-ChildItem "dist/FDMX" -File -Recurse | Sort-Object Length -Descending | Select-Object -First 15 FullName, Length
+          $appBytes = (Get-ChildItem "dist/GNS Downloader" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          "GNS_DOWNLOADER_DIRECTORY_MB=$([math]::Round($appBytes / 1MB, 2))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Get-ChildItem "dist/GNS Downloader" -File -Recurse | Sort-Object Length -Descending | Select-Object -First 15 FullName, Length
 
       - name: Install Inno Setup
         run: choco install innosetup --yes --no-progress
@@ -79,36 +71,42 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/FDMX-Setup-6.36.exe").Path
-          $installDir = Join-Path $env:ProgramFiles "FDMX"
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.37.exe").Path
+          $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
-          $app = Join-Path $installDir "FDMX.exe"
+          $app = Join-Path $installDir "GNS Downloader.exe"
           if (-not (Test-Path $app)) { throw "Installed application not found: $app" }
+          $started = Get-Date
           $process = Start-Process -FilePath $app -PassThru
-          Start-Sleep -Seconds 12
-          $process.Refresh()
-          if ($process.HasExited) { throw "Installed FDMX exited during startup (exit code $($process.ExitCode))" }
+          $ready = $false
+          for ($i = 0; $i -lt 35; $i++) {
+            Start-Sleep -Seconds 1
+            $process.Refresh()
+            if ($process.HasExited) { throw "Installed GNS Downloader exited during startup (exit code $($process.ExitCode))" }
+            if ($process.MainWindowHandle -ne 0) { $ready = $true; break }
+          }
+          if (-not $ready) { throw "GNS Downloader did not create its main window within 35 seconds" }
+          Write-Host "Installed GNS Downloader window ready in $([math]::Round(((Get-Date)-$started).TotalSeconds,1)) seconds."
           Stop-Process -Id $process.Id -Force
-          Write-Host "Installed FDMX launch smoke test passed."
 
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/FDMX/*", "dist/fdmx_plugin_worker.exe" -DestinationPath "dist/FDMX-Portable-v6.36-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip" -Force
 
       - name: Report final package sizes
         shell: pwsh
         run: |
-          Get-Item "dist/installer/FDMX-Setup-6.36.exe", "dist/FDMX-Portable-v6.36-Windows-x64.zip", "dist/fdmx_plugin_worker.exe" |
+          Get-Item "dist/installer/GNS-Downloader-Setup-6.37.exe", "dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip" |
             Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
-          name: FDMX-Windows-v6.36-compact
+          name: GNS-Downloader-Windows-v6.37
           path: |
-            dist/FDMX-Portable-v6.36-Windows-x64.zip
-            dist/installer/FDMX-Setup-6.36.exe
+            dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip
+            dist/installer/GNS-Downloader-Setup-6.37.exe
           if-no-files-found: error
           retention-days: 14
