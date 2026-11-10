@@ -87,12 +87,17 @@ class PluginRepository:
                 if len(infos) > MAX_FILES:
                     raise PluginRepositoryError("Plugin archive contains too many files")
                 total = 0
+                seen_paths = set()
                 for info in infos:
                     name = info.filename.replace("\\", "/")
                     path = PurePosixPath(name)
                     mode = (info.external_attr >> 16) & 0xFFFF
-                    if path.is_absolute() or ".." in path.parts or not path.parts:
+                    normalized = path.as_posix().casefold()
+                    if path.is_absolute() or ".." in path.parts or not path.parts or ":" in path.parts[0]:
                         raise PluginRepositoryError("Unsafe path in plugin archive")
+                    if normalized in seen_paths:
+                        raise PluginRepositoryError("Duplicate path in plugin archive")
+                    seen_paths.add(normalized)
                     if (mode & 0o170000) == 0o120000:
                         raise PluginRepositoryError("Symbolic links are not allowed in plugin archives")
                     total += info.file_size
