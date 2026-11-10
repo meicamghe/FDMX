@@ -534,12 +534,14 @@ class PluginManagerDialog(QDialog):
         self.scan_button, self.enable_button = QPushButton("Refresh"), QPushButton("Enable")
         self.load_button, self.disable_button = QPushButton("Load"), QPushButton("Disable")
         self.install_button, self.uninstall_button = QPushButton("Install Folder"), QPushButton("Uninstall")
+        self.trust_button = QPushButton("Trust Publisher")
         self.close_button = QPushButton("Close")
-        for button in (self.scan_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.uninstall_button): buttons.addWidget(button)
+        for button in (self.scan_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.uninstall_button): buttons.addWidget(button)
         buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
         self.install_button.clicked.connect(self._install_plugin)
         self.uninstall_button.clicked.connect(self._uninstall_plugin)
+        self.trust_button.clicked.connect(self._trust_selected_publisher)
         self.enable_button.clicked.connect(lambda: self._set_enabled(True))
         self.disable_button.clicked.connect(lambda: self._set_enabled(False))
         self.load_button.clicked.connect(self._load_selected)
@@ -563,13 +565,22 @@ class PluginManagerDialog(QDialog):
     def _show_details(self, _row):
         pid = self._selected(); rec = self.manager.records.get(pid) if pid else None
         if not rec: self.details.clear(); return
-        self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nError: {rec.error or 'None'}")
+        self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nSignature: {rec.signature_status}\nPublisher fingerprint: {rec.publisher_fingerprint or '—'}\nError: {rec.error or 'None'}")
 
     def _install_plugin(self):
         folder = QFileDialog.getExistingDirectory(self, "Select plugin folder")
         if not folder: return
         try:
-            rec = self.manager.install_plugin(folder)
+            verification = verify_plugin_folder(folder, self.manager.trusted_publishers)
+            if verification["status"] != "trusted":
+                answer = QMessageBox.warning(self, "Untrusted plugin",
+                    "Signature status: " + verification["status"] + "\n" + verification["detail"] +
+                    "\n\nInstalling an untrusted plugin can execute unsafe code. Continue?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if answer != QMessageBox.Yes: return
+                rec = self.manager.install_plugin(folder, allow_untrusted=True)
+            else:
+                rec = self.manager.install_plugin(folder)
             self.refresh()
             QMessageBox.information(self, "Plugin installed", f"{rec.name} v{rec.version} installed and remains disabled until enabled.")
         except Exception as exc:
@@ -596,8 +607,38 @@ class PluginManagerDialog(QDialog):
         try: self.manager.set_enabled(pid, enabled); self.refresh()
         except Exception as exc: QMessageBox.warning(self, "Plugin Manager", str(exc))
 
+    def _trust_selected_publisher(self):
+        pid = self._selected()
+        if not pid: return
+        rec = self.manager.records[pid]
+        if rec.signature_status != "unknown_publisher":
+            QMessageBox.information(self, "Publisher trust", "Only a valid signature from an unknown publisher can be trusted.")
+            return
+        answer = QMessageBox.warning(self, "Trust publisher",
+            "Trust this publisher on this computer?\nFingerprint:\n" + rec.publisher_fingerprint +
+            "\n\nVerify this fingerprint through a separate trusted channel first.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes: return
+        try:
+            fingerprint = self.manager.trust_plugin_publisher(pid)
+            self.refresh()
+            QMessageBox.information(self, "Publisher trusted", "Trusted publisher: " + fingerprint)
+        except Exception as exc:
+            QMessageBox.warning(self, "Trust publisher failed", str(exc))
+
     def _load_selected(self):
         pid = self._selected()
         if not pid: return
-        try: self.manager.load(pid); self.refresh()
+        rec = self.manager.records[pid]
+        try:
+            if rec.signature_status != "trusted":
+                answer = QMessageBox.warning(self, "Untrusted plugin",
+                    "Signature status: " + rec.signature_status +
+                    "\nThis plugin can execute code with your user-account permissions. Load anyway?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if answer != QMessageBox.Yes: return
+                self.manager.load(pid, allow_untrusted=True)
+            else:
+                self.manager.load(pid)
+            self.refresh()
         except Exception as exc: QMessageBox.warning(self, "Plugin load failed", str(exc))
