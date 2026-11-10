@@ -2619,7 +2619,7 @@ class LinkGrabberWorker(QThread):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
-remove plugin signals    def __init__(self):
+    def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
         self.setWindowFlags(Qt.Window)
@@ -3658,7 +3658,7 @@ remove plugin signals    def __init__(self):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
 
-remove plugin methods    def open_settings_dialog(self):
+    def open_settings_dialog(self):
         self.settings_dialog.exec()
 
     def save_and_close_settings(self):
