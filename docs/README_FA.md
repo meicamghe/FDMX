@@ -145,7 +145,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --name FDMX --collect-all P
 Copy-Item .\dist\fdmx_plugin_worker.exe .\dist\ -Force
 ```
 
-ساختار خروجی باید حداقل به این شکل باشد:
+ساخت Worker ابتدا فایل `dist\\fdmx_plugin_worker.exe` را ایجاد می‌کند. ساخت برنامه اصلی پس از آن فایل `dist\\FDMX.exe` را نیز در همان پوشه می‌سازد؛ هر دو فایل باید کنار هم باقی بمانند. ساختار خروجی باید حداقل به این شکل باشد:
 
 ```text
 dist/
@@ -176,12 +176,12 @@ dist/
 - **نسخه Portable:** کاربر فایل `FDMX.exe` را از داخل یک پوشه اجرا می‌کند و فایل `fdmx_plugin_worker.exe` نیز باید کنار آن باشد.
 - **نسخه Installer:** فایل Setup برنامه را در مسیر نصب کپی می‌کند، میانبر Start Menu/Desktop می‌سازد و امکان حذف برنامه را فراهم می‌کند.
 
-در حال حاضر در مخزن، اسکریپت نگهداری‌شده Inno Setup و فایل نهایی Setup.exe وجود ندارد. پس از ساخت و تست دو فایل EXE بالا:
+یک اسکریپت اولیه نصب در مسیر `installer/FDMX.iss` به مخزن اضافه شده است. پس از ساخت و تست دو فایل EXE بالا:
 
 ۱. نرم‌افزار [Inno Setup](https://jrsoftware.org/isinfo.php) را نصب کنید.
-۲. یک اسکریپت نصب بسازید که هر دو فایل `FDMX.exe` و `fdmx_plugin_worker.exe` را در یک پوشه نصب قرار دهد.
-۳. میانبر برنامه را به `FDMX.exe` وصل کنید.
-۴. اسکریپت را Compile کنید تا فایل Setup.exe ساخته شود.
+۲. فایل `installer/FDMX.iss` را در Inno Setup Compiler باز کنید.
+۳. گزینه **Build → Compile** را انتخاب کنید. اسکریپت هر دو فایل `FDMX.exe` و `fdmx_plugin_worker.exe` را در یک پوشه نصب قرار می‌دهد و میانبر ایجاد می‌کند.
+۴. فایل Setup ساخته‌شده را از پوشه `dist/installer` بردارید.
 
 اطلاعات کاربر مانند تاریخچه دانلود و داده افزونه‌ها باید در پروفایل کاربر (مانند `%USERPROFILE%\.fdmx`) باقی بماند، نه داخل Program Files. نصب‌کننده نباید هنگام حذف برنامه، بدون تأیید کاربر اطلاعات شخصی را پاک کند.
 
