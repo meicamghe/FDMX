@@ -1,0 +1,12 @@
+{
+  "id": "hello_world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "A minimal example plugin demonstrating FDMX application events and logging.",
+  "entrypoint": "plugin.py",
+  "permissions": [
+    "app.events",
+    "app.log",
+    "ui.notifications"
+  ]
+}
