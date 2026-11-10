@@ -551,6 +551,12 @@ class PluginManager:
         entry = str(manifest.get("entrypoint", "plugin.py"))
         if Path(entry).name != entry or not entry.endswith(".py") or not (source / entry).is_file():
             raise ValueError("Rollback package has an invalid entrypoint")
+        permissions = manifest.get("permissions", [])
+        if not isinstance(permissions, list) or any(not isinstance(p, str) for p in permissions):
+            raise ValueError("Rollback package permissions must be a list of strings")
+        unknown = set(permissions) - ALLOWED_PERMISSIONS
+        if unknown:
+            raise ValueError("Rollback package contains unsupported permissions: " + ", ".join(sorted(unknown)))
         for item in source.rglob("*"):
             if item.is_symlink():
                 raise ValueError("Rollback package may not contain symbolic links")
@@ -767,7 +773,7 @@ class PluginManagerDialog(QDialog):
             chosen = versions[labels.index(selected)]
             answer = QMessageBox.warning(
                 self, "Confirm rollback",
-                f"Replace {plugin_id} v{self.manager.records[plugin_id].version} with v{chosen['version']}?\\n"
+                f"Replace {plugin_id} v{self.manager.records[plugin_id].version} with v{chosen['version']}?\n"
                 "The current version will be kept in history. The plugin will remain stopped.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
             )
@@ -803,7 +809,7 @@ class PluginManagerDialog(QDialog):
                     state = f"[Update available; installed v{installed.version}]" if newer else f"[Installed v{installed.version}]"
                 else:
                     state = "[Available]"
-                notes = str(item.get("release_notes", item.get("changelog", ""))).strip().replace("\\n", " ")
+                notes = str(item.get("release_notes", item.get("changelog", ""))).strip().replace("\n", " ")
                 labels.append(f"{item['id']}  v{item['version']}  {state}" + (f" — {notes[:90]}" if notes else ""))
             selected, ok = QInputDialog.getItem(
                 self, "Plugin Repository", "Select a plugin:", labels, 0, False
@@ -824,9 +830,9 @@ class PluginManagerDialog(QDialog):
                     return
                 answer = QMessageBox.question(
                     self, "Confirm plugin update",
-                    f"Update {plugin_id} from v{current_version} to v{entry['version']}?\\n\\n"
+                    f"Update {plugin_id} from v{current_version} to v{entry['version']}?\n\n"
                     + (notes[:3000] if notes else "No release notes supplied.") +
-                    "\\n\\nThe plugin will remain stopped after updating.",
+                    "\n\nThe plugin will remain stopped after updating.",
                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No
                 )
                 if answer != QMessageBox.Yes:
