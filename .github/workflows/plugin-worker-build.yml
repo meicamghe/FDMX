@@ -1,0 +1,57 @@
+name: Plugin worker build
+
+on:
+  push:
+    branches:
+      - feature/fdmx-6.22-advanced-fingerprinting
+    paths:
+      - "fdmx_plugin_host.py"
+      - "tests/smoke_plugin_worker.py"
+      - ".github/workflows/plugin-worker-build.yml"
+  pull_request:
+    paths:
+      - "fdmx_plugin_host.py"
+      - "tests/smoke_plugin_worker.py"
+      - ".github/workflows/plugin-worker-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-worker:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            executable: fdmx_plugin_worker
+          - os: ubuntu-latest
+            python-version: "3.12"
+            executable: fdmx_plugin_worker
+          - os: windows-latest
+            python-version: "3.11"
+            executable: fdmx_plugin_worker.exe
+          - os: windows-latest
+            python-version: "3.12"
+            executable: fdmx_plugin_worker.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+      - name: Build standalone plugin worker
+        run: pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker fdmx_plugin_host.py
+      - name: Smoke-test packaged worker
+        run: python tests/smoke_plugin_worker.py dist/${{ matrix.executable }}
+      - name: Upload worker executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdmx-plugin-worker-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/${{ matrix.executable }}
+          if-no-files-found: error
