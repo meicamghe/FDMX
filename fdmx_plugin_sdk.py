@@ -527,6 +527,9 @@ class PluginManager:
     def scan(self):
         found = {}
         for manifest_path in self.plugin_dir.glob("*/plugin.json"):
+            # Internal staging/rollback directories must never appear as installed plugins.
+            if manifest_path.parent.name.startswith("."):
+                continue
             try:
                 data = json.loads(manifest_path.read_text(encoding="utf-8"))
                 pid = str(data.get("id", manifest_path.parent.name))
