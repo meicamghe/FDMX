@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+_MODULE_STARTED_AT = time.perf_counter()
+
 from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
 from PySide6.QtWidgets import (
@@ -37,7 +39,6 @@ from PySide6.QtWidgets import (
 
 APP_NAME = "GNS Downloader"
 APP_VERSION = "6.37"
-_MODULE_STARTED_AT = time.perf_counter()
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -1726,7 +1727,7 @@ class AdminLoginFinderWorker(QThread):
             try:
                 bootstrap_request = urllib.request.Request(
                     "https://data.iana.org/rdap/dns.json",
-                    headers={"User-Agent": f"FDMX/{APP_VERSION}", "Accept": "application/json"}
+                    headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/json"}
                 )
                 with urllib.request.urlopen(bootstrap_request, timeout=10) as response:
                     bootstrap = json.loads(response.read(2 * 1024 * 1024).decode("utf-8", errors="replace"))
@@ -1749,7 +1750,7 @@ class AdminLoginFinderWorker(QThread):
                 query_url = base_url.rstrip("/") + "/domain/" + urllib.parse.quote(candidate, safe=".-")
                 request = urllib.request.Request(
                     query_url,
-                    headers={"User-Agent": f"FDMX/{APP_VERSION} (domain registration lookup)",
+                    headers={"User-Agent": f"{APP_NAME}/{APP_VERSION} (domain registration lookup)",
                              "Accept": "application/rdap+json, application/json"}
                 )
                 with urllib.request.urlopen(request, timeout=12) as response:
@@ -1823,7 +1824,7 @@ class AdminLoginFinderWorker(QThread):
                         if "/entity/" in href:
                             try:
                                 req = urllib.request.Request(
-                                    href, headers={"User-Agent": f"FDMX/{APP_VERSION}",
+                                    href, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}",
                                                    "Accept": "application/rdap+json, application/json"}
                                 )
                                 with urllib.request.urlopen(req, timeout=8) as response:
@@ -2032,7 +2033,7 @@ class AdminLoginFinderDialog(QDialog):
         event.accept()
 
     def show_report(self, report):
-        lines = ["FDMX ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
+        lines = [f"{APP_NAME.upper()} ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
                  f"Target: {report.get('target')}", f"Final URL: {report.get('final_url')}",
                  f"HTTP status: {report.get('status')}",
                  f"Public IP address(es): {', '.join(report.get('ip_addresses', [])) or 'Unknown'}",
@@ -3040,7 +3041,7 @@ remove plugin signals    def __init__(self):
         analytics_layout.addLayout(export_row)
         self.tabs.addTab(analytics_page, "Analytics")
 
-        # Keep one fixed visual preset; the separate Theme Studio tab was removed.
+        # Keep one fixed visual preset without a separate appearance-management tab.
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("Windows 11 Fluent", "fluent")
         self.theme_preview = QLabel()
@@ -3267,7 +3268,7 @@ remove plugin signals    def __init__(self):
                 hwnd = int(self.winId())
 
                 # Windows 11 22H2+: use the native Transient Window (acrylic)
-                # system backdrop, which blurs the actual desktop behind FDMX.
+                # system backdrop, which blurs the actual desktop behind the app.
                 dwm = ctypes.WinDLL("dwmapi")
                 attribute = 38  # DWMWA_SYSTEMBACKDROP_TYPE
                 backdrop_type = ctypes.c_int(3)  # DWMSBT_TRANSIENTWINDOW
@@ -3591,7 +3592,7 @@ remove plugin signals    def __init__(self):
         if hasattr(self, "theme_preview"):
             self.theme_preview.setText(
                 f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
-                "Theme applied to the entire FDMX interface"
+                "Theme applied to the entire GNS Downloader interface"
             )
             preview_background = (
                 f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
@@ -4742,7 +4743,11 @@ remove plugin methods    def open_settings_dialog(self):
             for task in active:
                 worker = task.get("worker") or task.get("metadata_worker")
                 if worker:
-                    worker.wait(3000)
+                    worker.wait(5000)
+                if task.get("status") not in ("Canceled", "Completed"):
+                    task.update({"status": "Canceled", "worker": None, "speed": 0.0, "eta": -1.0})
+                    self._cleanup_task_artifacts(task.get("id"), task)
+                    self.save_history_entry(task)
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):
