@@ -36,7 +36,7 @@ class PluginWorkerPackagingTests(unittest.TestCase):
         command = _build_worker_command(self.record, self.host, frozen=True,
                                         executable=str(self.root / "FDMX.exe"),
                                         platform="win32")
-        self.assertEqual(command[0], str(worker))
+        self.assertEqual(Path(command[0]), worker.resolve())
         self.assertEqual(command[1], str(self.folder))
 
     def test_frozen_mode_checks_bundle_directory(self):
