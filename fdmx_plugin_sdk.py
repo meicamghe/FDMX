@@ -1,4 +1,4 @@
-"""FDMX Plugin SDK 1.1 - isolated plugin worker manager.
+"""FDMX Plugin SDK 1.2 - isolated plugin worker manager.
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
