@@ -282,7 +282,9 @@ class PluginSDKTests(unittest.TestCase):
         self.manager.set_enabled(rec.plugin_id, True)
         with self.assertRaises(PermissionError):
             self.manager.load(rec.plugin_id)
-        self.manager.load(rec.plugin_id, allow_untrusted=True)
+        from unittest.mock import patch
+        with patch("fdmx_plugin_sdk._Worker.start", lambda worker: None):
+            self.manager.load(rec.plugin_id, allow_untrusted=True)
         self.assertTrue(self.manager.records[rec.plugin_id].loaded)
 
     def test_shutdown_callback_runs(self):
