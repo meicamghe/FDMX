@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   package-windows:
-    name: Build Windows EXE and Setup
+    name: Build optimized Windows EXE and Setup
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -39,23 +39,80 @@ jobs:
 
       - name: Build standalone plugin worker
         run: |
-          pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker --distpath dist --workpath build/worker fdmx_plugin_host.py
+          pyinstaller --noconfirm --clean --onefile --console --name fdmx_plugin_worker --distpath dist --workpath build/worker --exclude-module PySide6 fdmx_plugin_host.py
 
       - name: Smoke-test packaged plugin worker
         run: |
           python tests/smoke_plugin_worker.py dist/fdmx_plugin_worker.exe
 
-      - name: Build standalone FDMX application
+      - name: Build lean FDMX application
+        shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name FDMX --distpath dist --workpath build/app --collect-all PySide6 --collect-all cryptography FDMX_v6_36.py
+          $excluded = @(
+            "PySide6.Qt3DAnimation",
+            "PySide6.Qt3DCore",
+            "PySide6.Qt3DExtras",
+            "PySide6.Qt3DInput",
+            "PySide6.Qt3DLogic",
+            "PySide6.Qt3DRender",
+            "PySide6.QtBluetooth",
+            "PySide6.QtCharts",
+            "PySide6.QtDataVisualization",
+            "PySide6.QtDesigner",
+            "PySide6.QtGraphs",
+            "PySide6.QtGraphsWidgets",
+            "PySide6.QtLocation",
+            "PySide6.QtMultimedia",
+            "PySide6.QtMultimediaWidgets",
+            "PySide6.QtNfc",
+            "PySide6.QtPdf",
+            "PySide6.QtPdfWidgets",
+            "PySide6.QtPositioning",
+            "PySide6.QtQml",
+            "PySide6.QtQuick",
+            "PySide6.QtQuick3D",
+            "PySide6.QtQuickControls2",
+            "PySide6.QtQuickWidgets",
+            "PySide6.QtRemoteObjects",
+            "PySide6.QtScxml",
+            "PySide6.QtSensors",
+            "PySide6.QtSerialBus",
+            "PySide6.QtSerialPort",
+            "PySide6.QtSpatialAudio",
+            "PySide6.QtStateMachine",
+            "PySide6.QtTextToSpeech",
+            "PySide6.QtWebChannel",
+            "PySide6.QtWebEngineCore",
+            "PySide6.QtWebEngineQuick",
+            "PySide6.QtWebEngineWidgets",
+            "PySide6.QtWebSockets",
+            "PySide6.QtWebView"
+          )
+          $args = @(
+            "--noconfirm", "--clean", "--onefile", "--windowed",
+            "--name", "FDMX", "--distpath", "dist", "--workpath", "build/app",
+            "--exclude-module", "PySide6.scripts",
+            "--exclude-module", "PySide6.support"
+          )
+          foreach ($module in $excluded) {
+            $args += @("--exclude-module", $module)
+          }
+          $args += "FDMX_v6_36.py"
+          & pyinstaller @args
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
-      - name: Verify package inputs
+      - name: Verify package inputs and report sizes
         shell: pwsh
         run: |
           $required = @("dist/FDMX.exe", "dist/fdmx_plugin_worker.exe")
           foreach ($file in $required) {
             if (-not (Test-Path $file)) { throw "Required build output is missing: $file" }
           }
+          Get-Item $required | Select-Object Name, Length
+          $appBytes = (Get-Item "dist/FDMX.exe").Length
+          $workerBytes = (Get-Item "dist/fdmx_plugin_worker.exe").Length
+          "FDMX_EXE_MB=$([math]::Round($appBytes / 1MB, 2))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "PLUGIN_WORKER_MB=$([math]::Round($workerBytes / 1MB, 2))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Install Inno Setup
         run: choco install innosetup --yes --no-progress
@@ -73,13 +130,17 @@ jobs:
         run: |
           Compress-Archive -Path "dist/FDMX.exe", "dist/fdmx_plugin_worker.exe" -DestinationPath "dist/FDMX-Portable-v6.36-Windows-x64.zip" -Force
 
+      - name: Report final package sizes
+        shell: pwsh
+        run: |
+          Get-Item "dist/FDMX.exe", "dist/fdmx_plugin_worker.exe", "dist/installer/FDMX-Setup-6.36.exe", "dist/FDMX-Portable-v6.36-Windows-x64.zip" |
+            Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
+
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
-          name: FDMX-Windows-v6.36
+          name: FDMX-Windows-v6.36-optimized
           path: |
-            dist/FDMX.exe
-            dist/fdmx_plugin_worker.exe
             dist/FDMX-Portable-v6.36-Windows-x64.zip
             dist/installer/FDMX-Setup-6.36.exe
           if-no-files-found: error
