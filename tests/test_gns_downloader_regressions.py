@@ -48,7 +48,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('def _choose_part_count(self, total, measured_speed):', SOURCE)
         self.assertIn('self.parts_configured.emit(parts_count, measured_speed)', SOURCE)
         self.assertIn('"parts.json"', SOURCE)
-        self.assertIn('parts_count = int(candidate["count"])', SOURCE)
+        self.assertIn('candidate_count = int(candidate.get("count", 0))', SOURCE)
         self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
         self.assertIn('"parts_count", "measured_speed"', SOURCE)
 
