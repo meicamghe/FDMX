@@ -1,4 +1,4 @@
-# GNS Downloader 6.38
+# GNS Downloader 6.39
 
 GNS Downloader is a Windows desktop download manager built with Python and PySide6.
 
@@ -6,7 +6,7 @@ GNS Downloader is a Windows desktop download manager built with Python and PySid
 
 ## Current build
 
-- Application version: **6.38**
+- Application version: **6.39**
 - Main source: `FDMX_v6_36.py`
 - Primary target: Windows 10/11, x64
 - Interface: fixed Windows 11 Fluent appearance. There is no theme-selection tab or Theme Studio.
@@ -16,11 +16,14 @@ GNS Downloader is a Windows desktop download manager built with Python and PySid
 
 - HTTP/HTTPS downloads with multi-connection transfers.
 - Pause, resume, cancel, retry, queue management and persistent task state.
-- Per-download details window with progress and segment information.
+- Per-download details window with progress and segment information. After a successful download, the action area switches to **Open** and **Close**; the transfer controls are hidden.
+- Smart speed detection samples an initial byte range, estimates real throughput, and selects 1, 2, 4 or up to 8 parallel parts based on the file size and measured speed. The chosen byte-range map is stored with the temporary fragments so pause/recovery can resume safely without repartitioning existing data.
 - Scheduling, speed limits, download history and CSV/JSON analytics.
 - Browser hand-off through a local-only bridge at `127.0.0.1:38471`.
 - Per-download post-completion action: do nothing, shut down Windows, log out, or hibernate. The action is configured in that download's own details window and does not affect other downloads.
 - Enabled and disabled buttons use distinct visual treatments.
+
+The adaptive engine chooses a stable part layout at the beginning of a transfer; it does not reshuffle byte ranges mid-transfer. Servers that do not support HTTP Range continue using the single-stream fallback.
 
 Post-completion power actions are Windows-only and run only after a successful completion. Use them carefully; shutdown, log out and hibernate can interrupt other work.
 
@@ -28,8 +31,8 @@ Post-completion power actions are Windows-only and run only after a successful c
 
 The CI workflow publishes two separate artifacts after a successful build:
 
-- **[Portable ZIP — GNS Downloader 6.38](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
-- **[Setup installer — GNS Downloader 6.38](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
+- **[Portable ZIP — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
+- **[Setup installer — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
 
 Open the latest successful **Build GNS Downloader Windows packages** run in GitHub Actions and download the matching artifact. Artifacts are retained for 14 days. These are CI artifacts, not a permanent GitHub Release.
 
