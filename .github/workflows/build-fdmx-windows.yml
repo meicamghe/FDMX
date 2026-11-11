@@ -9,6 +9,7 @@ on:
       - "FDMX_v6_36.py"
       - "fdmx_plugin_*.py"
       - "installer/**"
+      - "tests/**"
       - ".github/workflows/build-fdmx-windows.yml"
 
 permissions:
