@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.39"
+APP_VERSION = "6.40"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -2799,6 +2799,91 @@ class LinkGrabberWorker(QThread):
             self.failed.emit(str(exc))
 
 
+def _version_key(value):
+    numbers = [int(item) for item in re.findall(r"\\d+", str(value))[:3]]
+    return tuple((numbers + [0, 0, 0])[:3])
+
+
+class GitHubUpdateWorker(QThread):
+    """Check GitHub Releases and download the Windows Setup asset when applicable."""
+    update_ready = Signal(str, str, str)
+    up_to_date = Signal(str)
+    failed = Signal(str)
+    RELEASE_API = "https://api.github.com/repos/meicamghe/FDMX/releases/latest"
+
+    def __init__(self, current_version):
+        super().__init__()
+        self.current_version = current_version
+
+    def run(self):
+        installer_path = ""
+        try:
+            request = urllib.request.Request(
+                self.RELEASE_API,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            with open_url(request, timeout=25) as response:
+                release = json.loads(response.read().decode("utf-8"))
+            version = str(release.get("tag_name", "")).lstrip("vV").strip()
+            if not version:
+                raise RuntimeError("GitHub returned a release without a version tag.")
+            if _version_key(version) <= _version_key(self.current_version):
+                self.up_to_date.emit(version)
+                return
+
+            release_url = release.get("html_url") or "https://github.com/meicamghe/FDMX/releases/latest"
+            if os.name != "nt":
+                self.update_ready.emit(version, "", release_url)
+                return
+
+            setup = next(
+                (asset for asset in release.get("assets", [])
+                 if str(asset.get("name", "")).lower().endswith(".exe")
+                 and "setup" in str(asset.get("name", "")).lower()),
+                None,
+            )
+            if not setup or not setup.get("browser_download_url"):
+                raise RuntimeError("The latest GitHub Release does not contain a Windows Setup installer.")
+
+            fd, installer_path = tempfile.mkstemp(prefix="gns-downloader-update-", suffix=".exe")
+            os.close(fd)
+            download_request = urllib.request.Request(
+                setup["browser_download_url"],
+                headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/octet-stream"},
+            )
+            digest = hashlib.sha256()
+            downloaded = 0
+            with open_url(download_request, timeout=60) as response, open(installer_path, "wb") as output:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    digest.update(chunk)
+                    downloaded += len(chunk)
+
+            expected_size = int(setup.get("size") or 0)
+            if expected_size and downloaded != expected_size:
+                raise RuntimeError("The downloaded installer size does not match the GitHub release asset.")
+            expected_digest = str(setup.get("digest") or "")
+            if expected_digest.startswith("sha256:") and digest.hexdigest().lower() != expected_digest.split(":", 1)[1].lower():
+                raise RuntimeError("The installer SHA-256 digest does not match the GitHub release.")
+            self.update_ready.emit(version, installer_path, release_url)
+            installer_path = ""
+        except Exception as exc:
+            if installer_path and os.path.exists(installer_path):
+                try:
+                    os.remove(installer_path)
+                except OSError:
+                    pass
+            self.failed.emit(str(exc))
+
+
+
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
     def __init__(self):
@@ -2942,6 +3027,7 @@ class FDMX(QWidget):
         settings_menu = self.menu_bar.addMenu("Settings")
         settings_menu.addAction("Preferences…", self.open_settings_dialog)
         help_menu = self.menu_bar.addMenu("Help")
+        help_menu.addAction("Check for updates…", self.check_for_updates)
         help_menu.addAction(f"About {APP_NAME}", self.show_about)
         root.setMenuBar(self.menu_bar)
 
@@ -3212,9 +3298,13 @@ class FDMX(QWidget):
         analytics_layout.addLayout(export_row)
         self.tabs.addTab(analytics_page, "Analytics")
 
-        # Keep one fixed visual preset without a separate appearance-management tab.
+        # Select the visual preset automatically for the current desktop OS.
+        # No theme-selection tab is exposed in the product UI.
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        if sys.platform.startswith("linux"):
+            self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")
+        else:
+            self.theme_combo.addItem("Windows 11 Fluent", "fluent")
         self.theme_preview = QLabel()
 
         self.status = QLabel("Ready — add a URL to begin.")
@@ -3510,6 +3600,7 @@ class FDMX(QWidget):
             "cyber": ("#0b1020", "#111a30", "#1b2945", "#e6f7ff", "#8ba6c9", "#00e5ff", "#07111d", "#31516f"),
             "sonoma": ("#20232b", "#292e38", "#343b48", "#f5f6fa", "#b6bfce", "#8b9cff", "#ffffff", "#4a5262"),
             "fluent": ("#f3f5f9", "#ffffff", "#e8edf5", "#1d2635", "#66758b", "#536fcb", "#ffffff", "#d5ddeb"),
+            "ubuntu_yaru": ("#f6f5f4", "#ffffff", "#e8e6e3", "#241f31", "#5e5c64", "#e95420", "#ffffff", "#d5d3cf"),
             "solarized": ("#002b36", "#073642", "#164752", "#eee8d5", "#93a1a1", "#2aa198", "#002b36", "#586e75"),
             "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86"),
             "aero_blue": ("#d9efff", "#eaf7ff", "#ffffff", "#18364f", "#54738b", "#269fe8", "#ffffff", "#a9d8f4"),
@@ -3526,17 +3617,18 @@ class FDMX(QWidget):
         }
         bg, panel, raised, fg, muted, accent, accent_text, border = palettes.get(theme, palettes["dark"])
         is_light = theme in ("light", "fluent", "aero_blue", "aero_light", "crystal", "aero_sunset",
-                             "aero_kubuntu", "aero_ubuntu", "aero_windows11",
+                             "aero_kubuntu", "aero_ubuntu", "aero_windows11", "ubuntu_yaru",
                              "emerald_glass", "aurora_spectrum", "crystal_aqua_glass")
         selection = accent
         self._active_theme_palette = {
             "background": bg, "panel": panel, "raised": raised,
             "foreground": fg, "muted": muted, "accent": accent, "border": border
         }
+        font_family = '"Ubuntu", "Cantarell", "Noto Sans", sans-serif' if theme == "ubuntu_yaru" else '"Segoe UI", "Inter", "Noto Sans", sans-serif'
         qss = f"""
             QWidget {{
                 background-color: {bg}; color: {fg};
-                font-family: "Segoe UI", "Inter", "Noto Sans", sans-serif;
+                font-family: {font_family};
                 font-size: 10pt;
             }}
             QMainWindow, QDialog {{ background-color: {bg}; }}
@@ -3836,8 +3928,64 @@ class FDMX(QWidget):
         self.settings_dialog.accept()
 
     def show_about(self):
-        QMessageBox.about(self, f"About {APP_NAME}",
-                          f"{APP_NAME} {APP_VERSION}\\nA lightweight download manager.")
+        QMessageBox.about(
+            self, f"About {APP_NAME}",
+            f"{APP_NAME} {APP_VERSION}\\n\\n"
+            "Created by MeysamGNS\\n"
+            "Developed with assistance from ChatGPT\\n\\n"
+            "A lightweight, adaptive download manager."
+        )
+
+    def check_for_updates(self):
+        worker = getattr(self, "_update_worker", None)
+        if worker is not None and worker.isRunning():
+            QMessageBox.information(self, "Updates", "An update check is already running.")
+            return
+        self.status.setText("Checking GitHub for updates…")
+        worker = GitHubUpdateWorker(APP_VERSION)
+        self._update_worker = worker
+        worker.update_ready.connect(self.on_update_ready)
+        worker.up_to_date.connect(self.on_update_up_to_date)
+        worker.failed.connect(self.on_update_check_failed)
+        worker.start()
+
+    def on_update_up_to_date(self, version):
+        self.status.setText(f"You are using the latest version ({APP_VERSION}).")
+        QMessageBox.information(self, "No updates available", f"GNS Downloader {APP_VERSION} is up to date.")
+
+    def on_update_check_failed(self, message):
+        self.status.setText("GitHub update check failed.")
+        QMessageBox.warning(self, "Update check failed", f"Could not check or download the update from GitHub:\\n{message}")
+
+    def on_update_ready(self, version, installer_path, release_url):
+        if not installer_path:
+            QMessageBox.information(
+                self, "Update available",
+                f"GNS Downloader {version} is available. Windows installer packages are published on GitHub Releases."
+            )
+            QDesktopServices.openUrl(QUrl(release_url))
+            return
+        answer = QMessageBox.question(
+            self, "Update ready",
+            f"GNS Downloader {version} has been downloaded.\\n\\n"
+            "Launch the Setup installer now? The application will close.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+        )
+        if answer != QMessageBox.Yes:
+            try:
+                os.remove(installer_path)
+            except OSError:
+                pass
+            return
+        self.close()
+        if self.isVisible():
+            QMessageBox.information(self, "Update postponed", "Close active downloads before installing the update.")
+            return
+        try:
+            subprocess.Popen([installer_path], close_fds=True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not launch Setup", str(exc))
+
 
     def set_filter(self, name):
         self.current_filter = name
@@ -4779,8 +4927,9 @@ class FDMX(QWidget):
         self.torrent_upload_limit.valueChanged.connect(self.save_preferences)
         self.folder.editingFinished.connect(self.save_preferences)
         self.clipboard_monitor.setChecked(self.settings.value("clipboard_monitor", False, type=bool))
-        self.theme_combo.setCurrentIndex(0)
-        self.settings.setValue("theme", "fluent")
+        default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(default_theme)))
+        self.settings.setValue("theme", default_theme)
         self.apply_selected_theme()
         self.proxy_enabled.setChecked(self.settings.value("proxy_enabled", False, type=bool))
         self.proxy_url.setText(self.settings.value("proxy_url", "", type=str))
