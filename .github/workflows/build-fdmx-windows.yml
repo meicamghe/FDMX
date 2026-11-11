@@ -115,6 +115,12 @@ jobs:
         run: |
           Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" -Force
 
+      - name: Prepare stable GitHub Release asset names
+        shell: pwsh
+        run: |
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.40.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
+
       - name: Report final package sizes
         shell: pwsh
         run: |
@@ -146,7 +152,61 @@ jobs:
           target_commitish: feature/fdmx-6.40-github-updater-ubuntu-theme
           generate_release_notes: true
           files: |
-            dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip
-            dist/installer/GNS-Downloader-Setup-6.40.exe
+            dist/GNS-Downloader-Portable-Windows-x64.zip
+            dist/installer/GNS-Downloader-Setup.exe
           fail_on_unmatched_files: true
           make_latest: true
+
+  test-linux-ubuntu-theme:
+    name: Test Linux source and Ubuntu Yaru appearance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PySide6
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials
+
+      - name: Compile source and run regression tests
+        run: |
+          python -m py_compile FDMX_v6_36.py ubuntu.py
+          python tests/test_gns_downloader_regressions.py
+
+      - name: Launch app and verify Ubuntu Yaru theme
+        run: |
+          python - <<'PY'
+          import runpy
+          import sys
+          from PySide6.QtCore import QTimer
+          from PySide6.QtWidgets import QApplication
+
+          original_exec = QApplication.exec
+          original_exit = sys.exit
+
+          def timed_exec(self):
+              QTimer.singleShot(1800, self.quit)
+              return original_exec(self)
+
+          QApplication.exec = timed_exec
+          sys.exit = lambda *args, **kwargs: None
+          try:
+              namespace = runpy.run_path("FDMX_v6_36.py", run_name="__main__")
+              app = QApplication.instance()
+              window = namespace["window"]
+              assert window.theme_combo.currentData() == "ubuntu_yaru"
+              assert "#e95420" in app.styleSheet().lower()
+              print("Ubuntu Yaru startup smoke test passed.")
+          finally:
+              sys.exit = original_exit
+              QApplication.exec = original_exec
+          PY
