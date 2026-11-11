@@ -28,9 +28,11 @@ The adaptive engine keeps a stable part layout during each transfer so pause/res
 
 Permanent release links (updated when a new stable release is published):
 
-- **[Portable ZIP — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Portable-v6.40-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Setup-6.40.exe)** — installs the application and shortcuts.
+- **[Portable ZIP — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
+
+The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
 To publish a permanent release after a successful CI build, run **Build GNS Downloader Windows packages** manually from GitHub Actions and set **publish_release** to true. Ordinary branch builds create temporary CI artifacts only.
 
