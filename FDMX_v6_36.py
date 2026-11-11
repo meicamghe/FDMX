@@ -640,6 +640,20 @@ class DownloadWorker(QThread):
             except (OSError, ValueError, TypeError, AttributeError):
                 manifest = None
 
+            # If a manifest exists but is invalid or belongs to a different file size,
+            # discard its fragments instead of guessing their byte-range layout.
+            if os.path.exists(manifest_path) and manifest is None:
+                for filename in os.listdir(temp_folder):
+                    if filename.startswith("part_") and filename.endswith(".tmp"):
+                        try:
+                            os.remove(os.path.join(temp_folder, filename))
+                        except OSError:
+                            pass
+                try:
+                    os.remove(manifest_path)
+                except OSError:
+                    pass
+
             existing_parts = any(
                 os.path.isfile(os.path.join(temp_folder, f"part_{index:02d}.tmp"))
                 for index in range(CONNECTIONS)
@@ -1097,6 +1111,8 @@ class DownloadDetailsDialog(QDialog):
             button.setVisible(not completed)
         self.open_btn.setVisible(completed)
         self.close_btn.setVisible(True)
+        self.post_action_enabled.setEnabled(not completed)
+        self.post_action.setEnabled(not completed and self.post_action_enabled.isChecked())
         self.start_btn.setVisible(not completed and status in ("Ready", "Checking metadata"))
         self.start_btn.setEnabled(status == "Ready")
         self.pause_btn.setEnabled(status in ("Downloading", "Checking server", "Seeding"))
