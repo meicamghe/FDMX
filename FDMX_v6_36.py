@@ -2800,7 +2800,7 @@ class LinkGrabberWorker(QThread):
 
 
 def _version_key(value):
-    numbers = [int(item) for item in re.findall(r"\\d+", str(value))[:3]]
+    numbers = [int(item) for item in re.findall(r"\d+", str(value))[:3]]
     return tuple((numbers + [0, 0, 0])[:3])
 
 
