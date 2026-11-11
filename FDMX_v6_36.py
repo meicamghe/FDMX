@@ -3104,7 +3104,7 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "scheduled_at": selected_time.toString(Qt.ISODate),
-            "category": category_for_filename(name)
+            "category": category_for_filename(name),
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -3916,7 +3916,7 @@ class FDMX(QWidget):
                 "name": name, "status": "Queued", "downloaded": 0, "total": 0,
                 "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
                 "history": False, "scheduled_at": "",
-                "category": category_for_filename(name)
+                "category": category_for_filename(name),
                 "post_action_enabled": False, "post_action": "none", "post_action_done": False
             }
             added += 1
@@ -3957,7 +3957,7 @@ class FDMX(QWidget):
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "metadata_worker": None,
             "scheduled_at": "", "total_known": False,
-            "category": category_for_filename(name)
+            "category": category_for_filename(name),
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -4031,7 +4031,7 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0, "speed": 0.0,
             "eta": -1.0, "path": "", "worker": None, "history": False,
             "kind": "torrent", "category": "Torrent", "upload_speed": 0.0,
-            "scheduled_at": ""
+            "scheduled_at": "",
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
