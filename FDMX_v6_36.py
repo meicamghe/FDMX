@@ -251,6 +251,10 @@ class RateLimiter:
                 time.sleep(wait)
 
 
+class RangeNotSupportedError(RuntimeError):
+    """Raised when a server rejects or misreports an HTTP byte-range request."""
+
+
 class DownloadWorker(QThread):
     progress = Signal(int, int, float, float)
     parts_configured = Signal(int, float)
@@ -376,12 +380,78 @@ class DownloadWorker(QThread):
         eta = (total - downloaded) / speed if total > downloaded and speed > 0 else -1.0
         self.progress.emit(downloaded, total, speed, eta)
 
-    def request(self, start=None, end=None):
-        headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION}"}
+    def request_headers(self, start=None, end=None):
+        # Use a conventional browser User-Agent: some legacy download hosts
+        # reject application-specific clients even though browsers/IDM work.
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            # Byte offsets must refer to the representation written to disk.
+            "Accept-Encoding": "identity",
+        }
         if start is not None:
             headers["Range"] = f"bytes={start}-{end}"
-        req = urllib.request.Request(self.url, headers=headers)
-        return urllib.request.urlopen(req, timeout=15)
+        return headers
+
+    def request(self, start=None, end=None):
+        req = urllib.request.Request(
+            self.url, headers=self.request_headers(start, end)
+        )
+        return urllib.request.urlopen(req, timeout=30)
+
+    def probe_download(self):
+        """Try a one-byte Range probe, then ordinary GET if the host rejects it."""
+        last_error = None
+        for use_range in (True, False):
+            response = None
+            sock = None
+            try:
+                response = self.request(0, 0) if use_range else self.request()
+                sock = self.get_response_socket(response)
+                self.register_socket(sock)
+                self.wait_if_paused()
+
+                filename = get_filename(response)
+                content_range = response.headers.get("Content-Range", "")
+                match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
+                supported = bool(use_range and response.status == 206 and match)
+                if match:
+                    total = int(match.group(1))
+                else:
+                    raw_length = response.headers.get("Content-Length", "")
+                    total = int(raw_length) if raw_length.isdigit() else 0
+
+                # Consume at most one byte; the response is closed immediately.
+                response.read(1)
+                return filename, supported, total
+            except urllib.error.HTTPError as exc:
+                last_error = exc
+                try:
+                    exc.close()
+                except Exception:
+                    pass
+            except Exception as exc:
+                if self.cancel_event.is_set():
+                    raise InterruptedError("Download canceled")
+                if not self.pause_event.is_set():
+                    self.wait_if_paused()
+                    continue
+                last_error = exc
+            finally:
+                self.unregister_socket(sock)
+                if response is not None:
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
+
+        raise RuntimeError(
+            f"Server rejected both Range and ordinary GET requests: {last_error}"
+        ) from last_error
         
     def get_response_socket(self, response):
         """Return urllib's underlying socket for readiness polling."""
@@ -441,20 +511,20 @@ class DownloadWorker(QThread):
 
             offset = start + received
             req = urllib.request.Request(
-                self.url,
-                headers={
-                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
-                    "Range": f"bytes={offset}-{end}",
-                },
+                self.url, headers=self.request_headers(offset, end)
             )
             sock = None
             try:
                 with urllib.request.urlopen(req, timeout=30) as response:
                     if response.status != 206:
-                        raise RuntimeError("Server stopped supporting HTTP Range")
+                        raise RangeNotSupportedError(
+                            f"Server returned HTTP {response.status} for a Range request"
+                        )
                     content_range = response.headers.get("Content-Range", "")
                     if not content_range.startswith(f"bytes {offset}-{end}/"):
-                        raise RuntimeError("Invalid Content-Range response")
+                        raise RangeNotSupportedError(
+                            f"Server returned an invalid Content-Range: {content_range!r}"
+                        )
                     sock = self.get_response_socket(response)
                     self.register_socket(sock)
                     mode = "ab" if received else "wb"
@@ -481,6 +551,22 @@ class DownloadWorker(QThread):
                 failures = 0
             except InterruptedError:
                 raise
+            except RangeNotSupportedError:
+                raise
+            except urllib.error.HTTPError as exc:
+                if exc.code in (400, 403, 405, 416, 501):
+                    raise RangeNotSupportedError(
+                        f"Server rejected HTTP Range with status {exc.code}"
+                    ) from exc
+                if self.cancel_event.is_set():
+                    raise InterruptedError("Download canceled")
+                if not self.pause_event.is_set():
+                    self.wait_if_paused()
+                    continue
+                failures += 1
+                if failures > 3:
+                    raise
+                time.sleep(min(1.0 * failures, 3.0))
             except Exception:
                 # Closing the socket is the mechanism that interrupts a blocked
                 # urllib read. A pause is not a failed download: wait, then Range-resume.
@@ -576,11 +662,7 @@ class DownloadWorker(QThread):
         sample_size = min(512 * 1024, max(1, total // CONNECTIONS), total)
         sample_path = os.path.join(temp_folder, "part_00.tmp")
         request = urllib.request.Request(
-            self.url,
-            headers={
-                "User-Agent": f"{APP_NAME}/{APP_VERSION}",
-                "Range": f"bytes=0-{sample_size - 1}",
-            },
+            self.url, headers=self.request_headers(0, sample_size - 1)
         )
         sock = None
         started = time.monotonic()
@@ -735,19 +817,7 @@ class DownloadWorker(QThread):
         try:
             self.state.emit("Checking server")
             self.wait_if_paused()
-            with self.request(0, 0) as probe:
-                probe_socket = self.get_response_socket(probe)
-                self.register_socket(probe_socket)
-                try:
-                    self.wait_if_paused()
-                    filename = get_filename(probe)
-                    content_range = probe.headers.get("Content-Range", "")
-                    match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
-                    supported = probe.status == 206 and match is not None
-                    total = int(match.group(1)) if match else 0
-                    probe.read(1)
-                finally:
-                    self.unregister_socket(probe_socket)
+            filename, supported, total = self.probe_download()
             self.wait_if_paused()
 
             os.makedirs(self.folder, exist_ok=True)
@@ -760,7 +830,17 @@ class DownloadWorker(QThread):
                     raise InterruptedError("Download canceled")
                 try:
                     if supported and total > 1:
-                        self.download_multi(destination, total)
+                        try:
+                            self.download_multi(destination, total)
+                        except RangeNotSupportedError:
+                            # The initial probe can succeed while later byte ranges
+                            # are blocked by a CDN/proxy. Fall back to a clean stream.
+                            self.state.emit("Range unavailable; using single connection")
+                            parts_dir = os.path.join(
+                                self.folder, f".fdmx_{self.task_id}.parts"
+                            )
+                            shutil.rmtree(parts_dir, ignore_errors=True)
+                            self.download_single(destination)
                     else:
                         self.download_single(destination)
                     self.progress.emit(100, self.total, self.current_speed, 0.0)
