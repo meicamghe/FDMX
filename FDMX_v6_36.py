@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
     QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
     QDateTimeEdit, QCheckBox, QComboBox, QMenuBar, QTabWidget, QTextEdit, QListWidget, QListWidgetItem,
-    QSystemTrayIcon, QInputDialog, QVBoxLayout as VBoxLayout
+    QSystemTrayIcon, QInputDialog, QProgressDialog, QVBoxLayout as VBoxLayout
 )
 
 
@@ -2933,8 +2933,8 @@ def _version_key(value):
 
 
 class GitHubUpdateWorker(QThread):
-    """Check GitHub Releases and download the Windows Setup asset when applicable."""
-    update_ready = Signal(str, str, str)
+    """Fetch release metadata only; downloading starts after explicit user approval."""
+    update_available = Signal(str, str, str, str, int, str)
     up_to_date = Signal(str)
     failed = Signal(str)
     RELEASE_API = "https://api.github.com/repos/meicamghe/FDMX/releases/latest"
@@ -2944,7 +2944,6 @@ class GitHubUpdateWorker(QThread):
         self.current_version = current_version
 
     def run(self):
-        installer_path = ""
         try:
             request = urllib.request.Request(
                 self.RELEASE_API,
@@ -2964,51 +2963,94 @@ class GitHubUpdateWorker(QThread):
                 return
 
             release_url = release.get("html_url") or "https://github.com/meicamghe/FDMX/releases/latest"
-            if not _is_installed_windows_build():
-                self.update_ready.emit(version, "", release_url)
-                return
+            notes = str(release.get("body") or "").strip()
+            asset_url = ""
+            asset_size = 0
+            asset_digest = ""
+            if _is_installed_windows_build():
+                setup = next(
+                    (asset for asset in release.get("assets", [])
+                     if str(asset.get("name", "")).lower().endswith(".exe")
+                     and "setup" in str(asset.get("name", "")).lower()),
+                    None,
+                )
+                if not setup or not setup.get("browser_download_url"):
+                    raise RuntimeError("The latest GitHub Release does not contain a Windows Setup installer.")
+                asset_url = str(setup["browser_download_url"])
+                asset_size = int(setup.get("size") or 0)
+                asset_digest = str(setup.get("digest") or "")
+            self.update_available.emit(version, notes, release_url, asset_url, asset_size, asset_digest)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
-            setup = next(
-                (asset for asset in release.get("assets", [])
-                 if str(asset.get("name", "")).lower().endswith(".exe")
-                 and "setup" in str(asset.get("name", "")).lower()),
-                None,
-            )
-            if not setup or not setup.get("browser_download_url"):
-                raise RuntimeError("The latest GitHub Release does not contain a Windows Setup installer.")
 
+class GitHubUpdateDownloadWorker(QThread):
+    """Download and verify the installer while reporting live progress."""
+    progress = Signal(int, int, float)
+    downloaded = Signal(str)
+    failed = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, url, expected_size=0, expected_digest=""):
+        super().__init__()
+        self.url = url
+        self.expected_size = max(0, int(expected_size or 0))
+        self.expected_digest = str(expected_digest or "")
+        self.cancel_event = threading.Event()
+
+    def cancel(self):
+        self.cancel_event.set()
+
+    def run(self):
+        installer_path = ""
+        try:
             fd, installer_path = tempfile.mkstemp(prefix="gns-downloader-update-", suffix=".exe")
             os.close(fd)
-            download_request = urllib.request.Request(
-                setup["browser_download_url"],
-                headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/octet-stream"},
+            request = urllib.request.Request(
+                self.url,
+                headers={
+                    "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                    "Accept": "application/octet-stream",
+                },
             )
             digest = hashlib.sha256()
             downloaded = 0
-            with open_url(download_request, timeout=60) as response, open(installer_path, "wb") as output:
+            started = time.monotonic()
+            with open_url(request, timeout=60) as response, open(installer_path, "wb") as output:
+                raw_total = response.headers.get("Content-Length", "")
+                total = int(raw_total) if raw_total.isdigit() else self.expected_size
+                self.progress.emit(0, total, 0.0)
                 while True:
-                    chunk = response.read(1024 * 1024)
+                    if self.cancel_event.is_set():
+                        raise InterruptedError("Update download canceled by user.")
+                    chunk = response.read(256 * 1024)
                     if not chunk:
                         break
                     output.write(chunk)
                     digest.update(chunk)
                     downloaded += len(chunk)
-
-            expected_size = int(setup.get("size") or 0)
-            if expected_size and downloaded != expected_size:
+                    elapsed = max(0.001, time.monotonic() - started)
+                    self.progress.emit(downloaded, total, downloaded / elapsed)
+            if self.cancel_event.is_set():
+                raise InterruptedError("Update download canceled by user.")
+            if self.expected_size and downloaded != self.expected_size:
                 raise RuntimeError("The downloaded installer size does not match the GitHub release asset.")
-            expected_digest = str(setup.get("digest") or "")
-            if expected_digest.startswith("sha256:") and digest.hexdigest().lower() != expected_digest.split(":", 1)[1].lower():
-                raise RuntimeError("The installer SHA-256 digest does not match the GitHub release.")
-            self.update_ready.emit(version, installer_path, release_url)
+            if self.expected_digest.startswith("sha256:"):
+                expected = self.expected_digest.split(":", 1)[1].lower()
+                if digest.hexdigest().lower() != expected:
+                    raise RuntimeError("The installer SHA-256 digest does not match the GitHub release.")
+            self.downloaded.emit(installer_path)
             installer_path = ""
+        except InterruptedError:
+            self.canceled.emit()
         except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
             if installer_path and os.path.exists(installer_path):
                 try:
                     os.remove(installer_path)
                 except OSError:
                     pass
-            self.failed.emit(str(exc))
 
 
 
@@ -4066,13 +4108,15 @@ class FDMX(QWidget):
 
     def check_for_updates(self):
         worker = getattr(self, "_update_worker", None)
-        if worker is not None and worker.isRunning():
-            QMessageBox.information(self, "Updates", "An update check is already running.")
+        download_worker = getattr(self, "_update_download_worker", None)
+        if ((worker is not None and worker.isRunning())
+                or (download_worker is not None and download_worker.isRunning())):
+            QMessageBox.information(self, "Updates", "An update operation is already running.")
             return
         self.status.setText("Checking GitHub for updates…")
         worker = GitHubUpdateWorker(APP_VERSION)
         self._update_worker = worker
-        worker.update_ready.connect(self.on_update_ready)
+        worker.update_available.connect(self.on_update_available)
         worker.up_to_date.connect(self.on_update_up_to_date)
         worker.failed.connect(self.on_update_check_failed)
         worker.start()
@@ -4083,19 +4127,88 @@ class FDMX(QWidget):
 
     def on_update_check_failed(self, message):
         self.status.setText("GitHub update check failed.")
-        QMessageBox.warning(self, "Update check failed", f"Could not check or download the update from GitHub:\\n{message}")
+        QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\\n{message}")
 
-    def on_update_ready(self, version, installer_path, release_url):
-        if not installer_path:
-            QMessageBox.information(
-                self, "Update available",
-                f"GNS Downloader {version} is available. Open GitHub Releases and download the Portable ZIP for a portable or source-based copy."
+    def on_update_available(self, version, notes, release_url, asset_url, asset_size, asset_digest):
+        summary = (
+            f"GNS Downloader {version} is available.\\n"
+            f"Current version: {APP_VERSION}\\n\\n"
+            "Release notes:\\n"
+            + (notes[:12000] if notes else "No release notes were provided.")
+        )
+        if not asset_url:
+            answer = QMessageBox.question(
+                self, "Update available", summary + "\\n\\nOpen GitHub Releases to download the portable package?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
             )
-            QDesktopServices.openUrl(QUrl(release_url))
+            if answer == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl(release_url))
             return
+
         answer = QMessageBox.question(
-            self, "Update ready",
-            f"GNS Downloader {version} has been downloaded.\\n\\n"
+            self, "Update available", summary + "\\n\\nDownload this update now?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+        )
+        if answer != QMessageBox.Yes:
+            self.status.setText("Update postponed.")
+            return
+        self.start_update_download(version, asset_url, asset_size, asset_digest)
+
+    def start_update_download(self, version, asset_url, asset_size, asset_digest):
+        progress = QProgressDialog("Preparing update download…", "Cancel", 0, 100, self)
+        progress.setWindowTitle(f"Downloading GNS Downloader {version}")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        self._update_progress = progress
+        worker = GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest)
+        self._update_download_worker = worker
+        worker.progress.connect(self.on_update_download_progress)
+        worker.downloaded.connect(self.on_update_downloaded)
+        worker.failed.connect(self.on_update_download_failed)
+        worker.canceled.connect(self.on_update_download_canceled)
+        progress.canceled.connect(worker.cancel)
+        self.status.setText(f"Downloading update {version}…")
+        progress.show()
+        worker.start()
+
+    def on_update_download_progress(self, downloaded, total, speed):
+        progress = getattr(self, "_update_progress", None)
+        if progress is None:
+            return
+        if total > 0:
+            percent = min(100, int(downloaded * 100 / total))
+            progress.setRange(0, 100)
+            progress.setValue(percent)
+            progress.setLabelText(
+                f"Downloaded {format_bytes(downloaded)} of {format_bytes(total)} "
+                f"({percent}%)\\nSpeed: {format_bytes(speed)}/s"
+            )
+        else:
+            progress.setRange(0, 0)
+            progress.setLabelText(f"Downloaded {format_bytes(downloaded)}\\nSpeed: {format_bytes(speed)}/s")
+
+    def on_update_download_failed(self, message):
+        progress = getattr(self, "_update_progress", None)
+        if progress is not None:
+            progress.close()
+        self.status.setText("Update download failed.")
+        QMessageBox.warning(self, "Update download failed", message)
+
+    def on_update_download_canceled(self):
+        progress = getattr(self, "_update_progress", None)
+        if progress is not None:
+            progress.close()
+        self.status.setText("Update download canceled.")
+
+    def on_update_downloaded(self, installer_path):
+        progress = getattr(self, "_update_progress", None)
+        if progress is not None:
+            progress.close()
+        answer = QMessageBox.question(
+            self, "Install update",
+            "The update has been downloaded and verified.\\n\\n"
             "Launch the Setup installer now? The application will close.",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
         )
@@ -4104,10 +4217,15 @@ class FDMX(QWidget):
                 os.remove(installer_path)
             except OSError:
                 pass
+            self.status.setText("Update downloaded; installation postponed.")
             return
         self.close()
         if self.isVisible():
             QMessageBox.information(self, "Update postponed", "Close active downloads before installing the update.")
+            try:
+                os.remove(installer_path)
+            except OSError:
+                pass
             return
         try:
             subprocess.Popen([installer_path], close_fds=True)
