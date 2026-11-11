@@ -61,8 +61,7 @@ class AppRegressionTests(unittest.TestCase):
         )
         namespace = {"CONNECTIONS": 8}
         exec(compile(ast.Module(body=[method], type_ignores=[]), "<adaptive>", "exec"), namespace)
-        class Worker:
-            _choose_part_count = namespace["_choose_part_count"]
+        Worker = type("Worker", (), {"_choose_part_count": namespace["_choose_part_count"]})
         worker = Worker()
         mib = 1024 * 1024
         self.assertEqual(worker._choose_part_count(1 * mib, 8 * mib), 1)
