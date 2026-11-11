@@ -34,7 +34,7 @@ The CI workflow publishes two separate artifacts after a successful build:
 - **[Portable ZIP — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
 - **[Setup installer — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
 
-Open the latest successful **Build GNS Downloader Windows packages** run in GitHub Actions and download the matching artifact. Artifacts are retained for 14 days. These are CI artifacts, not a permanent GitHub Release.
+These links point directly to the two artifacts from successful run [#42964320833](https://github.com/meicamghe/FDMX/actions/runs/42964320833). Artifacts are retained for 14 days and are not permanent GitHub Releases.
 
 ## Run from source on Windows
 
