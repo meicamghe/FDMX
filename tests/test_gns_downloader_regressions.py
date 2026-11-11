@@ -41,6 +41,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('button.setVisible(not completed)', SOURCE)
         self.assertIn('self.open_btn.setVisible(completed)', SOURCE)
         self.assertIn('self.open_btn.clicked.connect(self.open_downloaded_file)', SOURCE)
+        self.assertIn('self.post_action_enabled.setEnabled(not completed)', SOURCE)
         self.assertIn('QDesktopServices.openUrl(QUrl.fromLocalFile', SOURCE)
 
     def test_adaptive_speed_probe_selects_and_persists_safe_part_layout(self):
@@ -51,6 +52,24 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('candidate_count = int(candidate.get("count", 0))', SOURCE)
         self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
         self.assertIn('"parts_count", "measured_speed"', SOURCE)
+
+    def test_adaptive_part_count_thresholds(self):
+        tree = ast.parse(SOURCE)
+        method = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "_choose_part_count"
+        )
+        namespace = {"CONNECTIONS": 8}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), "<adaptive>", "exec"), namespace)
+        class Worker:
+            _choose_part_count = namespace["_choose_part_count"]
+        worker = Worker()
+        mib = 1024 * 1024
+        self.assertEqual(worker._choose_part_count(1 * mib, 8 * mib), 1)
+        self.assertEqual(worker._choose_part_count(20 * mib, 128 * 1024), 1)
+        self.assertEqual(worker._choose_part_count(20 * mib, 512 * 1024), 2)
+        self.assertEqual(worker._choose_part_count(20 * mib, 2 * mib), 4)
+        self.assertEqual(worker._choose_part_count(20 * mib, 8 * mib), 8)
 
     def test_cancel_handles_tasks_without_live_download_workers(self):
         tree = ast.parse(SOURCE)
