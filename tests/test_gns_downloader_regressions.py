@@ -15,7 +15,7 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_product_brand_and_version(self):
         self.assertIn('APP_NAME = "GNS Downloader"', SOURCE)
-        self.assertIn('APP_VERSION = "6.38"', SOURCE)
+        self.assertIn('APP_VERSION = "6.39"', SOURCE)
 
     def test_theme_studio_and_plugin_manager_are_removed(self):
         self.assertNotIn("Theme Studio", SOURCE)
@@ -33,6 +33,24 @@ class AppRegressionTests(unittest.TestCase):
     def test_disabled_buttons_have_a_distinct_visual_state(self):
         self.assertIn('QPushButton:disabled', SOURCE)
         self.assertIn('border: 1px dashed #aab4c2', SOURCE)
+
+    def test_completed_download_window_switches_to_open_and_close(self):
+        self.assertIn('self.open_btn = QPushButton("Open")', SOURCE)
+        self.assertIn('self.close_btn = QPushButton("Close")', SOURCE)
+        self.assertIn('for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):', SOURCE)
+        self.assertIn('button.setVisible(not completed)', SOURCE)
+        self.assertIn('self.open_btn.setVisible(completed)', SOURCE)
+        self.assertIn('self.open_btn.clicked.connect(self.open_downloaded_file)', SOURCE)
+        self.assertIn('QDesktopServices.openUrl(QUrl.fromLocalFile', SOURCE)
+
+    def test_adaptive_speed_probe_selects_and_persists_safe_part_layout(self):
+        self.assertIn('def _measure_initial_speed(self, temp_folder, total):', SOURCE)
+        self.assertIn('def _choose_part_count(self, total, measured_speed):', SOURCE)
+        self.assertIn('self.parts_configured.emit(parts_count, measured_speed)', SOURCE)
+        self.assertIn('"parts.json"', SOURCE)
+        self.assertIn('parts_count = int(candidate["count"])', SOURCE)
+        self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
+        self.assertIn('"parts_count", "measured_speed"', SOURCE)
 
     def test_cancel_handles_tasks_without_live_download_workers(self):
         tree = ast.parse(SOURCE)
