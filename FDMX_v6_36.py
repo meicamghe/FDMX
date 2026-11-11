@@ -2799,6 +2799,22 @@ class LinkGrabberWorker(QThread):
             self.failed.emit(str(exc))
 
 
+
+def _is_installed_windows_build():
+    """Return True only for the packaged app installed under Program Files."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return False
+    program_files = os.environ.get("ProgramFiles")
+    if not program_files:
+        return False
+    root = os.path.normcase(os.path.abspath(program_files))
+    executable = os.path.normcase(os.path.abspath(sys.executable))
+    try:
+        return os.path.commonpath([root, executable]) == root
+    except ValueError:
+        return False
+
+
 def _version_key(value):
     numbers = [int(item) for item in re.findall(r"\d+", str(value))[:3]]
     return tuple((numbers + [0, 0, 0])[:3])
@@ -2836,7 +2852,7 @@ class GitHubUpdateWorker(QThread):
                 return
 
             release_url = release.get("html_url") or "https://github.com/meicamghe/FDMX/releases/latest"
-            if os.name != "nt":
+            if not _is_installed_windows_build():
                 self.update_ready.emit(version, "", release_url)
                 return
 
@@ -3961,7 +3977,7 @@ class FDMX(QWidget):
         if not installer_path:
             QMessageBox.information(
                 self, "Update available",
-                f"GNS Downloader {version} is available. Windows installer packages are published on GitHub Releases."
+                f"GNS Downloader {version} is available. Open GitHub Releases and download the Portable ZIP for a portable or source-based copy."
             )
             QDesktopServices.openUrl(QUrl(release_url))
             return
