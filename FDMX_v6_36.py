@@ -609,10 +609,15 @@ class DownloadWorker(QThread):
                         self.update_progress(len(chunk))
                     output.flush()
                     os.fsync(output.fileno())
+        except InterruptedError:
+            raise
+        except Exception:
+            # The speed probe is advisory; keep the download working with one safe range.
+            return 0.0
         finally:
             self.unregister_socket(sock)
         if received != sample_size:
-            raise RuntimeError("Speed-check sample was incomplete")
+            return 0.0
         elapsed = max(0.05, time.monotonic() - started)
         return received / elapsed
 
@@ -1151,6 +1156,11 @@ class DownloadDetailsDialog(QDialog):
                 self.summary_label.setText(
                     self.summary_label.text()
                     + f"\nSmart engine: {selected_parts} parts selected from an initial speed of {format_bytes(measured_speed)}/s"
+                )
+            elif selected_parts:
+                self.summary_label.setText(
+                    self.summary_label.text()
+                    + f"\nSmart engine: speed sample unavailable; using {selected_parts} safe part(s)"
                 )
             elif status in ("Downloading", "Checking server", "Retrying"):
                 self.summary_label.setText(self.summary_label.text() + "\nSmart engine: measuring speed and selecting download parts…")
