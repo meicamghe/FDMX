@@ -25,8 +25,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _MODULE_STARTED_AT = time.perf_counter()
 
-from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
+from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
@@ -253,6 +253,7 @@ class RateLimiter:
 
 class DownloadWorker(QThread):
     progress = Signal(int, int, float, float)
+    parts_configured = Signal(int, float)
     completed = Signal(str)
     failed = Signal(str)
     canceled = Signal()
@@ -280,6 +281,8 @@ class DownloadWorker(QThread):
         self.limiter = RateLimiter(speed_limit_kbps * 1024)
         self.destination_path = None
         self.temp_path = None
+        self.part_count = CONNECTIONS
+        self.measured_speed = 0.0
 
     def _interrupt_active_sockets(self):
         with self._socket_lock:
@@ -556,18 +559,114 @@ class DownloadWorker(QThread):
             finally:
                 self.unregister_socket(sock)
 
+    def _write_parts_manifest(self, temp_folder, total, count, measured_speed):
+        manifest_path = os.path.join(temp_folder, "parts.json")
+        temp_path = manifest_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as file:
+            json.dump({
+                "total": int(total), "count": int(count),
+                "measured_speed": float(measured_speed), "version": 1
+            }, file)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, manifest_path)
+
+    def _measure_initial_speed(self, temp_folder, total):
+        """Measure a real initial byte range and retain it as the beginning of part 1."""
+        sample_size = min(512 * 1024, total)
+        sample_path = os.path.join(temp_folder, "part_00.tmp")
+        request = urllib.request.Request(
+            self.url,
+            headers={
+                "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                "Range": f"bytes=0-{sample_size - 1}",
+            },
+        )
+        sock = None
+        started = time.monotonic()
+        received = 0
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status != 206:
+                    raise RuntimeError("Server stopped supporting HTTP Range during speed check")
+                content_range = response.headers.get("Content-Range", "")
+                if not content_range.startswith(f"bytes 0-{sample_size - 1}/"):
+                    raise RuntimeError("Invalid Content-Range during speed check")
+                sock = self.get_response_socket(response)
+                self.register_socket(sock)
+                with open(sample_path, "wb") as output:
+                    while received < sample_size:
+                        self.wait_if_paused()
+                        chunk = self.read_chunk(response)
+                        self.wait_if_paused()
+                        if not chunk:
+                            break
+                        chunk = chunk[:sample_size - received]
+                        self.limiter.acquire(len(chunk), self)
+                        self.wait_if_paused()
+                        output.write(chunk)
+                        received += len(chunk)
+                        self.update_progress(len(chunk))
+                    output.flush()
+                    os.fsync(output.fileno())
+        finally:
+            self.unregister_socket(sock)
+        if received != sample_size:
+            raise RuntimeError("Speed-check sample was incomplete")
+        elapsed = max(0.05, time.monotonic() - started)
+        return received / elapsed
+
+    def _choose_part_count(self, total, measured_speed):
+        """Select parallelism conservatively from file size and measured throughput."""
+        if total < 2 * 1024 * 1024 or measured_speed < 256 * 1024:
+            return 1
+        if measured_speed < 1024 * 1024:
+            return min(2, total)
+        if measured_speed < 4 * 1024 * 1024:
+            return min(4, total)
+        return min(CONNECTIONS, total)
+
     def download_multi(self, destination, total):
         self.reset_progress(total)
-        parts_count = min(CONNECTIONS, total)
-        ranges = []
-        for index in range(parts_count):
-            start = (total * index) // parts_count
-            end = (total * (index + 1)) // parts_count - 1
-            ranges.append((index, start, end))
-
         with PersistentTempDirectory(os.path.join(self.folder, f".fdmx_{self.task_id}.parts")) as temp_folder:
-            # Reject impossible oversized fragments before calculating resume offsets.
-            # A truncated fragment is safe to continue; an oversized one is discarded.
+            manifest_path = os.path.join(temp_folder, "parts.json")
+            manifest = None
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as file:
+                    candidate = json.load(file)
+                candidate_count = int(candidate.get("count", 0))
+                if int(candidate.get("total", 0)) == total and 1 <= candidate_count <= min(CONNECTIONS, total):
+                    manifest = candidate
+            except (OSError, ValueError, TypeError, AttributeError):
+                manifest = None
+
+            existing_parts = any(
+                os.path.isfile(os.path.join(temp_folder, f"part_{index:02d}.tmp"))
+                for index in range(CONNECTIONS)
+            )
+            if manifest:
+                # Keep the original partition map so resume never mixes byte ranges.
+                parts_count = int(manifest["count"])
+                measured_speed = float(manifest.get("measured_speed", 0.0))
+            elif existing_parts:
+                # Legacy fixed-eight fragments must keep their original byte-range map.
+                parts_count = min(CONNECTIONS, total)
+                measured_speed = 0.0
+                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+            else:
+                measured_speed = self._measure_initial_speed(temp_folder, total)
+                parts_count = self._choose_part_count(total, measured_speed)
+                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+
+            self.part_count = parts_count
+            self.measured_speed = measured_speed
+            self.parts_configured.emit(parts_count, measured_speed)
+            ranges = []
+            for index in range(parts_count):
+                start = (total * index) // parts_count
+                end = (total * (index + 1)) // parts_count - 1
+                ranges.append((index, start, end))
+
             existing_bytes = 0
             for index, start, end in ranges:
                 part_path = os.path.join(temp_folder, f"part_{index:02d}.tmp")
@@ -866,14 +965,19 @@ class DownloadDetailsDialog(QDialog):
         self.cancel_btn = QPushButton("Cancel")
         self.retry_btn = QPushButton("Retry")
         self.start_btn = QPushButton("Start")
+        self.open_btn = QPushButton("Open")
+        self.close_btn = QPushButton("Close")
         self.start_btn.clicked.connect(self.start_download)
         self.pause_btn.clicked.connect(self.pause_download)
         self.resume_btn.clicked.connect(self.resume_download)
         self.cancel_btn.clicked.connect(self.cancel_download)
         self.retry_btn.clicked.connect(self.retry_download)
-        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
+        self.open_btn.clicked.connect(self.open_downloaded_file)
+        self.close_btn.clicked.connect(self.close)
+        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn, self.open_btn, self.close_btn):
             button.setMinimumHeight(36)
             actions.addWidget(button)
+        self.open_btn.setVisible(False)
         layout.addLayout(actions)
 
         # Each download owns its own post-completion action.
@@ -911,10 +1015,6 @@ class DownloadDetailsDialog(QDialog):
             self.parts_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         layout.addWidget(self.parts_table, 1)
 
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
         # Reuse the main window's palette and stylesheet instead of imposing a separate dark theme.
         if parent is not None:
             self.setPalette(parent.palette())
@@ -932,6 +1032,15 @@ class DownloadDetailsDialog(QDialog):
         if not self.task["post_action_enabled"]:
             self.task["post_action_done"] = False
         self.parent_window.save_tasks()
+
+    def open_downloaded_file(self):
+        path = self.task.get("path", "")
+        if self.task.get("status") != "Completed" or not path or not os.path.isfile(path):
+            QMessageBox.warning(self, "File unavailable", "The completed file could not be found.")
+            self.refresh_data()
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path))):
+            QMessageBox.warning(self, "Open failed", "Windows could not open this file.")
 
     def start_download(self):
         if self.task.get("status") != "Ready":
@@ -983,12 +1092,19 @@ class DownloadDetailsDialog(QDialog):
         name = task.get("name", "Download")
         status = task.get("status", "Unknown")
         active_states = ("Downloading", "Checking server", "Retrying", "Seeding")
-        self.start_btn.setVisible(status in ("Ready", "Checking metadata"))
+        completed = status == "Completed"
+        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
+            button.setVisible(not completed)
+        self.open_btn.setVisible(completed)
+        self.close_btn.setVisible(True)
+        self.start_btn.setVisible(not completed and status in ("Ready", "Checking metadata"))
         self.start_btn.setEnabled(status == "Ready")
         self.pause_btn.setEnabled(status in ("Downloading", "Checking server", "Seeding"))
         self.resume_btn.setEnabled(status == "Paused")
         self.cancel_btn.setEnabled(status in active_states or status in ("Checking metadata", "Paused", "Queued", "Ready"))
         self.retry_btn.setEnabled(status in ("Failed", "Canceled"))
+        final_path_for_open = task.get("path", "")
+        self.open_btn.setEnabled(completed and bool(final_path_for_open) and os.path.isfile(final_path_for_open))
         downloaded = int(task.get("downloaded") or 0)
         total = int(task.get("total") or 0)
         speed = float(task.get("speed") or 0)
@@ -1010,6 +1126,8 @@ class DownloadDetailsDialog(QDialog):
         self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
         self.progress_bar.setValue(percent)
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
+        if completed:
+            self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
@@ -1030,7 +1148,7 @@ class DownloadDetailsDialog(QDialog):
                 self.parts_table.setItem(0, col, QTableWidgetItem("—"))
             return
 
-        count = min(self.connections, total)
+        count = min(int(task.get("parts_count") or self.connections), total)
         parts_dir = os.path.join(task.get("folder", ""), ".fdmx_" + task.get("id", "") + ".parts")
         self.parts_table.setRowCount(count)
         for index in range(count):
@@ -4064,6 +4182,8 @@ class FDMX(QWidget):
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
+            if hasattr(worker, "parts_configured"):
+                worker.parts_configured.connect(lambda count, speed, tid=task_id: self.on_parts_configured(tid, count, speed))
             worker.completed.connect(self.on_completed)
             worker.failed.connect(self.on_failed)
             worker.canceled.connect(self.on_canceled)
@@ -4107,7 +4227,7 @@ class FDMX(QWidget):
         if task.get("status") == "Completed":
             return "Download completed\nDouble-click to open the downloaded file."
         total = int(task.get("total") or 0)
-        count = min(CONNECTIONS, total) if total > 0 else CONNECTIONS
+        count = min(int(task.get("parts_count") or CONNECTIONS), total) if total > 0 else CONNECTIONS
         if total <= 0:
             return (
                 f"Download threads: {count}\n"
@@ -4259,6 +4379,18 @@ class FDMX(QWidget):
         self.save_tasks()
         self.refresh_table()
         self.status.setText(f"Deleted from disk: {path}")
+
+    def on_parts_configured(self, task_id, count, measured_speed):
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+        task["parts_count"] = int(count)
+        task["measured_speed"] = float(measured_speed)
+        self.save_tasks()
+        dialog = self.detail_windows.get(task_id)
+        if dialog is not None:
+            dialog.refresh_data()
+        self.refresh_table()
 
     def on_progress(self, downloaded, total, speed, eta):
         sender = self.sender()
@@ -4495,7 +4627,9 @@ class FDMX(QWidget):
                 "retry_attempts": int(entry.get("retry_attempts", 0)),
                 "post_action_enabled": bool(entry.get("post_action_enabled", False)),
                 "post_action": entry.get("post_action", "none"),
-                "post_action_done": bool(entry.get("post_action_done", False))
+                "post_action_done": bool(entry.get("post_action_done", False)),
+                "parts_count": int(entry.get("parts_count", 0) or 0),
+                "measured_speed": float(entry.get("measured_speed", 0.0) or 0.0)
             }
 
     def prompt_recovery(self):
@@ -4528,7 +4662,8 @@ class FDMX(QWidget):
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
                 "category", "kind", "scheduled_at", "content_type", "retry_attempts",
-                "post_action_enabled", "post_action", "post_action_done"
+                "post_action_enabled", "post_action", "post_action_done",
+                "parts_count", "measured_speed"
             )})
         temp_path = TASKS_FILE + ".tmp"
         backup_temp = TASKS_BACKUP_FILE + ".tmp"
