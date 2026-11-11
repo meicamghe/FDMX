@@ -79,6 +79,13 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('expected_digest.startswith("sha256:")', SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
 
+
+    def test_updater_distinguishes_installed_and_portable_builds(self):
+        self.assertIn("def _is_installed_windows_build():", SOURCE)
+        self.assertIn('os.path.commonpath([root, executable]) == root', SOURCE)
+        self.assertIn('if not _is_installed_windows_build():', SOURCE)
+        self.assertIn("Portable ZIP for a portable or source-based copy", SOURCE)
+
     def test_ubuntu_yaru_theme_is_selected_only_on_linux(self):
         self.assertIn('self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")', SOURCE)
         self.assertIn('"ubuntu_yaru": ("#f6f5f4", "#ffffff", "#e8e6e3"', SOURCE)
