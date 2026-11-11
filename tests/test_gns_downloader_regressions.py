@@ -15,13 +15,24 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_product_brand_and_version(self):
         self.assertIn('APP_NAME = "GNS Downloader"', SOURCE)
-        self.assertIn('APP_VERSION = "6.37"', SOURCE)
+        self.assertIn('APP_VERSION = "6.38"', SOURCE)
 
     def test_theme_studio_and_plugin_manager_are_removed(self):
         self.assertNotIn("Theme Studio", SOURCE)
         self.assertNotIn("Plugin Manager", SOURCE)
         self.assertNotIn("PluginManager", SOURCE)
         self.assertNotIn("plugin_manager", SOURCE)
+
+    def test_post_download_action_is_configured_per_download(self):
+        self.assertIn('After this download finishes:', SOURCE)
+        self.assertIn('def run_task_post_action(self, task):', SOURCE)
+        self.assertIn('self.run_task_post_action(task)', SOURCE)
+        self.assertNotIn('After all downloads finish:', SOURCE)
+        self.assertNotIn('check_after_download_action', SOURCE)
+
+    def test_disabled_buttons_have_a_distinct_visual_state(self):
+        self.assertIn('QPushButton:disabled', SOURCE)
+        self.assertIn('border: 1px dashed #aab4c2', SOURCE)
 
     def test_cancel_handles_tasks_without_live_download_workers(self):
         tree = ast.parse(SOURCE)
