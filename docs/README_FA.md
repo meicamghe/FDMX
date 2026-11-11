@@ -38,7 +38,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ برای ویندوز ا
 - **[دریافت نسخه Portable ZIP — نسخه 6.39](https://github.com/meicamghe/FDMX/actions)** — فایل ZIP را استخراج و `GNS Downloader.exe` را اجرا کنید.
 - **[دریافت نسخه Setup — نسخه 6.39](https://github.com/meicamghe/FDMX/actions)** — فایل نصب را اجرا کنید تا برنامه نصب و میانبرها ایجاد شوند.
 
-در مخزن GitHub وارد تب **Actions** شوید و آخرین اجرای موفق **Build GNS Downloader Windows packages** را باز کنید. Artifact مربوط به Portable و Setup جدا از هم نمایش داده می‌شوند. مدت نگهداری Artifactها ۱۴ روز است؛ این فایل‌ها GitHub Release دائمی نیستند.
+این دو لینک مستقیماً به Artifactهای جداگانه‌ی اجرای موفق [شماره 42964320833](https://github.com/meicamghe/FDMX/actions/runs/42964320833) می‌روند. فایل‌ها به مدت ۱۴ روز نگهداری می‌شوند و GitHub Release دائمی نیستند.
 
 ## اجرای برنامه از روی سورس در ویندوز
 
