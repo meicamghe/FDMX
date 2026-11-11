@@ -1,24 +1,60 @@
 name: Build browser extensions
+
 on:
   workflow_dispatch:
   push:
     paths:
       - "browser-extensions/**"
       - ".github/workflows/build-browser-extensions.yml"
+
+permissions:
+  contents: read
+
 jobs:
   package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate desktop bridge syntax
-        run: python -m py_compile FDMX_v6_3.py
-      - name: Package Chrome extension
-        run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome.zip .
+      - name: Validate manifests
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for browser in ("chrome", "firefox"):
+              manifest = json.loads((Path("browser-extensions") / browser / "manifest.json").read_text())
+              assert manifest["manifest_version"] == 3
+              assert manifest["version"] == "1.0.0"
+              assert (Path("browser-extensions") / browser / "icons" / "icon-128.png").is_file()
+          firefox = json.loads(Path("browser-extensions/firefox/manifest.json").read_text())
+          assert firefox["browser_specific_settings"]["gecko"]["data_collection_permissions"]["required"] == ["websiteActivity"]
+          PY
+      - name: Check JavaScript syntax
+        run: |
+          node --check browser-extensions/chrome/background.js
+          node --check browser-extensions/chrome/popup.js
+          node --check browser-extensions/firefox/background.js
+          node --check browser-extensions/firefox/popup.js
+      - name: Lint Firefox extension
+        run: |
+          npm install --global web-ext
+          web-ext lint --source-dir browser-extensions/firefox
+      - name: Package Chrome Web Store ZIP
+        run: |
+          cd browser-extensions/chrome
+          zip -r ../../FDMX-Chrome-Web-Store.zip .
+      - name: Package Firefox AMO source ZIP
+        run: |
+          cd browser-extensions/firefox
+          zip -r ../../FDMX-Firefox-AMO.zip .
       - name: Package Firefox XPI
-        run: cd browser-extensions/firefox && zip -r ../../FDMX-Firefox.xpi .
+        run: |
+          cd browser-extensions/firefox
+          zip -r ../../FDMX-Firefox.xpi .
       - uses: actions/upload-artifact@v4
         with:
-          name: FDMX-browser-extensions
+          name: FDMX-Browser-Store-Packages
           path: |
-            FDMX-Chrome.zip
+            FDMX-Chrome-Web-Store.zip
+            FDMX-Firefox-AMO.zip
             FDMX-Firefox.xpi
+          if-no-files-found: error
