@@ -4529,7 +4529,8 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "scheduled_at", "content_type", "retry_attempts"
+                "category", "kind", "scheduled_at", "content_type", "retry_attempts",
+                "post_action_enabled", "post_action", "post_action_done"
             )})
         temp_path = TASKS_FILE + ".tmp"
         backup_temp = TASKS_BACKUP_FILE + ".tmp"
