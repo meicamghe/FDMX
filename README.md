@@ -34,7 +34,7 @@ Permanent release links (updated when a new stable release is published):
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-To publish a permanent release after a successful CI build, run **Build GNS Downloader Windows packages** manually from GitHub Actions and set **publish_release** to true. Ordinary branch builds create temporary CI artifacts only.
+To publish a permanent release, create and push the tag **v6.40** on this feature branch after the source is ready. The tag push runs both the Windows packaging and Linux theme smoke test, then publishes the Portable ZIP and Setup as permanent GitHub Release assets. Ordinary branch builds create temporary CI artifacts only.
 
 ## Run from source
 
