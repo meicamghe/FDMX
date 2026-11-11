@@ -15,7 +15,7 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_product_brand_and_version(self):
         self.assertIn('APP_NAME = "GNS Downloader"', SOURCE)
-        self.assertIn('APP_VERSION = "6.39"', SOURCE)
+        self.assertIn('APP_VERSION = "6.40"', SOURCE)
 
     def test_theme_studio_and_plugin_manager_are_removed(self):
         self.assertNotIn("Theme Studio", SOURCE)
@@ -69,6 +69,21 @@ class AppRegressionTests(unittest.TestCase):
         self.assertEqual(worker._choose_part_count(20 * mib, 512 * 1024), 2)
         self.assertEqual(worker._choose_part_count(20 * mib, 2 * mib), 4)
         self.assertEqual(worker._choose_part_count(20 * mib, 8 * mib), 8)
+
+
+    def test_about_credits_and_github_updater(self):
+        self.assertIn("Created by MeysamGNS", SOURCE)
+        self.assertIn("Developed with assistance from ChatGPT", SOURCE)
+        self.assertIn("class GitHubUpdateWorker(QThread):", SOURCE)
+        self.assertIn("https://api.github.com/repos/meicamghe/FDMX/releases/latest", SOURCE)
+        self.assertIn('expected_digest.startswith("sha256:")', SOURCE)
+        self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
+
+    def test_ubuntu_yaru_theme_is_selected_only_on_linux(self):
+        self.assertIn('self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")', SOURCE)
+        self.assertIn('"ubuntu_yaru": ("#f6f5f4", "#ffffff", "#e8e6e3"', SOURCE)
+        self.assertIn('default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"', SOURCE)
+        self.assertIn('"Ubuntu", "Cantarell", "Noto Sans"', SOURCE)
 
     def test_cancel_handles_tasks_without_live_download_workers(self):
         tree = ast.parse(SOURCE)
