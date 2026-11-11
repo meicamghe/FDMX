@@ -19,7 +19,7 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_product_brand_and_version(self):
         self.assertIn('APP_NAME = "GNS Downloader"', SOURCE)
-        self.assertIn('APP_VERSION = "6.40.1"', SOURCE)
+        self.assertIn('APP_VERSION = "6.40.2"', SOURCE)
 
     def test_theme_studio_and_plugin_manager_are_removed(self):
         self.assertNotIn("Theme Studio", SOURCE)
