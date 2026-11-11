@@ -1,162 +1,80 @@
-# GNS Downloader — Download Manager
+# GNS Downloader 6.38
 
-GNS Downloader is a desktop download manager built with **Python** and **PySide6 (Qt for Python)**. It provides multi-connection HTTP/HTTPS downloads, task controls, download history, scheduling, analytics, and browser hand-off.
+GNS Downloader is a Windows desktop download manager built with Python and PySide6.
 
-**زبان فارسی:** [راهنمای فارسی نصب، اجرا و ساخت فایل EXE](docs/README_FA.md)
+**فارسی:** [راهنمای فارسی نصب و استفاده](docs/README_FA.md)
 
-> **Development status:** The current desktop application is **GNS Downloader 6.37**, built from `FDMX_v6_36.py`. The Windows CI workflow builds a branded installer and portable ZIP as GitHub Actions artifacts. The separate Plugin SDK source remains in the repository for development/testing but is not included in the GNS Downloader application.
+## Current build
 
-## Project overview
+- Application version: **6.38**
+- Main source: `FDMX_v6_36.py`
+- Primary target: Windows 10/11, x64
+- Interface: fixed Windows 11 Fluent appearance. There is no theme-selection tab or Theme Studio.
+- The desktop application UI does not include a Plugin Manager.
 
-The repository preserves earlier numbered scripts for development history; use the current entry point rather than launching an old numbered file.
+## Features
 
-### Main capabilities
+- HTTP/HTTPS downloads with multi-connection transfers.
+- Pause, resume, cancel, retry, queue management and persistent task state.
+- Per-download details window with progress and segment information.
+- Scheduling, speed limits, download history and CSV/JSON analytics.
+- Browser hand-off through a local-only bridge at `127.0.0.1:38471`.
+- Per-download post-completion action: do nothing, shut down Windows, log out, or hibernate. The action is configured in that download's own details window and does not affect other downloads.
+- Enabled and disabled buttons use distinct visual treatments.
 
-- HTTP and HTTPS downloads with configurable multi-connection transfers.
-- Pause, resume, cancel, and retry controls for downloads.
-- Download queue/task persistence and download history.
-- Download scheduling and transfer speed controls.
-- Destination selection and automatic file-type categorization.
-- Browser integration through local loopback communication.
-- Chrome and Firefox extension source code.
-- A separate Plugin SDK codebase is retained for development and automated tests; it is not exposed in the GNS Downloader 6.37 user interface or packaged with the desktop application.
+Post-completion power actions are Windows-only and run only after a successful completion. Use them carefully; shutdown, log out and hibernate can interrupt other work.
 
-Some features depend on the remote server, browser, plugin dependencies, or the selected application build. Browser media extraction and torrent-related workflows should be considered experimental unless separately validated.
+## Download the Windows packages
 
-## Current repository structure
+The CI workflow publishes two separate artifacts after a successful build:
 
-| Path | Purpose |
-|---|---|
-| `FDMX_v6_36.py` | Current GNS Downloader Windows/desktop application entry point (v6.37) |
-| `ubuntu.py` | Ubuntu-themed desktop variant; separate build with its own compatibility testing |
-| `fdmx_plugin_sdk.py` | Separate Plugin SDK development code; not shipped in GNS Downloader |
-| `fdmx_plugin_host.py` | Separate plugin worker process |
-| `fdmx_plugin_repository.py` | HTTPS plugin catalog and package/update client |
-| `plugins/example_hello_world/` | Example plugin |
-| `tests/` | Plugin SDK, repository and worker tests |
-| `browser-extensions/chrome/` | Chrome extension |
-| `browser-extensions/firefox/` | Firefox extension |
-| `PLUGIN_SDK.md` | Plugin SDK technical documentation |
-| `docs/README_FA.md` | Persian user guide |
+- **[Portable ZIP — GNS Downloader 6.38](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
+- **[Setup installer — GNS Downloader 6.38](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
 
-## Requirements
-
-- Windows 10/11 is the primary desktop target.
-- Python 3.11 or 3.12 is recommended for development and SDK test parity.
-- PySide6 for the graphical interface.
-- `cryptography` for Ed25519 plugin signature verification/signing features.
-- PyInstaller only when creating standalone executables.
-- Inno Setup only when creating a traditional Windows setup installer.
+Open the latest successful **Build GNS Downloader Windows packages** run in GitHub Actions and download the matching artifact. Artifacts are retained for 14 days. These are CI artifacts, not a permanent GitHub Release.
 
 ## Run from source on Windows
 
-Open PowerShell in the repository directory:
+Install Python 3.12, then run in PowerShell from the repository directory:
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6 cryptography
+python -m pip install PySide6-Essentials
 python FDMX_v6_36.py
 ```
 
-If PowerShell blocks virtual-environment activation, use Command Prompt:
+## Build packages locally
 
-```bat
-.venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-python -m pip install PySide6 cryptography
-python FDMX_v6_36.py
-```
+The Windows packages are built on Windows (PyInstaller is not a cross-compiler). Install Python 3.12, PySide6-Essentials, PyInstaller, Pillow and Inno Setup, then use the same build workflow as the source of truth:
 
-To try the Ubuntu-themed variant:
+1. Generate the icon: `python installer/create_icon.py`
+2. Build the onedir app with PyInstaller.
+3. Compile `installer/FDMX.iss` with Inno Setup.
+4. Zip the contents of `dist/GNS Downloader` for the portable package.
 
-```powershell
-python ubuntu.py
-```
-
-The Ubuntu-themed variant has a separate code path and should be tested on the target Linux distribution before being treated as a supported Linux release.
-
-## Run from source on Ubuntu
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git
-git clone https://github.com/meicamghe/FDMX.git
-cd FDMX
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install PySide6 cryptography
-python ubuntu.py
-```
-
-Linux package/runtime requirements can vary by distribution and desktop environment. This source-run procedure is not a claim that a Linux installer or AppImage is currently published.
-
-## Windows installer and portable package
-
-The current Windows application is **GNS Downloader 6.37**. Its packaged build removes the Theme Studio tab and Plugin Manager integration. The separate Plugin SDK source remains in the repository but is not bundled with the application.
-
-The recommended build path is GitHub Actions:
-
-1. Open **Actions → Build GNS Downloader Windows packages**.
-2. Run the workflow on the development branch.
-3. Download the `GNS-Downloader-Windows-v6.37` artifact after the workflow succeeds.
-
-The workflow generates the red **G** application icon, builds the onedir Windows application, compiles the Inno Setup installer, installs it silently on the runner, verifies that the main window appears, and creates a portable ZIP. The desktop shortcut and executable use the same icon and product name.
-
-For a local Windows build, install Python 3.12, PySide6 Essentials, cryptography, PyInstaller, Pillow, and Inno Setup. Generate the icon with `python installer/create_icon.py`, build the application with PyInstaller using `--name "GNS Downloader"` and `--icon installer/gns-downloader.ico`, then compile `installer/FDMX.iss` with Inno Setup.
-
-User data remains under `%USERPROFILE%\\.fdmx` so existing download history and preferences are preserved when the application is renamed or upgraded. The application supports canceling stale paused/retrying tasks and removes task-specific temporary download fragments when canceled.
+For repeatable builds and smoke testing, prefer GitHub Actions → **Build GNS Downloader Windows packages**.
 
 ## Browser extensions
 
-The extension sources are under `browser-extensions/`. Load them in developer mode for testing:
+Chrome and Firefox extension sources are in `browser-extensions/`. The desktop bridge listens only on `127.0.0.1:38471`; do not expose it on a LAN or public interface. Firefox temporary add-ons must be loaded again after the browser closes.
 
-**Chrome**
-1. Start FDMX.
-2. Open `chrome://extensions`.
-3. Enable Developer mode.
-4. Select **Load unpacked** and choose `browser-extensions/chrome`.
+## Data and privacy
 
-**Firefox**
-1. Start FDMX.
-2. Open `about:debugging#/runtime/this-firefox`.
-3. Select **Load Temporary Add-on**.
-4. Choose `browser-extensions/firefox/manifest.json`.
+Task state and download history are stored under the user's home directory in `.fdmx`. Download URLs can contain private tokens; remove them from logs and bug reports before sharing.
 
-The desktop bridge uses loopback networking at `127.0.0.1:38471`. It is intended for the same computer only; do not expose it on a LAN or public interface. Firefox temporary add-ons are removed when Firefox closes; permanent distribution requires Mozilla signing.
+## Tests
 
-## Plugin system and security notes
-
-The plugin platform includes manifest/permission validation, separate worker-process execution, plugin settings/data, Ed25519 package signatures, local publisher trust, HTTPS repository metadata, update history, and rollback support.
-
-- Newly installed or updated plugins are not automatically started.
-- Invalid signatures are rejected.
-- Publisher fingerprints should be verified through an independent trusted channel before trusting a publisher.
-- A separate process is **not** an OS security sandbox. A plugin still runs with the current user's operating-system permissions. Install only plugins from sources you trust.
-- See [PLUGIN_SDK.md](PLUGIN_SDK.md) for package format, signing, repository catalog, rollback, and worker build details.
-
-## Automated Windows packaging
-
-The workflow `.github/workflows/build-fdmx-windows.yml` builds the Windows application and plugin worker, smoke-tests the packaged worker, compiles the Inno Setup installer, and uploads a 14-day GitHub Actions artifact containing `FDMX.exe`, `fdmx_plugin_worker.exe`, `FDMX-Portable-v6.36-Windows-x64.zip`, and `FDMX-Setup-6.36.exe`. It runs on relevant pushes to the development branch or manually from **Actions → Build FDMX Windows packages → Run workflow**. Open the completed run and download the `FDMX-Windows-v6.36` artifact. This workflow performs packaging checks; it does not replace the separate plugin SDK integration-test matrix.
-
-## Tests and CI
-
-Run the SDK test suite from the repository root:
+Run the focused application regression checks from the repository root:
 
 ```powershell
-python -m pip install PySide6 cryptography
-python -m py_compile FDMX_v6_36.py fdmx_plugin_sdk.py fdmx_plugin_host.py fdmx_plugin_repository.py
-python -m unittest discover -s tests -v
+python -m py_compile FDMX_v6_36.py
+python tests/test_gns_downloader_regressions.py
 ```
 
-GitHub Actions includes a four-way SDK test matrix (Windows/Ubuntu × Python 3.11/3.12) and a separate plugin-worker build/smoke-test workflow. The latest SDK integration-test run on this development branch is currently failing; inspect and fix that run before declaring the SDK 1.7 work stable or publishing a release. The historical Windows build workflows target older application versions and are not a verified release pipeline for v6.36.
+## Repository notes
 
-## Data location
+Older numbered scripts and the separate Plugin SDK development files remain in the repository for history and development. They are not the current GNS Downloader desktop entry point or part of the packaged application.
 
-Application task/history data is stored under the user's home directory in `.fdmx` (including `history.json` and `tasks.json`). Keep this user-data directory separate from the application installation directory. Download URLs can contain private tokens; remove them from logs and bug reports before sharing.
-
-## License
-
-The repository currently includes [LICENSE-NOTICE.md](LICENSE-NOTICE.md). Review that notice before redistributing binaries or source code; the presence of source code on GitHub does not by itself grant permission for redistribution or commercial use.
+Review [LICENSE-NOTICE.md](LICENSE-NOTICE.md) before redistributing source or binaries.
