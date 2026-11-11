@@ -1,7 +1,11 @@
 """Static regression checks for the branded desktop app and download cancellation."""
 from pathlib import Path
 import ast
+import re
+import urllib.error
+import urllib.request
 import unittest
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +71,73 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('self.state.emit("Range unavailable; using single connection")', SOURCE)
         self.assertIn("self.download_single(destination)", SOURCE)
         self.assertIn("Server rejected HTTP Range with status", SOURCE)
+
+    def test_probe_retries_with_plain_get_after_range_is_rejected(self):
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "DownloadWorker"
+        )
+        method = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "probe_download"
+        )
+        namespace = {
+            "re": re,
+            "urllib": urllib,
+            "get_filename": lambda response: "DWA-131_DRIVER_1.21_WIN.ZIP",
+        }
+        module = ast.Module(body=[method], type_ignores=[])
+        exec(compile(module, "<probe_download>", "exec"), namespace)
+
+        class FakeResponse:
+            status = 200
+            headers = {
+                "Content-Length": "17775053",
+                "Content-Disposition": 'attachment; filename="DWA-131_DRIVER_1.21_WIN.ZIP"',
+            }
+
+            def read(self, size):
+                return b"x"
+
+            def close(self):
+                pass
+
+        class FakeWorker:
+            cancel_event = SimpleNamespace(is_set=lambda: False)
+            pause_event = SimpleNamespace(is_set=lambda: True)
+
+            def __init__(self):
+                self.requests = []
+
+            def request(self, start=None, end=None):
+                self.requests.append((start, end))
+                if start is not None:
+                    raise urllib.error.HTTPError(
+                        "https://example.invalid/driver.zip",
+                        403, "Forbidden", {}, None
+                    )
+                return FakeResponse()
+
+            def get_response_socket(self, response):
+                return None
+
+            def register_socket(self, sock):
+                pass
+
+            def unregister_socket(self, sock):
+                pass
+
+            def wait_if_paused(self):
+                pass
+
+        worker = FakeWorker()
+        result = namespace["probe_download"](worker)
+        self.assertEqual(
+            result,
+            ("DWA-131_DRIVER_1.21_WIN.ZIP", False, 17775053),
+        )
+        self.assertEqual(worker.requests, [(0, 0), (None, None)])
 
     def test_adaptive_part_count_thresholds(self):
         tree = ast.parse(SOURCE)
