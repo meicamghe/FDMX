@@ -555,8 +555,10 @@ class DownloadWorker(QThread):
                 raise
             except urllib.error.HTTPError as exc:
                 if exc.code in (400, 403, 405, 416, 501):
+                    status = exc.code
+                    exc.close()
                     raise RangeNotSupportedError(
-                        f"Server rejected HTTP Range with status {exc.code}"
+                        f"Server rejected HTTP Range with status {status}"
                     ) from exc
                 if self.cancel_event.is_set():
                     raise InterruptedError("Download canceled")
