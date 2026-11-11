@@ -57,6 +57,14 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
         self.assertIn('"parts_count", "measured_speed"', SOURCE)
 
+    def test_https_uses_verified_certifi_ca_bundle(self):
+        self.assertIn("import certifi", SOURCE)
+        self.assertIn("ssl.create_default_context(cafile=bundle)", SOURCE)
+        self.assertIn("urllib.request.HTTPSHandler(context=SSL_CONTEXT)", SOURCE)
+        self.assertIn("urllib.request.install_opener(build_url_opener())", SOURCE)
+        self.assertIn("build_url_opener(handler)", SOURCE)
+        self.assertNotIn("_create_unverified_context", SOURCE)
+
     def test_download_probe_falls_back_to_plain_get(self):
         self.assertIn("def request_headers(self, start=None, end=None):", SOURCE)
         self.assertIn('"Accept-Encoding": "identity"', SOURCE)
