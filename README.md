@@ -1,44 +1,60 @@
-# GNS Downloader 6.39
+# GNS Downloader 6.40
 
-GNS Downloader is a Windows desktop download manager built with Python and PySide6.
+GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
 **فارسی:** [راهنمای فارسی نصب و استفاده](docs/README_FA.md)
 
-## Current build
+## Current version
 
-- Application version: **6.39**
+- Application version: **6.40**
 - Main source: `FDMX_v6_36.py`
-- Primary target: Windows 10/11, x64
-- Interface: fixed Windows 11 Fluent appearance. There is no theme-selection tab or Theme Studio.
-- The desktop application UI does not include a Plugin Manager.
+- Python version: **3.12**
+- Windows packages: Windows 10/11, x64
+- Linux source launch: `python ubuntu.py` (same current application source)
+- Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
+- There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## Features
+## What's new in 6.40
 
-- HTTP/HTTPS downloads with multi-connection transfers.
-- Pause, resume, cancel, retry, queue management and persistent task state.
-- Per-download details window with progress and segment information. After a successful download, the action area switches to **Open** and **Close**; the transfer controls are hidden.
-- Smart speed detection samples an initial byte range, estimates real throughput, and selects 1, 2, 4 or up to 8 parallel parts based on the file size and measured speed. The chosen byte-range map is stored with the temporary fragments so pause/recovery can resume safely without repartitioning existing data.
-- Scheduling, speed limits, download history and CSV/JSON analytics.
-- Browser hand-off through a local-only bridge at `127.0.0.1:38471`.
-- Per-download post-completion action: do nothing, shut down Windows, log out, or hibernate. The action is configured in that download's own details window and does not affect other downloads.
-- Enabled and disabled buttons use distinct visual treatments.
+- **Help → Check for updates** checks the latest public GitHub Release, compares versions, downloads the Windows Setup asset, validates its size and SHA-256 digest when provided by GitHub, and offers to launch the installer.
+- About dialog credits: **Created by MeysamGNS**, developed with assistance from **ChatGPT**.
+- Ubuntu Yaru appearance automatically selected on Linux while preserving Windows 11 Fluent on Windows.
+- Adaptive download engine measures initial throughput, selects a safe number of parts, persists byte-range maps for resume, and falls back to one stream when HTTP Range is unavailable.
+- Per-download details switch to **Open** and **Close** after successful completion.
 
-The adaptive engine chooses a stable part layout at the beginning of a transfer; it does not reshuffle byte ranges mid-transfer. Servers that do not support HTTP Range continue using the single-stream fallback.
+The adaptive engine keeps a stable part layout during each transfer so pause/resume does not mix byte ranges. It does not dynamically repartition a running download.
 
-Post-completion power actions are Windows-only and run only after a successful completion. Use them carefully; shutdown, log out and hibernate can interrupt other work.
+## Windows downloads
 
-## Download the Windows packages
+Permanent release links (updated when a new stable release is published):
 
-The CI workflow publishes two separate artifacts after a successful build:
+- **[Portable ZIP — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
-- **[Portable ZIP — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
-- **[Setup installer — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
+The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-These links point directly to the two artifacts from successful run [#42964320833](https://github.com/meicamghe/FDMX/actions/runs/42964320833). Artifacts are retained for 14 days and are not permanent GitHub Releases.
+To publish a permanent release, create and push the tag **v6.40** on this feature branch after the source is ready. The tag push runs both the Windows packaging and Linux theme smoke test, then publishes the Portable ZIP and Setup as permanent GitHub Release assets. Ordinary branch builds create temporary CI artifacts only.
 
-## Run from source on Windows
+## Run from source
 
-Install Python 3.12, then run in PowerShell from the repository directory:
+Install **Python 3.12** and the application dependency:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install PySide6-Essentials
+python FDMX_v6_36.py
+```
+
+On Linux, the compatibility launcher is also available:
+
+```bash
+python ubuntu.py
+```
+
+On Windows PowerShell:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -48,36 +64,23 @@ python -m pip install PySide6-Essentials
 python FDMX_v6_36.py
 ```
 
-## Build packages locally
+## Build Windows packages
 
-The Windows packages are built on Windows (PyInstaller is not a cross-compiler). Install Python 3.12, PySide6-Essentials, PyInstaller, Pillow and Inno Setup, then use the same build workflow as the source of truth:
+Windows executables are built on Windows (PyInstaller is not a cross-compiler). Use Python 3.12, PySide6-Essentials, PyInstaller, Pillow and Inno Setup. The reproducible build and smoke tests are defined in [the GitHub Actions workflow](.github/workflows/build-fdmx-windows.yml).
 
-1. Generate the icon: `python installer/create_icon.py`
-2. Build the onedir app with PyInstaller.
-3. Compile `installer/FDMX.iss` with Inno Setup.
-4. Zip the contents of `dist/GNS Downloader` for the portable package.
+## Browser extensions and privacy
 
-For repeatable builds and smoke testing, prefer GitHub Actions → **Build GNS Downloader Windows packages**.
-
-## Browser extensions
-
-Chrome and Firefox extension sources are in `browser-extensions/`. The desktop bridge listens only on `127.0.0.1:38471`; do not expose it on a LAN or public interface. Firefox temporary add-ons must be loaded again after the browser closes.
-
-## Data and privacy
+Chrome and Firefox extension sources are in `browser-extensions/`. The desktop bridge listens only on `127.0.0.1:38471`; do not expose it on a LAN or public interface.
 
 Task state and download history are stored under the user's home directory in `.fdmx`. Download URLs can contain private tokens; remove them from logs and bug reports before sharing.
 
 ## Tests
 
-Run the focused application regression checks from the repository root:
-
-```powershell
-python -m py_compile FDMX_v6_36.py
+```bash
+python -m py_compile FDMX_v6_36.py ubuntu.py
 python tests/test_gns_downloader_regressions.py
 ```
 
-## Repository notes
-
-Older numbered scripts and the separate Plugin SDK development files remain in the repository for history and development. They are not the current GNS Downloader desktop entry point or part of the packaged application.
+Older numbered scripts remain in the repository for development history; they are not the current application entry point.
 
 Review [LICENSE-NOTICE.md](LICENSE-NOTICE.md) before redistributing source or binaries.

@@ -1,19 +1,24 @@
 name: Build GNS Downloader Windows packages
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - feature/fdmx-6.22-advanced-fingerprinting
+      - feature/fdmx-6.40-github-updater-ubuntu-theme
+    tags:
+      - "v6.40"
     paths:
       - "FDMX_v6_36.py"
+      - "ubuntu.py"
+      - "README.md"
+      - "docs/README_FA.md"
       - "fdmx_plugin_*.py"
       - "installer/**"
       - "tests/**"
       - ".github/workflows/build-fdmx-windows.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package-windows:
@@ -22,10 +27,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -40,7 +45,7 @@ jobs:
 
       - name: Compile application
         run: |
-          python -m py_compile FDMX_v6_36.py
+          python -m py_compile FDMX_v6_36.py ubuntu.py
 
       - name: Run application regression tests
         run: |
@@ -81,7 +86,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.39.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.40.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -103,26 +108,104 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.39-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" -Force
+
+      - name: Prepare stable GitHub Release asset names
+        shell: pwsh
+        run: |
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.40.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
 
       - name: Report final package sizes
         shell: pwsh
         run: |
-          Get-Item "dist/installer/GNS-Downloader-Setup-6.39.exe", "dist/GNS-Downloader-Portable-v6.39-Windows-x64.zip" |
+          Get-Item "dist/installer/GNS-Downloader-Setup-6.40.exe", "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" |
             Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
       - name: Upload portable ZIP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Portable-v6.39
-          path: dist/GNS-Downloader-Portable-v6.39-Windows-x64.zip
+          name: GNS-Downloader-Portable-v6.40
+          path: dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload installer Setup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Setup-v6.39
-          path: dist/installer/GNS-Downloader-Setup-6.39.exe
+          name: GNS-Downloader-Setup-v6.40
+          path: dist/installer/GNS-Downloader-Setup-6.40.exe
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish permanent GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: GNS Downloader ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/GNS-Downloader-Portable-Windows-x64.zip
+            dist/installer/GNS-Downloader-Setup.exe
+          fail_on_unmatched_files: true
+          make_latest: true
+
+  test-linux-ubuntu-theme:
+    name: Test Linux source and Ubuntu Yaru appearance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - name: Install PySide6
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials
+
+      - name: Compile source and run regression tests
+        run: |
+          python -m py_compile FDMX_v6_36.py ubuntu.py
+          python tests/test_gns_downloader_regressions.py
+
+      - name: Launch app and verify Ubuntu Yaru theme
+        run: |
+          python - <<'PY'
+          import runpy
+          import sys
+          from PySide6.QtCore import QTimer
+          from PySide6.QtWidgets import QApplication
+
+          original_exec = QApplication.exec
+          original_exit = sys.exit
+
+          def timed_exec():
+              QTimer.singleShot(1800, QApplication.instance().quit)
+              return original_exec()
+
+          QApplication.exec = staticmethod(timed_exec)
+          sys.exit = lambda *args, **kwargs: None
+          try:
+              namespace = runpy.run_path("FDMX_v6_36.py", run_name="__main__")
+              app = QApplication.instance()
+              window = namespace["window"]
+              assert window.theme_combo.currentData() == "ubuntu_yaru"
+              assert "#e95420" in app.styleSheet().lower()
+              print("Ubuntu Yaru startup smoke test passed.")
+          finally:
+              sys.exit = original_exit
+              QApplication.exec = staticmethod(original_exec)
+          PY
