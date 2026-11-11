@@ -198,11 +198,11 @@ jobs:
           original_exec = QApplication.exec
           original_exit = sys.exit
 
-          def timed_exec(self):
-              QTimer.singleShot(1800, self.quit)
-              return original_exec(self)
+          def timed_exec():
+              QTimer.singleShot(1800, QApplication.instance().quit)
+              return original_exec()
 
-          QApplication.exec = timed_exec
+          QApplication.exec = staticmethod(timed_exec)
           sys.exit = lambda *args, **kwargs: None
           try:
               namespace = runpy.run_path("FDMX_v6_36.py", run_name="__main__")
@@ -213,5 +213,5 @@ jobs:
               print("Ubuntu Yaru startup smoke test passed.")
           finally:
               sys.exit = original_exit
-              QApplication.exec = original_exec
+              QApplication.exec = staticmethod(original_exec)
           PY
