@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.38"
+APP_VERSION = "6.39"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -573,7 +573,7 @@ class DownloadWorker(QThread):
 
     def _measure_initial_speed(self, temp_folder, total):
         """Measure a real initial byte range and retain it as the beginning of part 1."""
-        sample_size = min(512 * 1024, total)
+        sample_size = min(512 * 1024, max(1, total // CONNECTIONS), total)
         sample_path = os.path.join(temp_folder, "part_00.tmp")
         request = urllib.request.Request(
             self.url,
@@ -1128,6 +1128,16 @@ class DownloadDetailsDialog(QDialog):
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
         if completed:
             self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
+        elif task.get("kind") != "torrent":
+            selected_parts = int(task.get("parts_count") or 0)
+            measured_speed = float(task.get("measured_speed") or 0.0)
+            if selected_parts and measured_speed > 0:
+                self.summary_label.setText(
+                    self.summary_label.text()
+                    + f"\nSmart engine: {selected_parts} parts selected from an initial speed of {format_bytes(measured_speed)}/s"
+                )
+            elif status in ("Downloading", "Checking server", "Retrying"):
+                self.summary_label.setText(self.summary_label.text() + "\nSmart engine: measuring speed and selecting download parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
