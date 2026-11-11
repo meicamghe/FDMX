@@ -1,11 +1,23 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FDMX</title><style>
-body{width:280px;margin:0;padding:16px;background:#101114;color:#f4f4f5;font:14px Segoe UI,Arial}
-h2{margin:0 0 12px;color:#ff3038}button{width:100%;padding:11px;margin:5px 0;border:0;border-radius:7px;background:#a90018;color:white;font-weight:700;cursor:pointer}
-button:hover{background:#d00020}#status{margin-top:10px;color:#b7c0cc;font-size:12px;line-height:1.5}
-</style></head><body><h2>FDMX</h2>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FDMX Download Manager</title>
+<style>
+body{width:290px;margin:0;padding:16px;background:#101114;color:#f4f4f5;font:14px "Segoe UI",Arial,sans-serif}
+h2{margin:0 0 12px;color:#ff3038}
+button{width:100%;padding:11px;margin:5px 0;border:0;border-radius:7px;background:#a90018;color:white;font-weight:700;cursor:pointer}
+button:hover{background:#d00020}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+#status{margin-top:10px;color:#b7c0cc;font-size:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<h2>FDMX Download Manager</h2>
 <button id="current">Send current page to FDMX</button>
-<button id="video">Find video links on this page</button>
-<div id="status">Make sure FDMX 6.3 or newer is running.</div>
-<script src="popup.js"></script></body></html>
+<button id="video">Find direct video links</button>
+<div id="status" role="status" aria-live="polite">Make sure FDMX 6.40 or newer is running.</div>
+<script src="popup.js"></script>
+</body>
+</html>
