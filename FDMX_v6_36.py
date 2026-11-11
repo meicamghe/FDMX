@@ -18,6 +18,10 @@ import urllib.parse
 import urllib.error
 import socket
 import ssl
+try:
+    import certifi
+except ImportError:  # Source runs may use the operating system trust store.
+    certifi = None
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
@@ -42,6 +46,32 @@ APP_VERSION = "6.40"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
+
+
+def create_verified_ssl_context():
+    """Create a verified TLS context using certifi when it is available."""
+    if certifi is not None:
+        try:
+            bundle = certifi.where()
+            if bundle and os.path.isfile(bundle):
+                return ssl.create_default_context(cafile=bundle)
+        except (OSError, ssl.SSLError):
+            pass
+    return ssl.create_default_context()
+
+
+SSL_CONTEXT = create_verified_ssl_context()
+
+
+def build_url_opener(*handlers):
+    """Build an urllib opener that always keeps certificate verification enabled."""
+    return urllib.request.build_opener(
+        *handlers,
+        urllib.request.HTTPSHandler(context=SSL_CONTEXT),
+    )
+
+
+urllib.request.install_opener(build_url_opener())
 
 
 def open_url(request, timeout=60):
@@ -5054,9 +5084,9 @@ class FDMX(QWidget):
         if self.proxy_enabled.isChecked() and self.proxy_url.text().strip():
             proxy = self.proxy_url.text().strip()
             handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
-            urllib.request.install_opener(urllib.request.build_opener(handler))
+            urllib.request.install_opener(build_url_opener(handler))
         else:
-            urllib.request.install_opener(urllib.request.build_opener())
+            urllib.request.install_opener(build_url_opener())
 
     def run_task_post_action(self, task):
         """Run the action configured for this one task, at most once."""
