@@ -3,6 +3,7 @@ name: Build GNS Downloader Windows packages
 on:
   push:
     branches:
+      - main
       - feature/fdmx-6.22-advanced-fingerprinting
       - feature/fdmx-6.40-github-updater-ubuntu-theme
       - fix/http-download-compatibility
