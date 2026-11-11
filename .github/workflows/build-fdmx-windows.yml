@@ -80,7 +80,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.37.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.38.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -102,20 +102,26 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.38-Windows-x64.zip" -Force
 
       - name: Report final package sizes
         shell: pwsh
         run: |
-          Get-Item "dist/installer/GNS-Downloader-Setup-6.37.exe", "dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip" |
+          Get-Item "dist/installer/GNS-Downloader-Setup-6.38.exe", "dist/GNS-Downloader-Portable-v6.38-Windows-x64.zip" |
             Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
-      - name: Upload Windows packages
+      - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: GNS-Downloader-Windows-v6.37
-          path: |
-            dist/GNS-Downloader-Portable-v6.37-Windows-x64.zip
-            dist/installer/GNS-Downloader-Setup-6.37.exe
+          name: GNS-Downloader-Portable-v6.38
+          path: dist/GNS-Downloader-Portable-v6.38-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: GNS-Downloader-Setup-v6.38
+          path: dist/installer/GNS-Downloader-Setup-6.38.exe
           if-no-files-found: error
           retention-days: 14
