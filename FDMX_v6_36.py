@@ -4494,7 +4494,7 @@ class FDMX(QWidget):
                 "kind": entry.get("kind", "http"),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
-                "retry_attempts": int(entry.get("retry_attempts", 0))
+                "retry_attempts": int(entry.get("retry_attempts", 0)),
                 "post_action_enabled": bool(entry.get("post_action_enabled", False)),
                 "post_action": entry.get("post_action", "none"),
                 "post_action_done": bool(entry.get("post_action_done", False))
@@ -4668,7 +4668,6 @@ class FDMX(QWidget):
         self.status.setText(f"Download completed. Windows will {labels[action]} shortly.")
         subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
-    def update_torrent_upload_limit(self, value):
     def update_torrent_upload_limit(self, value):
         for worker in self.workers.values():
             if isinstance(worker, TorrentWorker):
