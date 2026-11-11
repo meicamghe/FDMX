@@ -53,6 +53,21 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
         self.assertIn('"parts_count", "measured_speed"', SOURCE)
 
+    def test_download_probe_falls_back_to_plain_get(self):
+        self.assertIn("def request_headers(self, start=None, end=None):", SOURCE)
+        self.assertIn('"Accept-Encoding": "identity"', SOURCE)
+        self.assertIn('"Accept": "*/*"', SOURCE)
+        self.assertIn("def probe_download(self):", SOURCE)
+        self.assertIn("for use_range in (True, False):", SOURCE)
+        self.assertIn("Server rejected both Range and ordinary GET requests", SOURCE)
+        self.assertIn("class RangeNotSupportedError(RuntimeError):", SOURCE)
+
+    def test_range_failure_falls_back_to_single_stream(self):
+        self.assertIn("except RangeNotSupportedError:", SOURCE)
+        self.assertIn('self.state.emit("Range unavailable; using single connection")', SOURCE)
+        self.assertIn("self.download_single(destination)", SOURCE)
+        self.assertIn("Server rejected HTTP Range with status", SOURCE)
+
     def test_adaptive_part_count_thresholds(self):
         tree = ast.parse(SOURCE)
         method = next(
