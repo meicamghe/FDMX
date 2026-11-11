@@ -1,7 +1,11 @@
 """Static regression checks for the branded desktop app and download cancellation."""
 from pathlib import Path
 import ast
+import re
+import urllib.error
+import urllib.request
 import unittest
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +56,96 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('candidate_count = int(candidate.get("count", 0))', SOURCE)
         self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
         self.assertIn('"parts_count", "measured_speed"', SOURCE)
+
+    def test_https_uses_verified_certifi_ca_bundle(self):
+        self.assertIn("import certifi", SOURCE)
+        self.assertIn("ssl.create_default_context(cafile=bundle)", SOURCE)
+        self.assertIn("urllib.request.HTTPSHandler(context=SSL_CONTEXT)", SOURCE)
+        self.assertIn("urllib.request.install_opener(build_url_opener())", SOURCE)
+        self.assertIn("build_url_opener(handler)", SOURCE)
+        self.assertNotIn("_create_unverified_context", SOURCE)
+
+    def test_download_probe_falls_back_to_plain_get(self):
+        self.assertIn("def request_headers(self, start=None, end=None):", SOURCE)
+        self.assertIn('"Accept-Encoding": "identity"', SOURCE)
+        self.assertIn('"Accept": "*/*"', SOURCE)
+        self.assertIn("def probe_download(self):", SOURCE)
+        self.assertIn("for use_range in (True, False):", SOURCE)
+        self.assertIn("Server rejected both Range and ordinary GET requests", SOURCE)
+        self.assertIn("class RangeNotSupportedError(RuntimeError):", SOURCE)
+
+    def test_range_failure_falls_back_to_single_stream(self):
+        self.assertIn("except RangeNotSupportedError:", SOURCE)
+        self.assertIn('self.state.emit("Range unavailable; using single connection")', SOURCE)
+        self.assertIn("self.download_single(destination)", SOURCE)
+        self.assertIn("Server rejected HTTP Range with status", SOURCE)
+
+    def test_probe_retries_with_plain_get_after_range_is_rejected(self):
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "DownloadWorker"
+        )
+        method = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "probe_download"
+        )
+        namespace = {
+            "re": re,
+            "urllib": urllib,
+            "get_filename": lambda response: "DWA-131_DRIVER_1.21_WIN.ZIP",
+        }
+        module = ast.Module(body=[method], type_ignores=[])
+        exec(compile(module, "<probe_download>", "exec"), namespace)
+
+        class FakeResponse:
+            status = 200
+            headers = {
+                "Content-Length": "17775053",
+                "Content-Disposition": 'attachment; filename="DWA-131_DRIVER_1.21_WIN.ZIP"',
+            }
+
+            def read(self, size):
+                return b"x"
+
+            def close(self):
+                pass
+
+        class FakeWorker:
+            cancel_event = SimpleNamespace(is_set=lambda: False)
+            pause_event = SimpleNamespace(is_set=lambda: True)
+
+            def __init__(self):
+                self.requests = []
+
+            def request(self, start=None, end=None):
+                self.requests.append((start, end))
+                if start is not None:
+                    raise urllib.error.HTTPError(
+                        "https://example.invalid/driver.zip",
+                        403, "Forbidden", {}, None
+                    )
+                return FakeResponse()
+
+            def get_response_socket(self, response):
+                return None
+
+            def register_socket(self, sock):
+                pass
+
+            def unregister_socket(self, sock):
+                pass
+
+            def wait_if_paused(self):
+                pass
+
+        worker = FakeWorker()
+        result = namespace["probe_download"](worker)
+        self.assertEqual(
+            result,
+            ("DWA-131_DRIVER_1.21_WIN.ZIP", False, 17775053),
+        )
+        self.assertEqual(worker.requests, [(0, 0), (None, None)])
 
     def test_adaptive_part_count_thresholds(self):
         tree = ast.parse(SOURCE)
