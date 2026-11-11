@@ -9,6 +9,7 @@ on:
       - fix/http-download-compatibility
     tags:
       - "v6.40"
+      - "v6.40.2"
     paths:
       - "FDMX_v6_36.py"
       - "ubuntu.py"
@@ -88,7 +89,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.40.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.40.2.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -110,33 +111,33 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.40.2.1-Windows-x64.zip" -Force
 
       - name: Prepare stable GitHub Release asset names
         shell: pwsh
         run: |
-          Copy-Item "dist/installer/GNS-Downloader-Setup-6.40.exe" "dist/installer/GNS-Downloader-Setup.exe"
-          Copy-Item "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.40.2.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.40.2.1-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
 
       - name: Report final package sizes
         shell: pwsh
         run: |
-          Get-Item "dist/installer/GNS-Downloader-Setup-6.40.exe", "dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip" |
+          Get-Item "dist/installer/GNS-Downloader-Setup-6.40.2.exe", "dist/GNS-Downloader-Portable-v6.40.2.1-Windows-x64.zip" |
             Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Portable-v6.40
-          path: dist/GNS-Downloader-Portable-v6.40-Windows-x64.zip
+          name: GNS-Downloader-Portable-v6.40.2
+          path: dist/GNS-Downloader-Portable-v6.40.2.1-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload installer Setup
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Setup-v6.40
-          path: dist/installer/GNS-Downloader-Setup-6.40.exe
+          name: GNS-Downloader-Setup-v6.40.2
+          path: dist/installer/GNS-Downloader-Setup-6.40.2.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -144,9 +145,9 @@ jobs:
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref == 'refs/heads/main' && 'v6.40.1' || github.ref_name }}
+          tag_name: ${{ github.ref == 'refs/heads/main' && 'v6.40.2' || github.ref_name }}
           target_commitish: main
-          name: GNS Downloader ${{ github.ref == 'refs/heads/main' && 'v6.40.1' || github.ref_name }}
+          name: GNS Downloader ${{ github.ref == 'refs/heads/main' && 'v6.40.2' || github.ref_name }}
           generate_release_notes: true
           files: |
             dist/GNS-Downloader-Portable-Windows-x64.zip
