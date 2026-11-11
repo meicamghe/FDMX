@@ -70,6 +70,9 @@ class PluginRepository:
                 raise PluginRepositoryError("Plugin archive must use HTTPS")
             if not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-fA-F]{64}", item["sha256"]):
                 raise PluginRepositoryError("Invalid archive SHA-256")
+            for notes_key in ("release_notes", "changelog"):
+                if notes_key in item and (not isinstance(item[notes_key], str) or len(item[notes_key]) > 10000):
+                    raise PluginRepositoryError(f"Invalid {notes_key}: expected text up to 10000 characters")
         return entries
 
     def download_package(self, entry, destination):

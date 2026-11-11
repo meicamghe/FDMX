@@ -23,10 +23,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fdmx_plugin_sdk import PluginManager, PluginManagerDialog
+_MODULE_STARTED_AT = time.perf_counter()
 
-from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient
+from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.36"
+APP_VERSION = "6.39"
 CONNECTIONS = 8
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
@@ -253,6 +253,7 @@ class RateLimiter:
 
 class DownloadWorker(QThread):
     progress = Signal(int, int, float, float)
+    parts_configured = Signal(int, float)
     completed = Signal(str)
     failed = Signal(str)
     canceled = Signal()
@@ -278,6 +279,10 @@ class DownloadWorker(QThread):
         self.last_bytes = 0
         self.current_speed = 0.0
         self.limiter = RateLimiter(speed_limit_kbps * 1024)
+        self.destination_path = None
+        self.temp_path = None
+        self.part_count = CONNECTIONS
+        self.measured_speed = 0.0
 
     def _interrupt_active_sockets(self):
         with self._socket_lock:
@@ -376,7 +381,7 @@ class DownloadWorker(QThread):
         if start is not None:
             headers["Range"] = f"bytes={start}-{end}"
         req = urllib.request.Request(self.url, headers=headers)
-        return urllib.request.urlopen(req, timeout=60)
+        return urllib.request.urlopen(req, timeout=15)
         
     def get_response_socket(self, response):
         """Return urllib's underlying socket for readiness polling."""
@@ -500,7 +505,8 @@ class DownloadWorker(QThread):
 
     def download_single(self, destination):
         """Single-stream fallback. Pause interrupts the socket; resume restarts safely."""
-        temp_path = destination + ".fdmx.tmp"
+        temp_path = destination + f".{self.task_id}.fdmx.tmp"
+        self.temp_path = temp_path
         self.reset_progress(0)
         failures = 0
         while True:
@@ -553,18 +559,133 @@ class DownloadWorker(QThread):
             finally:
                 self.unregister_socket(sock)
 
+    def _write_parts_manifest(self, temp_folder, total, count, measured_speed):
+        manifest_path = os.path.join(temp_folder, "parts.json")
+        temp_path = manifest_path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as file:
+            json.dump({
+                "total": int(total), "count": int(count),
+                "measured_speed": float(measured_speed), "version": 1
+            }, file)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, manifest_path)
+
+    def _measure_initial_speed(self, temp_folder, total):
+        """Measure a real initial byte range and retain it as the beginning of part 1."""
+        sample_size = min(512 * 1024, max(1, total // CONNECTIONS), total)
+        sample_path = os.path.join(temp_folder, "part_00.tmp")
+        request = urllib.request.Request(
+            self.url,
+            headers={
+                "User-Agent": f"{APP_NAME}/{APP_VERSION}",
+                "Range": f"bytes=0-{sample_size - 1}",
+            },
+        )
+        sock = None
+        started = time.monotonic()
+        received = 0
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status != 206:
+                    raise RuntimeError("Server stopped supporting HTTP Range during speed check")
+                content_range = response.headers.get("Content-Range", "")
+                if not content_range.startswith(f"bytes 0-{sample_size - 1}/"):
+                    raise RuntimeError("Invalid Content-Range during speed check")
+                sock = self.get_response_socket(response)
+                self.register_socket(sock)
+                with open(sample_path, "wb") as output:
+                    while received < sample_size:
+                        self.wait_if_paused()
+                        chunk = self.read_chunk(response)
+                        self.wait_if_paused()
+                        if not chunk:
+                            break
+                        chunk = chunk[:sample_size - received]
+                        self.limiter.acquire(len(chunk), self)
+                        self.wait_if_paused()
+                        output.write(chunk)
+                        received += len(chunk)
+                        self.update_progress(len(chunk))
+                    output.flush()
+                    os.fsync(output.fileno())
+        except InterruptedError:
+            raise
+        except Exception:
+            # The speed probe is advisory; keep the download working with one safe range.
+            return 0.0
+        finally:
+            self.unregister_socket(sock)
+        if received != sample_size:
+            return 0.0
+        elapsed = max(0.05, time.monotonic() - started)
+        return received / elapsed
+
+    def _choose_part_count(self, total, measured_speed):
+        """Select parallelism conservatively from file size and measured throughput."""
+        if total < 2 * 1024 * 1024 or measured_speed < 256 * 1024:
+            return 1
+        if measured_speed < 1024 * 1024:
+            return min(2, total)
+        if measured_speed < 4 * 1024 * 1024:
+            return min(4, total)
+        return min(CONNECTIONS, total)
+
     def download_multi(self, destination, total):
         self.reset_progress(total)
-        parts_count = min(CONNECTIONS, total)
-        ranges = []
-        for index in range(parts_count):
-            start = (total * index) // parts_count
-            end = (total * (index + 1)) // parts_count - 1
-            ranges.append((index, start, end))
-
         with PersistentTempDirectory(os.path.join(self.folder, f".fdmx_{self.task_id}.parts")) as temp_folder:
-            # Reject impossible oversized fragments before calculating resume offsets.
-            # A truncated fragment is safe to continue; an oversized one is discarded.
+            manifest_path = os.path.join(temp_folder, "parts.json")
+            manifest = None
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as file:
+                    candidate = json.load(file)
+                candidate_count = int(candidate.get("count", 0))
+                if int(candidate.get("total", 0)) == total and 1 <= candidate_count <= min(CONNECTIONS, total):
+                    manifest = candidate
+            except (OSError, ValueError, TypeError, AttributeError):
+                manifest = None
+
+            # If a manifest exists but is invalid or belongs to a different file size,
+            # discard its fragments instead of guessing their byte-range layout.
+            if os.path.exists(manifest_path) and manifest is None:
+                for filename in os.listdir(temp_folder):
+                    if filename.startswith("part_") and filename.endswith(".tmp"):
+                        try:
+                            os.remove(os.path.join(temp_folder, filename))
+                        except OSError:
+                            pass
+                try:
+                    os.remove(manifest_path)
+                except OSError:
+                    pass
+
+            existing_parts = any(
+                os.path.isfile(os.path.join(temp_folder, f"part_{index:02d}.tmp"))
+                for index in range(CONNECTIONS)
+            )
+            if manifest:
+                # Keep the original partition map so resume never mixes byte ranges.
+                parts_count = int(manifest["count"])
+                measured_speed = float(manifest.get("measured_speed", 0.0))
+            elif existing_parts:
+                # Legacy fixed-eight fragments must keep their original byte-range map.
+                parts_count = min(CONNECTIONS, total)
+                measured_speed = 0.0
+                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+            else:
+                measured_speed = self._measure_initial_speed(temp_folder, total)
+                parts_count = self._choose_part_count(total, measured_speed)
+                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+
+            self.part_count = parts_count
+            self.measured_speed = measured_speed
+            self.parts_configured.emit(parts_count, measured_speed)
+            ranges = []
+            for index in range(parts_count):
+                start = (total * index) // parts_count
+                end = (total * (index + 1)) // parts_count - 1
+                ranges.append((index, start, end))
+
             existing_bytes = 0
             for index, start, end in ranges:
                 part_path = os.path.join(temp_folder, f"part_{index:02d}.tmp")
@@ -615,16 +736,23 @@ class DownloadWorker(QThread):
             self.state.emit("Checking server")
             self.wait_if_paused()
             with self.request(0, 0) as probe:
-                filename = get_filename(probe)
-                content_range = probe.headers.get("Content-Range", "")
-                match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
-                supported = probe.status == 206 and match is not None
-                total = int(match.group(1)) if match else 0
-                probe.read(1)
+                probe_socket = self.get_response_socket(probe)
+                self.register_socket(probe_socket)
+                try:
+                    self.wait_if_paused()
+                    filename = get_filename(probe)
+                    content_range = probe.headers.get("Content-Range", "")
+                    match = re.fullmatch(r"bytes 0-0/(\d+)", content_range)
+                    supported = probe.status == 206 and match is not None
+                    total = int(match.group(1)) if match else 0
+                    probe.read(1)
+                finally:
+                    self.unregister_socket(probe_socket)
             self.wait_if_paused()
 
             os.makedirs(self.folder, exist_ok=True)
             destination = unique_path(self.folder, filename)
+            self.destination_path = destination
 
             last_error = None
             for attempt in range(3):
@@ -651,6 +779,15 @@ class DownloadWorker(QThread):
                         time.sleep(1.0 + attempt)
             raise RuntimeError(str(last_error))
         except InterruptedError:
+            parts_dir = os.path.join(self.folder, f".fdmx_{self.task_id}.parts")
+            if os.path.isdir(parts_dir):
+                shutil.rmtree(parts_dir, ignore_errors=True)
+            for partial in (self.temp_path, destination + ".fdmx.tmp" if destination else None):
+                if partial and os.path.isfile(partial):
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
             self.state.emit("Canceled")
             self.canceled.emit()
         except Exception as exc:
@@ -747,6 +884,19 @@ class FileInfoWorker(QThread):
     def __init__(self, url):
         super().__init__()
         self.url = url
+        self.cancel_event = threading.Event()
+        self._response_lock = threading.Lock()
+        self._active_response = None
+
+    def cancel(self):
+        self.cancel_event.set()
+        with self._response_lock:
+            response = self._active_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
     def run(self):
         info = {"size": -1, "name": "", "content_type": "", "accept_ranges": False, "error": ""}
@@ -755,10 +905,16 @@ class FileInfoWorker(QThread):
         try:
             request = urllib.request.Request(self.url, headers=headers, method="HEAD")
             try:
-                response = urllib.request.urlopen(request, timeout=12)
+                response = urllib.request.urlopen(request, timeout=4)
             except Exception:
+                if self.cancel_event.is_set():
+                    return
                 request = urllib.request.Request(self.url, headers={**headers, "Range": "bytes=0-0"})
-                response = urllib.request.urlopen(request, timeout=12)
+                response = urllib.request.urlopen(request, timeout=4)
+            with self._response_lock:
+                self._active_response = response
+            if self.cancel_event.is_set():
+                return
             content_range = response.headers.get("Content-Range", "")
             if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
                 info["size"] = int(content_range.rsplit("/", 1)[1])
@@ -781,7 +937,10 @@ class FileInfoWorker(QThread):
             if response is not None:
                 try: response.close()
                 except Exception: pass
-        self.info_ready.emit(info)
+            with self._response_lock:
+                self._active_response = None
+        if not self.cancel_event.is_set():
+            self.info_ready.emit(info)
 
 
 class DownloadDetailsDialog(QDialog):
@@ -825,15 +984,41 @@ class DownloadDetailsDialog(QDialog):
         self.cancel_btn = QPushButton("Cancel")
         self.retry_btn = QPushButton("Retry")
         self.start_btn = QPushButton("Start")
+        self.open_btn = QPushButton("Open")
+        self.close_btn = QPushButton("Close")
         self.start_btn.clicked.connect(self.start_download)
         self.pause_btn.clicked.connect(self.pause_download)
         self.resume_btn.clicked.connect(self.resume_download)
         self.cancel_btn.clicked.connect(self.cancel_download)
         self.retry_btn.clicked.connect(self.retry_download)
-        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
+        self.open_btn.clicked.connect(self.open_downloaded_file)
+        self.close_btn.clicked.connect(self.close)
+        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn, self.open_btn, self.close_btn):
             button.setMinimumHeight(36)
             actions.addWidget(button)
+        self.open_btn.setVisible(False)
         layout.addLayout(actions)
+
+        # Each download owns its own post-completion action.
+        post_action_row = QHBoxLayout()
+        self.post_action_enabled = QCheckBox("After this download finishes:")
+        self.post_action_enabled.setChecked(bool(task.get("post_action_enabled", False)))
+        self.post_action = QComboBox()
+        self.post_action.addItem("Do nothing", "none")
+        self.post_action.addItem("Shut down Windows", "shutdown")
+        self.post_action.addItem("Log out of Windows", "logout")
+        self.post_action.addItem("Hibernate Windows", "hibernate")
+        saved_action = task.get("post_action", "none")
+        self.post_action.setCurrentIndex(max(0, self.post_action.findData(saved_action)))
+        self.post_action.setEnabled(self.post_action_enabled.isChecked())
+        self.post_action_enabled.toggled.connect(self.post_action.setEnabled)
+        self.post_action_enabled.toggled.connect(self.save_post_action_settings)
+        self.post_action.currentIndexChanged.connect(self.save_post_action_settings)
+        self.post_action_enabled.setToolTip("Choose an action that runs only after this specific download completes.")
+        self.post_action.setToolTip("The selected action is saved with this download.")
+        post_action_row.addWidget(self.post_action_enabled)
+        post_action_row.addWidget(self.post_action, 1)
+        layout.addLayout(post_action_row)
 
         parts_title = QLabel("DOWNLOAD PARTS / SEGMENTS")
         parts_title.setStyleSheet("font-size:12pt;font-weight:700;padding-top:8px;")
@@ -849,10 +1034,6 @@ class DownloadDetailsDialog(QDialog):
             self.parts_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         layout.addWidget(self.parts_table, 1)
 
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn, alignment=Qt.AlignRight)
-
         # Reuse the main window's palette and stylesheet instead of imposing a separate dark theme.
         if parent is not None:
             self.setPalette(parent.palette())
@@ -863,6 +1044,22 @@ class DownloadDetailsDialog(QDialog):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_data)
         self.refresh_timer.start(700)
+
+    def save_post_action_settings(self, *_):
+        self.task["post_action_enabled"] = self.post_action_enabled.isChecked()
+        self.task["post_action"] = self.post_action.currentData() or "none"
+        if not self.task["post_action_enabled"]:
+            self.task["post_action_done"] = False
+        self.parent_window.save_tasks()
+
+    def open_downloaded_file(self):
+        path = self.task.get("path", "")
+        if self.task.get("status") != "Completed" or not path or not os.path.isfile(path):
+            QMessageBox.warning(self, "File unavailable", "The completed file could not be found.")
+            self.refresh_data()
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path))):
+            QMessageBox.warning(self, "Open failed", "Windows could not open this file.")
 
     def start_download(self):
         if self.task.get("status") != "Ready":
@@ -894,12 +1091,7 @@ class DownloadDetailsDialog(QDialog):
 
     def cancel_download(self):
         task = self.task
-        if task.get("status") in ("Queued", "Ready", "Checking metadata"):
-            task["status"] = "Canceled"
-            self.parent_window.save_history_entry(task)
-        elif task.get("worker"):
-            task["worker"].cancel()
-        self.parent_window.refresh_table()
+        self.parent_window.cancel_task(task.get("id"))
         self.refresh_data()
 
     def retry_download(self):
@@ -918,13 +1110,22 @@ class DownloadDetailsDialog(QDialog):
         task = self.task
         name = task.get("name", "Download")
         status = task.get("status", "Unknown")
-        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")
-        self.start_btn.setVisible(status in ("Ready", "Checking metadata"))
+        active_states = ("Downloading", "Checking server", "Retrying", "Seeding")
+        completed = status == "Completed"
+        for button in (self.start_btn, self.pause_btn, self.resume_btn, self.cancel_btn, self.retry_btn):
+            button.setVisible(not completed)
+        self.open_btn.setVisible(completed)
+        self.close_btn.setVisible(True)
+        self.post_action_enabled.setEnabled(not completed)
+        self.post_action.setEnabled(not completed and self.post_action_enabled.isChecked())
+        self.start_btn.setVisible(not completed and status in ("Ready", "Checking metadata"))
         self.start_btn.setEnabled(status == "Ready")
-        self.pause_btn.setEnabled(status in active_states)
+        self.pause_btn.setEnabled(status in ("Downloading", "Checking server", "Seeding"))
         self.resume_btn.setEnabled(status == "Paused")
-        self.cancel_btn.setEnabled(status in active_states or status in ("Paused", "Queued"))
+        self.cancel_btn.setEnabled(status in active_states or status in ("Checking metadata", "Paused", "Queued", "Ready"))
         self.retry_btn.setEnabled(status in ("Failed", "Canceled"))
+        final_path_for_open = task.get("path", "")
+        self.open_btn.setEnabled(completed and bool(final_path_for_open) and os.path.isfile(final_path_for_open))
         downloaded = int(task.get("downloaded") or 0)
         total = int(task.get("total") or 0)
         speed = float(task.get("speed") or 0)
@@ -946,6 +1147,23 @@ class DownloadDetailsDialog(QDialog):
         self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
         self.progress_bar.setValue(percent)
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
+        if completed:
+            self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
+        elif task.get("kind") != "torrent":
+            selected_parts = int(task.get("parts_count") or 0)
+            measured_speed = float(task.get("measured_speed") or 0.0)
+            if selected_parts and measured_speed > 0:
+                self.summary_label.setText(
+                    self.summary_label.text()
+                    + f"\nSmart engine: {selected_parts} parts selected from an initial speed of {format_bytes(measured_speed)}/s"
+                )
+            elif selected_parts:
+                self.summary_label.setText(
+                    self.summary_label.text()
+                    + f"\nSmart engine: speed sample unavailable; using {selected_parts} safe part(s)"
+                )
+            elif status in ("Downloading", "Checking server", "Retrying"):
+                self.summary_label.setText(self.summary_label.text() + "\nSmart engine: measuring speed and selecting download parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
@@ -966,7 +1184,7 @@ class DownloadDetailsDialog(QDialog):
                 self.parts_table.setItem(0, col, QTableWidgetItem("—"))
             return
 
-        count = min(self.connections, total)
+        count = min(int(task.get("parts_count") or self.connections), total)
         parts_dir = os.path.join(task.get("folder", ""), ".fdmx_" + task.get("id", "") + ".parts")
         self.parts_table.setRowCount(count)
         for index in range(count):
@@ -1691,7 +1909,7 @@ class AdminLoginFinderWorker(QThread):
             try:
                 bootstrap_request = urllib.request.Request(
                     "https://data.iana.org/rdap/dns.json",
-                    headers={"User-Agent": f"FDMX/{APP_VERSION}", "Accept": "application/json"}
+                    headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/json"}
                 )
                 with urllib.request.urlopen(bootstrap_request, timeout=10) as response:
                     bootstrap = json.loads(response.read(2 * 1024 * 1024).decode("utf-8", errors="replace"))
@@ -1714,7 +1932,7 @@ class AdminLoginFinderWorker(QThread):
                 query_url = base_url.rstrip("/") + "/domain/" + urllib.parse.quote(candidate, safe=".-")
                 request = urllib.request.Request(
                     query_url,
-                    headers={"User-Agent": f"FDMX/{APP_VERSION} (domain registration lookup)",
+                    headers={"User-Agent": f"{APP_NAME}/{APP_VERSION} (domain registration lookup)",
                              "Accept": "application/rdap+json, application/json"}
                 )
                 with urllib.request.urlopen(request, timeout=12) as response:
@@ -1788,7 +2006,7 @@ class AdminLoginFinderWorker(QThread):
                         if "/entity/" in href:
                             try:
                                 req = urllib.request.Request(
-                                    href, headers={"User-Agent": f"FDMX/{APP_VERSION}",
+                                    href, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}",
                                                    "Accept": "application/rdap+json, application/json"}
                                 )
                                 with urllib.request.urlopen(req, timeout=8) as response:
@@ -1933,7 +2151,7 @@ class AdminLoginFinderWorker(QThread):
 class AdminLoginFinderDialog(QDialog):
     def __init__(self, parent=None, initial_url=""):
         super().__init__(parent)
-        self.setWindowTitle("FDMX — Admin / Login Finder & Server Profiler")
+        self.setWindowTitle(f"{APP_NAME} — Admin / Login Finder & Server Profiler")
         self.resize(900, 680)
         self.worker = None
         layout = QVBoxLayout(self)
@@ -1997,7 +2215,7 @@ class AdminLoginFinderDialog(QDialog):
         event.accept()
 
     def show_report(self, report):
-        lines = ["FDMX ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
+        lines = [f"{APP_NAME.upper()} ADMIN / LOGIN FINDER & SERVER PROFILE", "=" * 58,
                  f"Target: {report.get('target')}", f"Final URL: {report.get('final_url')}",
                  f"HTTP status: {report.get('status')}",
                  f"Public IP address(es): {', '.join(report.get('ip_addresses', [])) or 'Unknown'}",
@@ -2254,7 +2472,7 @@ class WebsiteDownloaderDialog(QWidget):
         dialog.stop_button.hide()
         dialog.url_input.hide()
         dialog.show_report(self.recon_report)
-        dialog.setWindowTitle("FDMX — Saved discovery results")
+        dialog.setWindowTitle(f"{APP_NAME} — Saved discovery results")
         dialog.exec()
 
     def skip_current_page(self):
@@ -2583,13 +2801,12 @@ class LinkGrabberWorker(QThread):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str)
-    plugin_log_signal = Signal(str)
-    plugin_notify_signal = Signal(str, str)
-
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
         self.setWindowFlags(Qt.Window)
+        self._startup_started = _MODULE_STARTED_AT
+        self._log_startup_stage("window construction started")
         self.setWindowTitle(f"{APP_NAME}  •  Download Manager {APP_VERSION}")
         self.setWindowIcon(self.create_app_icon())
         self.resize(1080, 680)
@@ -2599,12 +2816,9 @@ class FDMX(QWidget):
         self.detail_windows = {}
         self.history = []
         self._loading = False
-        self._post_action_armed = False
-        self._post_action_done = False
-        self._session_task_ids = set()
         self._speed_samples = []  # Rolling speed samples used by the Analytics panel.
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
-        self.tray.setToolTip("FDMX Download Manager")
+        self.tray.setToolTip(APP_NAME)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
         self.current_filter = "All downloads"
@@ -2613,18 +2827,14 @@ class FDMX(QWidget):
         self.search_query = ""
         self.load_history()
         self.load_tasks()
+        self._log_startup_stage("task history restored")
         self.build_ui()
-        self.plugin_log_signal.connect(self.status.setText)
-        self.plugin_notify_signal.connect(self._show_plugin_notification)
-        self.plugin_manager = PluginManager(
-            os.path.join(os.path.expanduser("~"), ".fdmx", "plugins"),
-            logger=lambda message: self.plugin_log_signal.emit(str(message)),
-            notifier=lambda title, message: self.plugin_notify_signal.emit(str(title), str(message))
-        )
-        self.plugin_manager.scan()
+        self._log_startup_stage("interface built")
         self.load_preferences()
+        self._log_startup_stage("preferences loaded")
         self.browser_download_requested.connect(self.add_download_from_browser)
         self.start_browser_bridge()
+        self._log_startup_stage("browser bridge initialized")
         QApplication.clipboard().dataChanged.connect(self.on_clipboard_changed)
         self.refresh_table()
         self.scheduler_timer = self.startTimer(400)
@@ -2633,50 +2843,37 @@ class FDMX(QWidget):
         self.autosave_timer.start(5000)
         self.prompt_recovery()
         self.start_queue()
+        self._log_startup_stage("startup complete")
+
+    def _log_startup_stage(self, stage):
+        """Record startup timings to help diagnose slow first launches."""
+        try:
+            folder = os.path.join(os.path.expanduser("~"), ".fdmx")
+            os.makedirs(folder, exist_ok=True)
+            elapsed = time.perf_counter() - getattr(self, "_startup_started", _MODULE_STARTED_AT)
+            with open(os.path.join(folder, "startup.log"), "a", encoding="utf-8") as log:
+                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\\n")
+        except OSError:
+            pass
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not getattr(self, "_first_show_logged", False):
+            self._first_show_logged = True
+            self._log_startup_stage("main window shown")
 
     def create_app_icon(self):
+        """Create the red G brand mark used by the app window and tray."""
         pixmap = QPixmap(256, 256)
-        pixmap.fill(QColor("#030303"))
+        pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
-
-        # Deep black rounded tile with a subtle metallic edge.
-        tile = QLinearGradient(0, 0, 0, 256)
-        tile.setColorAt(0.0, QColor("#242424"))
-        tile.setColorAt(0.48, QColor("#090909"))
-        tile.setColorAt(1.0, QColor("#000000"))
-        painter.setBrush(tile)
-        painter.drawRoundedRect(8, 8, 240, 240, 48, 48)
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(QColor(110, 110, 110, 105))
-        painter.drawRoundedRect(9, 9, 238, 238, 47, 47)
-
-        font = QFont("Inter", 178, QFont.Black)
-        painter.setFont(font)
-        rect = pixmap.rect().adjusted(0, -5, 0, 0)
-
-        # Soft burgundy glow and depth behind the letter.
-        painter.setPen(QColor(255, 0, 0, 150))
-        for offset in (7, 5, 3):
-            painter.drawText(rect.translated(0, offset), Qt.AlignCenter, "G")
-        painter.setPen(QColor("#4a0000"))
-        painter.drawText(rect.translated(2, 4), Qt.AlignCenter, "G")
-
-        # Bright glossy burgundy-to-red face with a light-catching upper edge.
-        letter = QLinearGradient(0, 35, 0, 220)
-        letter.setColorAt(0.0, QColor("#fff0f0"))
-        letter.setColorAt(0.12, QColor("#ff5a5a"))
-        letter.setColorAt(0.38, QColor("#ff1010"))
-        letter.setColorAt(0.72, QColor("#d00000"))
-        letter.setColorAt(1.0, QColor("#780000"))
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(letter)
-        painter.drawText(rect, Qt.AlignCenter, "G")
-
-        # Narrow glossy highlight across the upper portion of the G.
-        painter.setPen(QColor(255, 220, 232, 175))
-        painter.drawText(rect.translated(0, -2), Qt.AlignCenter, "G")
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRoundedRect(8, 8, 240, 240, 44, 44)
+        painter.setPen(QColor("#e2231a"))
+        painter.setFont(QFont("Arial", 184, QFont.Bold))
+        painter.drawText(pixmap.rect().adjusted(0, -3, 0, 0), Qt.AlignCenter, "G")
         painter.end()
         return QIcon(pixmap)
 
@@ -2742,11 +2939,10 @@ class FDMX(QWidget):
         tools_menu.addAction("Export report (CSV / JSON)…", self.export_analytics_report)
         tools_menu.addAction("Verify SHA-256…", self.calculate_hash)
         tools_menu.addSeparator()
-        tools_menu.addAction("Plugin Manager…", self.open_plugin_manager)
         settings_menu = self.menu_bar.addMenu("Settings")
         settings_menu.addAction("Preferences…", self.open_settings_dialog)
         help_menu = self.menu_bar.addMenu("Help")
-        help_menu.addAction("About FDMX", self.show_about)
+        help_menu.addAction(f"About {APP_NAME}", self.show_about)
         root.setMenuBar(self.menu_bar)
 
         self.tabs = QTabWidget()
@@ -2813,7 +3009,7 @@ class FDMX(QWidget):
         downloads_layout.addLayout(entry)
 
         self.settings_dialog = QDialog(self)
-        self.settings_dialog.setWindowTitle("FDMX Preferences")
+        self.settings_dialog.setWindowTitle(f"{APP_NAME} Preferences")
         self.settings_dialog.setMinimumWidth(430)
         settings_layout = QVBoxLayout(self.settings_dialog)
         settings_grid = QGridLayout()
@@ -2839,14 +3035,6 @@ class FDMX(QWidget):
         self.proxy_url = QLineEdit()
         self.proxy_url.setPlaceholderText("http://127.0.0.1:8080")
         settings_grid.addWidget(self.proxy_url, 4, 0, 1, 2)
-        self.post_action_enabled = QCheckBox("After all downloads finish:")
-        settings_grid.addWidget(self.post_action_enabled, 5, 0)
-        self.post_action = QComboBox()
-        self.post_action.addItem("Do nothing", "none")
-        self.post_action.addItem("Shut down Windows", "shutdown")
-        self.post_action.addItem("Log out of Windows", "logout")
-        self.post_action.addItem("Hibernate Windows", "hibernate")
-        settings_grid.addWidget(self.post_action, 5, 1)
         settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
@@ -2939,7 +3127,7 @@ class FDMX(QWidget):
         grabber_page = QWidget()
         grabber_layout = QVBoxLayout(grabber_page)
         grabber_layout.setContentsMargins(10, 10, 10, 10)
-        grabber_layout.addWidget(QLabel("Enter a webpage URL. FDMX will find common downloadable file links; review the list before queueing."))
+        grabber_layout.addWidget(QLabel(f"Enter a webpage URL. {APP_NAME} will find common downloadable file links; review the list before queueing."))
         grabber_url_row = QHBoxLayout()
         self.grabber_url = QLineEdit()
         self.grabber_url.setPlaceholderText("https://example.com/downloads")
@@ -3024,28 +3212,10 @@ class FDMX(QWidget):
         analytics_layout.addLayout(export_row)
         self.tabs.addTab(analytics_page, "Analytics")
 
-        # Theme Studio stores a small preset name in QSettings.
-        theme_page = QWidget()
-        theme_layout = QVBoxLayout(theme_page)
-        theme_layout.setContentsMargins(18, 18, 18, 18)
-        theme_layout.addWidget(QLabel("Choose the appearance used by FDMX. Your selection is saved for the next launch."))
-        theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel("Theme preset:"))
+        # Keep one fixed visual preset without a separate appearance-management tab.
         self.theme_combo = QComboBox()
-        theme_presets = [("Windows 11 Fluent", "fluent")]
-        for label, key in theme_presets:
-            self.theme_combo.addItem(label, key)
-        theme_row.addWidget(self.theme_combo, 1)
-        apply_theme_button = QPushButton("Apply theme")
-        apply_theme_button.clicked.connect(self.apply_selected_theme)
-        theme_row.addWidget(apply_theme_button)
-        theme_layout.addLayout(theme_row)
-        self.theme_preview = QLabel("Preview: FDMX interface colors update immediately.")
-        self.theme_preview.setMinimumHeight(90)
-        self.theme_preview.setAlignment(Qt.AlignCenter)
-        theme_layout.addWidget(self.theme_preview)
-        theme_layout.addStretch(1)
-        self.tabs.addTab(theme_page, "Theme Studio")
+        self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_preview = QLabel()
 
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -3082,16 +3252,14 @@ class FDMX(QWidget):
 
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         task_id = uuid.uuid4().hex
-        self._session_task_ids.add(task_id)
         self.tasks[task_id] = {
             "id": task_id, "url": normalized_url, "folder": folder, "name": name,
             "status": "Queued", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "scheduled_at": selected_time.toString(Qt.ISODate),
-            "category": category_for_filename(name)
+            "category": category_for_filename(name),
+            "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
-        self._post_action_armed = True
-        self._post_action_done = False
         self.save_tasks()
         self.schedule_url.clear()
         self.refresh_table()
@@ -3269,7 +3437,7 @@ class FDMX(QWidget):
                 hwnd = int(self.winId())
 
                 # Windows 11 22H2+: use the native Transient Window (acrylic)
-                # system backdrop, which blurs the actual desktop behind FDMX.
+                # system backdrop, which blurs the actual desktop behind the app.
                 dwm = ctypes.WinDLL("dwmapi")
                 attribute = 38  # DWMWA_SYSTEMBACKDROP_TYPE
                 backdrop_type = ctypes.c_int(3)  # DWMSBT_TRANSIENTWINDOW
@@ -3406,9 +3574,10 @@ class FDMX(QWidget):
                 background: {raised}; color: {fg}; border: 1px solid {border};
                 border-radius: 8px; padding: 8px 15px; min-height: 20px;
             }}
-            QPushButton:hover {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
-            QPushButton:pressed {{ background: {border}; }}
-            QPushButton:disabled {{ color: {muted}; background: {panel}; }}
+            QPushButton:enabled {{ color: #1d2635; background: {raised}; border: 1px solid #aebbd0; font-weight: 600; }}
+            QPushButton:hover:enabled {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
+            QPushButton:pressed:enabled {{ background: {border}; }}
+            QPushButton:disabled {{ color: #778397; background: #e5e9f0; border: 1px dashed #aab4c2; font-weight: 400; }}
             QHeaderView::section {{
                 background: {raised}; color: {fg}; border: 0;
                 border-bottom: 1px solid {border}; padding: 8px; font-weight: 700;
@@ -3593,7 +3762,7 @@ class FDMX(QWidget):
         if hasattr(self, "theme_preview"):
             self.theme_preview.setText(
                 f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
-                "Theme applied to the entire FDMX interface"
+                "Theme applied to the entire GNS Downloader interface"
             )
             preview_background = (
                 f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
@@ -3606,7 +3775,7 @@ class FDMX(QWidget):
             )
 
     def export_analytics_report(self):
-        path, selected = QFileDialog.getSaveFileName(self, "Export download report", "FDMX-report.csv", "CSV files (*.csv);;JSON files (*.json)")
+        path, selected = QFileDialog.getSaveFileName(self, "Export download report", "GNS-Downloader-report.csv", "CSV files (*.csv);;JSON files (*.json)")
         if not path:
             return
         fields = ("name", "url", "status", "category", "downloaded", "total", "speed", "eta", "path", "folder", "content_type")
@@ -3659,16 +3828,6 @@ class FDMX(QWidget):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
 
-    def _show_plugin_notification(self, title, message):
-        QMessageBox.information(self, title, message)
-
-    def open_plugin_manager(self):
-        """Open the trusted-plugin manager."""
-        dialog = PluginManagerDialog(self.plugin_manager, self)
-        dialog.exec()
-        # Deliver startup notification after the user has loaded plugins in the dialog.
-        self.plugin_manager.emit("app.started", version=APP_VERSION)
-
     def open_settings_dialog(self):
         self.settings_dialog.exec()
 
@@ -3677,8 +3836,8 @@ class FDMX(QWidget):
         self.settings_dialog.accept()
 
     def show_about(self):
-        QMessageBox.about(self, "About FDMX",
-                          f"GNS Downloader / FDMX {APP_VERSION}\\nA lightweight download manager.")
+        QMessageBox.about(self, f"About {APP_NAME}",
+                          f"{APP_NAME} {APP_VERSION}\\nA lightweight download manager.")
 
     def set_filter(self, name):
         self.current_filter = name
@@ -3852,7 +4011,7 @@ class FDMX(QWidget):
 
             def do_GET(self):
                 if self.path == "/health":
-                    self._send(200, {"ok": True, "app": "FDMX", "version": APP_VERSION})
+                    self._send(200, {"ok": True, "app": APP_NAME, "version": APP_VERSION})
                 else:
                     self._send(404, {"ok": False, "error": "Not found"})
 
@@ -3870,7 +4029,7 @@ class FDMX(QWidget):
                     if parsed.scheme not in ("http", "https") or not parsed.netloc:
                         raise ValueError("Only HTTP and HTTPS links are supported")
                     window.browser_download_requested.emit(url)
-                    self._send(202, {"ok": True, "message": "Added to FDMX queue"})
+                    self._send(202, {"ok": True, "message": f"Added to {APP_NAME} queue"})
                 except Exception as exc:
                     self._send(400, {"ok": False, "error": str(exc)})
 
@@ -3904,18 +4063,16 @@ class FDMX(QWidget):
                 continue
             task_id = uuid.uuid4().hex
             name = os.path.basename(urllib.parse.unquote(parsed.path)) or suggested_name or "Download"
-            self._session_task_ids.add(task_id)
             self.tasks[task_id] = {
                 "id": task_id, "url": url, "folder": destination_folder,
                 "name": name, "status": "Queued", "downloaded": 0, "total": 0,
                 "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
                 "history": False, "scheduled_at": "",
-                "category": category_for_filename(name)
+                "category": category_for_filename(name),
+                "post_action_enabled": False, "post_action": "none", "post_action_done": False
             }
             added += 1
         if added:
-            self._post_action_armed = True
-            self._post_action_done = False
             self.save_tasks()
             self.refresh_table()
             self.start_queue()
@@ -3937,7 +4094,6 @@ class FDMX(QWidget):
             return
         os.makedirs(folder, exist_ok=True)
         task_id = uuid.uuid4().hex
-        self._session_task_ids.add(task_id)
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or "Download"
         normalized_url = urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, ""))
@@ -3953,10 +4109,9 @@ class FDMX(QWidget):
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "metadata_worker": None,
             "scheduled_at": "", "total_known": False,
-            "category": category_for_filename(name)
+            "category": category_for_filename(name),
+            "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
-        self._post_action_armed = True
-        self._post_action_done = False
         self.save_tasks()
         self.url.clear()
         self.status.setText("Checking file information before download…")
@@ -3969,16 +4124,28 @@ class FDMX(QWidget):
         worker = FileInfoWorker(task["url"])
         task["metadata_worker"] = worker
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
+        worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
         worker.start()
         self.show_download_details(task_id)
         self.refresh_table()
+
+    def _metadata_worker_finished(self, task_id, worker):
+        task = self.tasks.get(task_id)
+        if task and task.get("metadata_worker") is worker:
+            task["metadata_worker"] = None
 
     def on_file_info_ready(self, task_id, info):
         task = self.tasks.get(task_id)
         if not task:
             return
-        task["metadata_worker"] = None
-        if task.get("status") == "Canceled":
+        if task.get("status") in ("Canceled", "Canceling"):
+            return
+        if info.get("error"):
+            task.update({"status": "Failed", "speed": 0.0, "eta": -1.0})
+            self.save_history_entry(task, error=info["error"])
+            self.save_tasks()
+            self.refresh_table()
+            self.status.setText(f"Could not read download information: {info['error']}")
             return
         if info.get("name"):
             task["name"] = info["name"]
@@ -4011,16 +4178,14 @@ class FDMX(QWidget):
         if os.path.isfile(source):
             name = os.path.basename(source)
         task_id = uuid.uuid4().hex
-        self._session_task_ids.add(task_id)
         self.tasks[task_id] = {
             "id": task_id, "url": source, "folder": folder, "name": name,
             "status": "Queued", "downloaded": 0, "total": 0, "speed": 0.0,
             "eta": -1.0, "path": "", "worker": None, "history": False,
             "kind": "torrent", "category": "Torrent", "upload_speed": 0.0,
-            "scheduled_at": ""
+            "scheduled_at": "",
+            "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
-        self._post_action_armed = True
-        self._post_action_done = False
         self.save_tasks()
         self.refresh_table()
         self.status.setText("Torrent added to queue. Set its start time in the Schedule tab if needed.")
@@ -4053,6 +4218,8 @@ class FDMX(QWidget):
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
+            if hasattr(worker, "parts_configured"):
+                worker.parts_configured.connect(lambda count, speed, tid=task_id: self.on_parts_configured(tid, count, speed))
             worker.completed.connect(self.on_completed)
             worker.failed.connect(self.on_failed)
             worker.canceled.connect(self.on_canceled)
@@ -4062,7 +4229,6 @@ class FDMX(QWidget):
             worker.start()
             active += 1
         self.refresh_table()
-        self.check_after_download_action()
 
     def show_download_details(self, task_id):
         task = self.tasks.get(task_id)
@@ -4097,7 +4263,7 @@ class FDMX(QWidget):
         if task.get("status") == "Completed":
             return "Download completed\nDouble-click to open the downloaded file."
         total = int(task.get("total") or 0)
-        count = min(CONNECTIONS, total) if total > 0 else CONNECTIONS
+        count = min(int(task.get("parts_count") or CONNECTIONS), total) if total > 0 else CONNECTIONS
         if total <= 0:
             return (
                 f"Download threads: {count}\n"
@@ -4140,14 +4306,53 @@ class FDMX(QWidget):
 
     def cancel_selected(self):
         task_id = self.selected_task()
+        self.cancel_task(task_id)
+
+    def _cleanup_task_artifacts(self, task_id, task=None):
+        task = task or self.tasks.get(task_id, {})
+        folder = task.get("folder", "")
+        if not folder:
+            return
+        parts_dir = os.path.join(folder, f".fdmx_{task_id}.parts")
+        if os.path.isdir(parts_dir):
+            shutil.rmtree(parts_dir, ignore_errors=True)
+        worker = task.get("worker")
+        partials = (getattr(worker, "temp_path", None), task.get("temp_path"))
+        suffix = f".{task_id}.fdmx.tmp"
+        try:
+            for name in os.listdir(folder):
+                if name.endswith(suffix):
+                    partials += (os.path.join(folder, name),)
+        except OSError:
+            pass
+        for partial in partials:
+            if partial and os.path.isfile(partial):
+                try:
+                    os.remove(partial)
+                except OSError:
+                    pass
+
+    def cancel_task(self, task_id):
         task = self.tasks.get(task_id)
         if not task:
             return
-        if task["status"] == "Queued":
-            task["status"] = "Canceled"
+        metadata_worker = task.get("metadata_worker")
+        worker = task.get("worker")
+        if metadata_worker is not None:
+            try:
+                metadata_worker.cancel()
+            except Exception:
+                pass
+        if worker is not None and worker.isRunning():
+            task["status"] = "Canceling"
+            self.save_tasks()
+            worker.cancel()
+        else:
+            task.update({"status": "Canceled", "worker": None, "speed": 0.0, "eta": -1.0})
+            self._cleanup_task_artifacts(task_id, task)
             self.save_history_entry(task)
-        elif task.get("worker"):
-            task["worker"].cancel()
+            self.save_tasks()
+            self.schedule_downloads()
         self.refresh_table()
 
     def retry_selected(self):
@@ -4167,9 +4372,12 @@ class FDMX(QWidget):
         if not task_id:
             return
         task = self.tasks.get(task_id)
-        if task and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding"):
-            QMessageBox.information(self, "Download active", "Cancel the active download before removing it.")
-            return
+        if task and (task.get("worker") is not None or task.get("metadata_worker") is not None):
+            worker = task.get("worker") or task.get("metadata_worker")
+            if worker.isRunning():
+                QMessageBox.information(self, "Download active", "Cancel the active download before removing it.")
+                return
+        self._cleanup_task_artifacts(task_id, task)
         self.tasks.pop(task_id, None)
         self.save_tasks()
         self.refresh_table()
@@ -4207,6 +4415,18 @@ class FDMX(QWidget):
         self.save_tasks()
         self.refresh_table()
         self.status.setText(f"Deleted from disk: {path}")
+
+    def on_parts_configured(self, task_id, count, measured_speed):
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+        task["parts_count"] = int(count)
+        task["measured_speed"] = float(measured_speed)
+        self.save_tasks()
+        dialog = self.detail_windows.get(task_id)
+        if dialog is not None:
+            dialog.refresh_data()
+        self.refresh_table()
 
     def on_progress(self, downloaded, total, speed, eta):
         sender = self.sender()
@@ -4246,18 +4466,13 @@ class FDMX(QWidget):
                 "speed": 0.0, "eta": 0.0, "worker": None
             })
             self.save_history_entry(task)
-            self.plugin_manager.emit(
-                "download.completed", task_id=task_id,
-                name=task.get("name", "Download"), path=path,
-                downloaded=task.get("downloaded", 0), total=task.get("total", 0)
-            )
             self.refresh_table()
             self.status.setText(f"Completed: {path}")
             if QSystemTrayIcon.isSystemTrayAvailable():
-                self.tray.showMessage("FDMX — Download complete", task.get("name", "Download"), QSystemTrayIcon.Information, 4000)
+                self.tray.showMessage(f"{APP_NAME} — Download complete", task.get("name", "Download"), QSystemTrayIcon.Information, 4000)
         self.cleanup_worker(task_id)
         self.schedule_downloads()
-        self.check_after_download_action()
+        self.run_task_post_action(task)
 
     def on_failed(self, message):
         task_id = self.sender().task_id
@@ -4265,26 +4480,22 @@ class FDMX(QWidget):
         if task:
             task.update({"status": "Failed", "speed": 0.0, "eta": -1.0, "worker": None})
             self.save_history_entry(task, error=message)
-            self.plugin_manager.emit(
-                "download.failed", task_id=task_id,
-                name=task.get("name", "Download"), error=str(message)
-            )
             self.refresh_table()
             attempts = int(task.get("retry_attempts", 0)) if task else 0
         if task and attempts < 3:
             attempts += 1
             task["retry_attempts"] = attempts
             task["status"] = "Retrying"
+            self.save_tasks()
             delay = min(60, 5 * (2 ** (attempts - 1)))
             self.status.setText(f"Network error. Automatic retry {attempts}/3 in {delay}s…")
             QTimer.singleShot(delay * 1000, lambda tid=task_id: self._auto_retry_task(tid))
         else:
             self.status.setText(f"Download failed: {message}")
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray.showMessage("FDMX — Download failed", task.get("name", "Download") if task else message, QSystemTrayIcon.Warning, 5000)
+            self.tray.showMessage(f"{APP_NAME} — Download failed", task.get("name", "Download") if task else message, QSystemTrayIcon.Warning, 5000)
         self.cleanup_worker(task_id)
         self.schedule_downloads()
-        self.check_after_download_action()
         QMessageBox.warning(self, "Download failed", message)
 
     def _auto_retry_task(self, task_id):
@@ -4297,15 +4508,17 @@ class FDMX(QWidget):
         self.schedule_downloads()
 
     def on_canceled(self):
-        task_id = self.sender().task_id
+        worker = self.sender()
+        task_id = worker.task_id
         task = self.tasks.get(task_id)
         if task:
             task.update({"status": "Canceled", "speed": 0.0, "eta": -1.0, "worker": None})
+            self._cleanup_task_artifacts(task_id, task)
             self.save_history_entry(task)
+            self.save_tasks()
             self.refresh_table()
         self.cleanup_worker(task_id)
         self.schedule_downloads()
-        self.check_after_download_action()
 
     def cleanup_worker(self, task_id):
         worker = self.workers.pop(task_id, None)
@@ -4422,7 +4635,7 @@ class FDMX(QWidget):
                 saved = []
 
         self.recovered_task_ids = set()
-        interrupted_states = ("Downloading", "Paused", "Checking server", "Retrying", "Seeding")
+        interrupted_states = ("Downloading", "Checking server", "Retrying", "Seeding")
         for entry in saved:
             if not isinstance(entry, dict) or not entry.get("url") or not entry.get("folder"):
                 continue
@@ -4447,7 +4660,12 @@ class FDMX(QWidget):
                 "kind": entry.get("kind", "http"),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
-                "retry_attempts": int(entry.get("retry_attempts", 0))
+                "retry_attempts": int(entry.get("retry_attempts", 0)),
+                "post_action_enabled": bool(entry.get("post_action_enabled", False)),
+                "post_action": entry.get("post_action", "none"),
+                "post_action_done": bool(entry.get("post_action_done", False)),
+                "parts_count": int(entry.get("parts_count", 0) or 0),
+                "measured_speed": float(entry.get("measured_speed", 0.0) or 0.0)
             }
 
     def prompt_recovery(self):
@@ -4457,7 +4675,7 @@ class FDMX(QWidget):
             return
         answer = QMessageBox.question(
             self, "Recover interrupted downloads",
-            f"FDMX found {len(recovered)} interrupted download(s). Resume them now?",
+            f"{APP_NAME} found {len(recovered)} interrupted download(s). Resume them now?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
@@ -4475,11 +4693,13 @@ class FDMX(QWidget):
         os.makedirs(os.path.dirname(TASKS_FILE), exist_ok=True)
         saved = []
         for task in self.tasks.values():
-            if task.get("status") in ("Completed", "Failed", "Canceled"):
+            if task.get("status") in ("Completed", "Failed", "Canceled", "Canceling"):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "scheduled_at", "content_type", "retry_attempts"
+                "category", "kind", "scheduled_at", "content_type", "retry_attempts",
+                "post_action_enabled", "post_action", "post_action_done",
+                "parts_count", "measured_speed"
             )})
         temp_path = TASKS_FILE + ".tmp"
         backup_temp = TASKS_BACKUP_FILE + ".tmp"
@@ -4564,13 +4784,8 @@ class FDMX(QWidget):
         self.apply_selected_theme()
         self.proxy_enabled.setChecked(self.settings.value("proxy_enabled", False, type=bool))
         self.proxy_url.setText(self.settings.value("proxy_url", "", type=str))
-        self.post_action_enabled.setChecked(self.settings.value("post_action_enabled", False, type=bool))
-        action = self.settings.value("post_action", "none", type=str)
-        self.post_action.setCurrentIndex(max(0, self.post_action.findData(action)))
         self.proxy_enabled.toggled.connect(self.save_preferences)
         self.proxy_url.editingFinished.connect(self.save_preferences)
-        self.post_action_enabled.toggled.connect(self.save_preferences)
-        self.post_action.currentIndexChanged.connect(self.save_preferences)
         self.apply_proxy_settings()
 
     def save_preferences(self):
@@ -4584,8 +4799,6 @@ class FDMX(QWidget):
         self.settings.setValue("clipboard_monitor", self.clipboard_monitor.isChecked())
         self.settings.setValue("proxy_enabled", self.proxy_enabled.isChecked())
         self.settings.setValue("proxy_url", self.proxy_url.text().strip())
-        self.settings.setValue("post_action_enabled", self.post_action_enabled.isChecked())
-        self.settings.setValue("post_action", self.post_action.currentData())
         self.settings.sync()
         self.apply_proxy_settings()
 
@@ -4598,36 +4811,31 @@ class FDMX(QWidget):
         else:
             urllib.request.install_opener(urllib.request.build_opener())
 
-    def check_after_download_action(self):
-        if not self._post_action_armed or self._post_action_done or not self.post_action_enabled.isChecked():
+    def run_task_post_action(self, task):
+        """Run the action configured for this one task, at most once."""
+        if not task or not task.get("post_action_enabled") or task.get("post_action_done"):
             return
-        active_states = ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
-        session_tasks = [self.tasks[tid] for tid in self._session_task_ids if tid in self.tasks]
-        if not session_tasks:
-            return
-        if any(t.get("status") in active_states or t.get("status") == "Queued" for t in session_tasks):
-            return
-        if not any(t.get("status") == "Completed" for t in session_tasks):
-            return
-        action = self.post_action.currentData()
+        action = task.get("post_action", "none")
         if action == "none":
-            self._post_action_done = True
             return
         if os.name != "nt":
             self.status.setText("Post-download power actions are available on Windows only.")
-            self._post_action_done = True
+            task["post_action_done"] = True
+            self.save_tasks()
             return
-        import subprocess
         commands = {
             "shutdown": ["shutdown", "/s", "/t", "30"],
             "logout": ["shutdown", "/l"],
             "hibernate": ["shutdown", "/h"]
         }
         command = commands.get(action)
-        if command:
-            self._post_action_done = True
-            self.status.setText("All downloads finished. Windows action will run shortly.")
-            subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if not command:
+            return
+        task["post_action_done"] = True
+        self.save_tasks()
+        labels = {"shutdown": "shut down", "logout": "log out", "hibernate": "hibernate"}
+        self.status.setText(f"Download completed. Windows will {labels[action]} shortly.")
+        subprocess.Popen(command, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
     def update_torrent_upload_limit(self, value):
         for worker in self.workers.values():
@@ -4684,10 +4892,17 @@ class FDMX(QWidget):
         self.schedule_downloads()
 
     def closeEvent(self, event):
+        metadata_pending = [
+            task for task in self.tasks.values()
+            if task.get("metadata_worker") and task["metadata_worker"].isRunning()
+        ]
         active = [
             task for task in self.tasks.values()
-            if task.get("worker") and task["status"] in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
+            if task.get("worker")
+            and task.get("status") in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
         ]
+        for task in metadata_pending:
+            task["metadata_worker"].cancel()
         if active:
             answer = QMessageBox.question(
                 self, "Downloads running",
@@ -4698,11 +4913,21 @@ class FDMX(QWidget):
                 event.ignore()
                 return
             for task in active:
-                task["worker"].cancel()
+                worker = task.get("worker") or task.get("metadata_worker")
+                if worker:
+                    worker.cancel()
             for task in active:
-                task["worker"].wait(3000)
-        if hasattr(self, "plugin_manager"):
-            self.plugin_manager.shutdown()
+                worker = task.get("worker") or task.get("metadata_worker")
+                if worker:
+                    worker.wait(5000)
+                if task.get("status") not in ("Canceled", "Completed"):
+                    task.update({"status": "Canceled", "worker": None, "speed": 0.0, "eta": -1.0})
+                    self._cleanup_task_artifacts(task.get("id"), task)
+                    self.save_history_entry(task)
+        for task in metadata_pending:
+            worker = task.get("metadata_worker")
+            if worker:
+                worker.wait(5000)
         self.save_preferences()
         self.save_tasks()
         if getattr(self, '_browser_server', None):

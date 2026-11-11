@@ -1,178 +1,83 @@
-# FDMX — Download Manager
+# GNS Downloader 6.39
 
-**FDMX** is a Python desktop download manager built with **PySide6**. [راهنمای فارسی نصب و استفاده](docs/README_FA.md) is also available. The project includes a Windows-focused desktop application, an Ubuntu-themed interface variant, and browser extensions for Chrome and Firefox.
+GNS Downloader is a Windows desktop download manager built with Python and PySide6.
 
-> Project status: actively developed. Some capabilities and browser-integration workflows may depend on the selected script version. This repository currently contains multiple historical builds; for the latest tested Windows build use **FDMX_v6_11.py**. The Ubuntu-themed build is **ubuntu.py** and should be treated as experimental until tested on your system.
+**فارسی:** [راهنمای فارسی نصب و استفاده](docs/README_FA.md)
 
-## Highlights
+## Current build
 
-- Multi-connection HTTP/HTTPS downloads with configurable connection count.
-- Pause, resume, cancel and retry controls.
-- Per-download details window with progress and transfer information.
-- Download history and task persistence between application sessions.
-- Download scheduling with date and time controls.
-- Clipboard URL support and browser hand-off through local loopback bridge.
-- Speed limiting and download destination selection.
-- Categorization of common file types.
-- Chrome and Firefox extensions for sending links to FDMX.
-- Ubuntu-inspired aubergine and orange interface in `ubuntu.py`.
+- Application version: **6.39**
+- Main source: `FDMX_v6_36.py`
+- Primary target: Windows 10/11, x64
+- Interface: fixed Windows 11 Fluent appearance. There is no theme-selection tab or Theme Studio.
+- The desktop application UI does not include a Plugin Manager.
 
-Feature availability can differ between builds. Torrent support and media URL scanning are experimental and may have limitations; DRM-protected streams and browser blob URLs are not guaranteed to work.
+## Features
 
-## Repository layout
+- HTTP/HTTPS downloads with multi-connection transfers.
+- Pause, resume, cancel, retry, queue management and persistent task state.
+- Per-download details window with progress and segment information. After a successful download, the action area switches to **Open** and **Close**; the transfer controls are hidden.
+- Smart speed detection samples an initial byte range, estimates real throughput, and selects 1, 2, 4 or up to 8 parallel parts based on the file size and measured speed. The chosen byte-range map is stored with the temporary fragments so pause/recovery can resume safely without repartitioning existing data.
+- Scheduling, speed limits, download history and CSV/JSON analytics.
+- Browser hand-off through a local-only bridge at `127.0.0.1:38471`.
+- Per-download post-completion action: do nothing, shut down Windows, log out, or hibernate. The action is configured in that download's own details window and does not affect other downloads.
+- Enabled and disabled buttons use distinct visual treatments.
 
-| Path | Description |
-|---|---|
-| `FDMX_v6_11.py` | Latest tested Windows desktop build |
-| `ubuntu.py` | Ubuntu-themed UI variant; experimental |
-| `FDMX_v6_*.py` | Earlier development builds kept for reference |
-| `browser-extensions/chrome/` | Chrome extension source |
-| `browser-extensions/firefox/` | Firefox extension source |
-| `browser-extensions/README.md` | Browser extension installation notes |
+The adaptive engine chooses a stable part layout at the beginning of a transfer; it does not reshuffle byte ranges mid-transfer. Servers that do not support HTTP Range continue using the single-stream fallback.
 
-## Requirements
+Post-completion power actions are Windows-only and run only after a successful completion. Use them carefully; shutdown, log out and hibernate can interrupt other work.
 
-- Windows 10/11 (primary tested environment); Ubuntu/Linux may work with the Ubuntu variant but is not yet fully validated.
-- Python 3.10 or newer.
-- PySide6.
-- Internet access for downloading files and installing Python packages.
+## Download the Windows packages
 
-The desktop script uses Python standard-library modules plus PySide6; no separate third-party downloader package is required by the current source.
+The CI workflow publishes two separate artifacts after a successful build:
 
-## Install and run on Windows
+- **[Portable ZIP — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — extract the ZIP and run `GNS Downloader.exe`.
+- **[Setup installer — GNS Downloader 6.39](https://github.com/meicamghe/FDMX/actions)** — run Setup to install the application and create shortcuts.
 
-1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/). During setup, enable **Add Python to PATH**.
-2. Download this repository using **Code → Download ZIP**, then extract it; or clone it:
+These links point directly to the two artifacts from successful run [#42964320833](https://github.com/meicamghe/FDMX/actions/runs/42964320833). Artifacts are retained for 14 days and are not permanent GitHub Releases.
 
-   ```powershell
-   git clone https://github.com/meicamghe/FDMX.git
-   cd FDMX
-   ```
+## Run from source on Windows
 
-3. (Recommended) Create and activate a virtual environment:
+Install Python 3.12, then run in PowerShell from the repository directory:
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-   If PowerShell blocks activation, use Command Prompt:
-
-   ```bat
-   .venv\Scripts\activate.bat
-   ```
-
-4. Install the UI dependency:
-
-   ```powershell
-   py -m pip install --upgrade pip
-   py -m pip install PySide6
-   ```
-
-5. Run the tested Windows build:
-
-   ```powershell
-   py FDMX_v6_11.py
-   ```
-
-   To try the Ubuntu-themed variant on Windows:
-
-   ```powershell
-   py ubuntu.py
-   ```
-
-## Run on Ubuntu / Linux
-
-The Ubuntu-themed script is provided as a development build, not a promise of full Linux compatibility.
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
-git clone https://github.com/meicamghe/FDMX.git
-cd FDMX
-python3 -m venv .venv
-source .venv/bin/activate
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6
-python ubuntu.py
+python -m pip install PySide6-Essentials
+python FDMX_v6_36.py
 ```
 
-If the virtual environment cannot access system Qt libraries or the display server, check the PySide6 installation and your desktop environment. See the [official Qt for Python getting-started guide](https://doc.qt.io/qtforpython-6/quickstart.html).
+## Build packages locally
 
-## Using FDMX
+The Windows packages are built on Windows (PyInstaller is not a cross-compiler). Install Python 3.12, PySide6-Essentials, PyInstaller, Pillow and Inno Setup, then use the same build workflow as the source of truth:
 
-1. Start the application.
-2. Paste an HTTP or HTTPS download URL into the URL field (or use the clipboard feature if available in that build).
-3. Choose the destination folder and adjust connection/speed options as needed.
-4. Start the download.
-5. Open a download's details window to inspect progress and use Pause, Resume, Cancel or Retry when available.
-6. Use the scheduling section to configure a future start time. Keep the application running for scheduled tasks to execute.
+1. Generate the icon: `python installer/create_icon.py`
+2. Build the onedir app with PyInstaller.
+3. Compile `installer/FDMX.iss` with Inno Setup.
+4. Zip the contents of `dist/GNS Downloader` for the portable package.
 
-Downloads depend on the remote server. Some servers block parallel connections, require authentication, expire signed URLs, or do not support resuming. In those cases, a download may use fewer connections or need to be restarted.
+For repeatable builds and smoke testing, prefer GitHub Actions → **Build GNS Downloader Windows packages**.
 
-## Browser integration
+## Browser extensions
 
-The browser extensions communicate with the desktop application through a local-only bridge at **127.0.0.1:38471**.
-
-### Chrome
-
-1. Start the FDMX desktop application with browser bridge support.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Click **Load unpacked**.
-5. Select the repository folder `browser-extensions/chrome`.
-6. Right-click a link and choose **Download link with FDMX**, or open the extension popup and send the current page URL.
-
-### Firefox
-
-1. Start the FDMX desktop application with browser bridge support.
-2. Open `about:debugging#/runtime/this-firefox`.
-3. Click **Load Temporary Add-on**.
-4. Select `browser-extensions/firefox/manifest.json`.
-5. Right-click a link and choose **Download link with FDMX**, or use the popup.
-
-Firefox temporary add-ons are removed when Firefox closes. Permanent distribution requires Mozilla review/signing. An unsigned XPI normally cannot be installed permanently in standard Firefox release builds.
-
-### Browser connection troubleshooting
-
-- Confirm FDMX is running before sending a URL.
-- The local bridge listens on `127.0.0.1:38471`; it is not intended to be exposed to the LAN or public internet.
-- If the extension reports that it cannot connect, verify that the desktop build includes the bridge and that the port is not blocked or occupied.
-- Do not change the bridge to listen on `0.0.0.0` or expose it publicly.
+Chrome and Firefox extension sources are in `browser-extensions/`. The desktop bridge listens only on `127.0.0.1:38471`; do not expose it on a LAN or public interface. Firefox temporary add-ons must be loaded again after the browser closes.
 
 ## Data and privacy
 
-FDMX stores local task/history data under the user's home directory in `.fdmx` (including `history.json` and `tasks.json`). Browser integration uses loopback networking on the same computer. Download URLs may contain private tokens; avoid sharing logs, screenshots, or exported task files that expose signed URLs.
+Task state and download history are stored under the user's home directory in `.fdmx`. Download URLs can contain private tokens; remove them from logs and bug reports before sharing.
 
-## Troubleshooting
+## Tests
 
-| Problem | Things to check |
-|---|---|
-| `No module named PySide6` | Activate the environment and run `py -m pip install PySide6`. |
-| App does not start | Run it from PowerShell/Terminal and copy the full traceback. |
-| Browser says it cannot connect | Start FDMX first; verify local bridge support and port 38471. |
-| Download stops or cannot resume | The server may not support byte ranges, or the URL may have expired. |
-| Firefox says the add-on is unverified | Use temporary loading for testing, or submit it to Mozilla for signing. |
+Run the focused application regression checks from the repository root:
 
-## Development notes
+```powershell
+python -m py_compile FDMX_v6_36.py
+python tests/test_gns_downloader_regressions.py
+```
 
-- Main application: Python + PySide6 (Qt Widgets).
-- Networking and HTTP handling use Python's standard library.
-- Please report reproducible bugs with OS version, Python version, selected script/build, steps to reproduce, and the full error output. Remove credentials and private URL tokens before posting.
-- Contributions and feature suggestions are welcome through GitHub Issues.
+## Repository notes
 
-## Roadmap
+Older numbered scripts and the separate Plugin SDK development files remain in the repository for history and development. They are not the current GNS Downloader desktop entry point or part of the packaged application.
 
-- Consolidate historical scripts into a cleaner package structure.
-- Add automated tests for download workers and browser bridge.
-- Publish versioned releases and signed browser packages.
-- Improve Linux testing and packaging.
-- Document supported torrent and media-download workflows once they are stable.
-
-## License
-
-The repository does not currently grant an open-source license. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md). Viewing the source does not by itself grant permission to redistribute, modify, or use it commercially.
-
-## Acknowledgements
-
-Built with Python and [Qt for Python / PySide6](https://doc.qt.io/qtforpython-6/).
+Review [LICENSE-NOTICE.md](LICENSE-NOTICE.md) before redistributing source or binaries.

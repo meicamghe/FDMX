@@ -1,4 +1,4 @@
-"""FDMX Plugin SDK 1.5 - signed plugins, lifecycle, and atomic updates.
+"""FDMX Plugin SDK 1.7 - signed plugins, lifecycle, history, and rollback.
 Plugins run in a separate process. This is crash containment, NOT an OS sandbox.
 """
 from __future__ import annotations
@@ -427,7 +427,10 @@ class PluginManager:
         parts = str(value).split(".")
         if not parts or len(parts) > 4 or any(not p.isdigit() for p in parts):
             raise ValueError("Plugin versions must use numeric dot-separated versions")
-        return tuple(int(p) for p in parts)
+        normalized = [int(p) for p in parts]
+        while len(normalized) > 1 and normalized[-1] == 0:
+            normalized.pop()
+        return tuple(normalized)
 
     def update_plugin(self, source_folder):
         """Atomically replace an installed plugin with a newer, trusted signed build."""
@@ -487,8 +490,111 @@ class PluginManager:
                 os.replace(backup, target)
                 self.scan()
                 raise
-            shutil.rmtree(backup, ignore_errors=True)
+            # Keep the previous signed package for an explicit, auditable rollback.
+            history_dir = self.plugin_dir / ".history" / plugin_id
+            history_dir.mkdir(parents=True, exist_ok=True)
+            history_copy = history_dir / (current.version + "__" + uuid.uuid4().hex)
+            try:
+                os.replace(backup, history_copy)
+            except OSError as exc:
+                self.logger(f"Update succeeded but history archival failed; backup retained at {backup}: {exc}")
             self.logger(f"Updated plugin {plugin_id}: {current.version} -> {new_version}")
+            return self.records[plugin_id]
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def list_plugin_versions(self, plugin_id):
+        """Return verified, trusted historical versions for an installed plugin."""
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        current = self.records.get(plugin_id)
+        if current is None:
+            raise KeyError(f"Plugin is not installed: {plugin_id}")
+        history = self.plugin_dir / ".history" / plugin_id
+        versions = []
+        if not history.is_dir():
+            return versions
+        for folder in sorted(history.iterdir(), key=lambda p: p.name, reverse=True):
+            if not folder.is_dir() or folder.is_symlink():
+                continue
+            try:
+                verification = verify_plugin_folder(folder, self.trusted_publishers)
+                if verification["status"] != "trusted" or verification["fingerprint"] != current.publisher_fingerprint:
+                    continue
+                manifest = json.loads((folder / "plugin.json").read_text(encoding="utf-8"))
+                if str(manifest.get("id", "")) != plugin_id:
+                    continue
+                version = str(manifest.get("version", ""))
+                self._version_tuple(version)
+                versions.append({"version": version, "folder": folder})
+            except Exception:
+                continue
+        versions.sort(key=lambda item: self._version_tuple(item["version"]), reverse=True)
+        return versions
+
+    def rollback_plugin(self, plugin_id, historical_folder):
+        """Restore a previously installed package after verifying its trusted publisher signature."""
+        if not PLUGIN_ID_RE.fullmatch(str(plugin_id)):
+            raise ValueError("Invalid plugin id")
+        current = self.records.get(plugin_id)
+        if current is None:
+            raise KeyError(f"Plugin is not installed: {plugin_id}")
+        history_root = (self.plugin_dir / ".history" / plugin_id).resolve()
+        source = Path(historical_folder).resolve()
+        if source.parent != history_root or not source.is_dir():
+            raise ValueError("Rollback source is not a managed history package")
+        verification = verify_plugin_folder(source, self.trusted_publishers)
+        if verification["status"] != "trusted" or verification["fingerprint"] != current.publisher_fingerprint:
+            raise PermissionError("Rollback requires a valid signature from the currently trusted publisher")
+        manifest = json.loads((source / "plugin.json").read_text(encoding="utf-8"))
+        if str(manifest.get("id", "")) != plugin_id:
+            raise ValueError("Rollback package plugin id does not match")
+        version = str(manifest.get("version", ""))
+        self._version_tuple(version)
+        entry = str(manifest.get("entrypoint", "plugin.py"))
+        if Path(entry).name != entry or not entry.endswith(".py") or not (source / entry).is_file():
+            raise ValueError("Rollback package has an invalid entrypoint")
+        permissions = manifest.get("permissions", [])
+        if not isinstance(permissions, list) or any(not isinstance(p, str) for p in permissions):
+            raise ValueError("Rollback package permissions must be a list of strings")
+        unknown = set(permissions) - ALLOWED_PERMISSIONS
+        if unknown:
+            raise ValueError("Rollback package contains unsupported permissions: " + ", ".join(sorted(unknown)))
+        for item in source.rglob("*"):
+            if item.is_symlink():
+                raise ValueError("Rollback package may not contain symbolic links")
+        staging = self.plugin_dir / (".rollback-stage-" + uuid.uuid4().hex)
+        backup = self.plugin_dir / (".rollback-current-" + uuid.uuid4().hex)
+        shutil.copytree(source, staging)
+        try:
+            staged = verify_plugin_folder(staging, self.trusted_publishers)
+            if staged["status"] != "trusted" or staged["fingerprint"] != current.publisher_fingerprint:
+                raise PermissionError("Staged rollback package failed signature verification")
+            self.unload(plugin_id)
+            target = self.plugin_dir / plugin_id
+            os.replace(target, backup)
+            try:
+                os.replace(staging, target)
+                self.scan()
+                if plugin_id not in self.records or self.records[plugin_id].version != version:
+                    raise RuntimeError("Rolled-back plugin failed post-install validation")
+            except Exception:
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                os.replace(backup, target)
+                self.scan()
+                raise
+            history_dir = self.plugin_dir / ".history" / plugin_id
+            history_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.replace(backup, history_dir / (current.version + "__" + uuid.uuid4().hex))
+            except OSError as exc:
+                self.logger(f"Rollback succeeded but current version archival failed; backup retained at {backup}: {exc}")
+            # The selected historical package is now active; remove its archived
+            # duplicate so history contains only alternate rollback points.
+            shutil.rmtree(source, ignore_errors=True)
+            self.logger(f"Rolled back plugin {plugin_id}: {current.version} -> {version}")
             return self.records[plugin_id]
         finally:
             if staging.exists():
@@ -623,11 +729,13 @@ class PluginManagerDialog(QDialog):
         self.install_button, self.uninstall_button = QPushButton("Install Folder"), QPushButton("Uninstall")
         self.trust_button = QPushButton("Trust Publisher")
         self.repository_button = QPushButton("Plugin Repository")
+        self.rollback_button = QPushButton("Rollback")
         self.close_button = QPushButton("Close")
-        for button in (self.scan_button, self.repository_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.uninstall_button): buttons.addWidget(button)
+        for button in (self.scan_button, self.repository_button, self.install_button, self.enable_button, self.load_button, self.disable_button, self.trust_button, self.rollback_button, self.uninstall_button): buttons.addWidget(button)
         buttons.addStretch(1); buttons.addWidget(self.close_button); layout.addLayout(buttons)
         self.scan_button.clicked.connect(self.refresh)
         self.repository_button.clicked.connect(self._open_repository)
+        self.rollback_button.clicked.connect(self._rollback_selected)
         self.install_button.clicked.connect(self._install_plugin)
         self.uninstall_button.clicked.connect(self._uninstall_plugin)
         self.trust_button.clicked.connect(self._trust_selected_publisher)
@@ -656,6 +764,34 @@ class PluginManagerDialog(QDialog):
         if not rec: self.details.clear(); return
         self.details.setPlainText(f"{rec.description}\nID: {rec.plugin_id}\nPermissions: {', '.join(rec.permissions) or 'none'}\nStatus: {'Running' if rec.loaded else ('Enabled' if rec.enabled else 'Disabled')}\nSignature: {rec.signature_status}\nPublisher fingerprint: {rec.publisher_fingerprint or '—'}\nError: {rec.error or 'None'}")
 
+    def _rollback_selected(self):
+        plugin_id = self._selected()
+        if not plugin_id:
+            return
+        try:
+            versions = self.manager.list_plugin_versions(plugin_id)
+            if not versions:
+                QMessageBox.information(self, "Plugin rollback", "No verified previous versions are available.")
+                return
+            labels = [f"v{item['version']} — {item['folder'].name[-8:]}" for item in versions]
+            selected, ok = QInputDialog.getItem(self, "Plugin rollback", "Restore version:", labels, 0, False)
+            if not ok:
+                return
+            chosen = versions[labels.index(selected)]
+            answer = QMessageBox.warning(
+                self, "Confirm rollback",
+                f"Replace {plugin_id} v{self.manager.records[plugin_id].version} with v{chosen['version']}?\n"
+                "The current version will be kept in history. The plugin will remain stopped.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if answer != QMessageBox.Yes:
+                return
+            record = self.manager.rollback_plugin(plugin_id, chosen["folder"])
+            self.refresh()
+            QMessageBox.information(self, "Rollback complete", f"{record.name} restored to v{record.version}. It remains stopped.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Plugin rollback failed", str(exc))
+
     def _open_repository(self):
         catalog_url, accepted = QInputDialog.getText(
             self, "Plugin Repository", "HTTPS catalog URL:"
@@ -669,11 +805,19 @@ class PluginManagerDialog(QDialog):
             if not entries:
                 QMessageBox.information(self, "Plugin Repository", "No plugins are listed in this catalog.")
                 return
-            labels = [
-                f"{item['id']}  v{item['version']}" +
-                ("  [Installed]" if item["id"] in self.manager.records else "  [Available]")
-                for item in entries
-            ]
+            labels = []
+            for item in entries:
+                installed = self.manager.records.get(item["id"])
+                if installed:
+                    try:
+                        newer = self.manager._version_tuple(item["version"]) > self.manager._version_tuple(installed.version)
+                    except ValueError:
+                        newer = False
+                    state = f"[Update available; installed v{installed.version}]" if newer else f"[Installed v{installed.version}]"
+                else:
+                    state = "[Available]"
+                notes = str(item.get("release_notes", item.get("changelog", ""))).strip().replace("\n", " ")
+                labels.append(f"{item['id']}  v{item['version']}  {state}" + (f" — {notes[:90]}" if notes else ""))
             selected, ok = QInputDialog.getItem(
                 self, "Plugin Repository", "Select a plugin:", labels, 0, False
             )
@@ -681,7 +825,25 @@ class PluginManagerDialog(QDialog):
                 return
             entry = entries[labels.index(selected)]
             plugin_id = entry["id"]
+            notes = str(entry.get("release_notes", entry.get("changelog", ""))).strip()
             if plugin_id in self.manager.records:
+                current_version = self.manager.records[plugin_id].version
+                try:
+                    if self.manager._version_tuple(entry["version"]) <= self.manager._version_tuple(current_version):
+                        QMessageBox.information(self, "Plugin Repository", f"{plugin_id} is already at the catalog version (v{current_version}).")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Plugin Repository", "The installed or catalog version is not a valid numeric version.")
+                    return
+                answer = QMessageBox.question(
+                    self, "Confirm plugin update",
+                    f"Update {plugin_id} from v{current_version} to v{entry['version']}?\n\n"
+                    + (notes[:3000] if notes else "No release notes supplied.") +
+                    "\n\nThe plugin will remain stopped after updating.",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                )
+                if answer != QMessageBox.Yes:
+                    return
                 record = repository.update(self.manager, plugin_id)
                 self.refresh()
                 QMessageBox.information(
