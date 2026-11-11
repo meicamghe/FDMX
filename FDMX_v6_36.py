@@ -2882,7 +2882,6 @@ class FDMX(QWidget):
         self.proxy_url.setPlaceholderText("http://127.0.0.1:8080")
         settings_grid.addWidget(self.proxy_url, 4, 0, 1, 2)
         settings_layout.addLayout(settings_grid)
-        settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
         settings_save = QPushButton("Save")
@@ -3425,7 +3424,6 @@ class FDMX(QWidget):
             QPushButton:hover:enabled {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
             QPushButton:pressed:enabled {{ background: {border}; }}
             QPushButton:disabled {{ color: #778397; background: #e5e9f0; border: 1px dashed #aab4c2; font-weight: 400; }}
-            QHeaderView::section {{
             QHeaderView::section {{
                 background: {raised}; color: {fg}; border: 0;
                 border-bottom: 1px solid {border}; padding: 8px; font-weight: 700;
