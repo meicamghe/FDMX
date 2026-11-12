@@ -1,0 +1,130 @@
+name: Build GNS Downloader Linux package
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "FDMX_v6_36.py"
+      - "ubuntu.py"
+      - "installer/linux/**"
+      - ".github/workflows/build-fdmx-linux.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "FDMX_v6_36.py"
+      - "ubuntu.py"
+      - "installer/linux/**"
+      - ".github/workflows/build-fdmx-linux.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  package-linux-deb:
+    name: Build and smoke-test Ubuntu/Debian DEB
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+
+      - name: Install Python build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow
+
+      - name: Compile and test source
+        run: |
+          python -m py_compile FDMX_v6_36.py ubuntu.py
+          python tests/test_gns_downloader_regressions.py
+
+      - name: Build frozen Linux application
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/linux FDMX_v6_36.py
+          test -x "dist/GNS Downloader/GNS Downloader"
+
+      - name: Assemble Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="build/deb-root"
+          APPDIR="$ROOT/opt/gns-downloader"
+          install -d "$APPDIR" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/icons/hicolor/256x256/apps" "$ROOT/DEBIAN"
+          cp -a "dist/GNS Downloader/." "$APPDIR/"
+          cat > "$ROOT/usr/bin/gns-downloader" <<'EOF'
+          #!/bin/sh
+          exec /opt/gns-downloader/"GNS Downloader" "$@"
+          EOF
+          chmod 0755 "$ROOT/usr/bin/gns-downloader"
+          python - <<'PY'
+          from PIL import Image, ImageDraw
+          image = Image.new("RGBA", (256, 256), (233, 84, 32, 255))
+          draw = ImageDraw.Draw(image)
+          draw.rounded_rectangle((38, 38, 218, 218), radius=34, fill=(255,255,255,255))
+          draw.polygon([(82, 80), (174, 80), (128, 150)], fill=(233,84,32,255))
+          draw.rounded_rectangle((116, 142, 140, 190), radius=8, fill=(233,84,32,255))
+          image.save("$ROOT/usr/share/icons/hicolor/256x256/apps/gns-downloader.png")
+          PY
+          cat > "$ROOT/usr/share/applications/gns-downloader.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=GNS Downloader
+          Comment=Multi-connection download manager
+          Exec=gns-downloader
+          Icon=gns-downloader
+          Terminal=false
+          Categories=Network;FileTransfer;
+          StartupNotify=true
+          EOF
+          cat > "$ROOT/DEBIAN/control" <<'EOF'
+          Package: gns-downloader
+          Version: 6.40.3
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: GNS Downloader Project
+          Depends: libc6, libegl1, libgl1, libxkbcommon0, libdbus-1-3, libxcb-cursor0, libxcb-xinerama0, libxcb-icccm4, libxcb-keysyms1, libxcb-render-util0
+          Description: GNS Downloader
+           Multi-connection graphical download manager.
+          EOF
+          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.40.3-amd64.deb"
+          dpkg-deb --info "dist/GNS-Downloader-6.40.3-amd64.deb"
+          dpkg-deb --contents "dist/GNS-Downloader-6.40.3-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
+
+      - name: Install package and smoke-test launcher
+        run: |
+          sudo apt-get install -y ./dist/GNS-Downloader-6.40.3-amd64.deb
+          test -x /usr/bin/gns-downloader
+          QT_QPA_PLATFORM=offscreen timeout 8s gns-downloader || test "$?" -eq 124
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v7
+        with:
+          name: GNS-Downloader-Linux-DEB-v6.40.3
+          path: dist/GNS-Downloader-6.40.3-amd64.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish Linux package to tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/GNS-Downloader-6.40.3-amd64.deb
+          fail_on_unmatched_files: true
