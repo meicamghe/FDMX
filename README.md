@@ -33,7 +33,7 @@ The adaptive engine keeps a stable part layout during each transfer so pause/res
 
 ## Windows downloads
 
-Release assets for v6.40.3:
+Release asset links for v6.40.3 (available after the version tag is published):
 
 - **[Portable ZIP — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
 - **[Setup installer — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
@@ -41,7 +41,7 @@ Release assets for v6.40.3:
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The [v6.40.3 release](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) contains the Windows packages and Linux DEB package. Branch builds create CI artifacts; version-tag builds publish release assets.
+Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The prepared release target is [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3). Publishing the version tag triggers the release workflow, which builds and attaches the Windows and Linux packages. Branch builds create CI artifacts only.
 
 
 
