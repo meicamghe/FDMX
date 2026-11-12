@@ -65,7 +65,30 @@ sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
 python3.12 --version
 ```
 
-اگر دستور پیدا نشد، ابتدا Python 3.12 و پشتیبانی محیط مجازی `venv` را متناسب با مخزن بسته‌های توزیع لینوکس خود نصب کنید.
+اگر Python 3.12 نصب نیست، روش متناسب با توزیع خود را اجرا کنید:
+
+**Ubuntu 24.04 LTS** (نسخه Python 3.12 در مخزن رسمی اوبونتو موجود است):
+
+```bash
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3-pip
+```
+
+**Ubuntu 22.04 یا Debian 12:** مخزن استاندارد این نسخه‌ها Python 3.12 را به‌عنوان مفسر پیش‌فرض ارائه نمی‌کند. یک روش ساده، نصب مدیر مستقل Python با نام `uv` و سپس دریافت Python 3.12 با آن است:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.12
+```
+
+اگر دستور `uv` شناخته نشد، یک ترمینال جدید باز کنید. سپس محیط مجازی را بسازید. در Ubuntu 24.04 می‌توانید از دستور `python3.12 -m venv .venv` استفاده کنید؛ در توزیع‌های قدیمی‌تر دستورهای زیر را اجرا کنید:
+
+```bash
+uv venv --python 3.12 --seed .venv
+source .venv/bin/activate
+```
+
+اگر از `uv` استفاده کردید، محیط مجازی از قبل ساخته و فعال شده است؛ آن را دوباره نسازید و به مرحله نصب وابستگی برنامه بروید.
 
 ### ۳. دریافت سورس و ساخت محیط مجازی
 
