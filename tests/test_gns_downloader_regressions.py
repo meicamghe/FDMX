@@ -48,14 +48,16 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('self.post_action_enabled.setEnabled(not completed)', SOURCE)
         self.assertIn('QDesktopServices.openUrl(QUrl.fromLocalFile', SOURCE)
 
-    def test_adaptive_speed_probe_selects_and_persists_safe_part_layout(self):
-        self.assertIn('def _measure_initial_speed(self, temp_folder, total):', SOURCE)
-        self.assertIn('def _choose_part_count(self, total, measured_speed):', SOURCE)
-        self.assertIn('self.parts_configured.emit(parts_count, measured_speed)', SOURCE)
+    def test_adaptive_engine_is_removed_and_parts_are_user_configured(self):
+        self.assertNotIn("_measure_initial_speed", SOURCE)
+        self.assertNotIn("_choose_part_count", SOURCE)
+        self.assertNotIn("measured_speed", SOURCE)
+        self.assertIn("self.configured_part_count", SOURCE)
+        self.assertIn("parts_count = min(self.configured_part_count, total)", SOURCE)
+        self.assertIn("parts_configured = Signal(int)", SOURCE)
         self.assertIn('"parts.json"', SOURCE)
         self.assertIn('candidate_count = int(candidate.get("count", 0))', SOURCE)
-        self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
-        self.assertIn('"parts_count", "measured_speed"', SOURCE)
+        self.assertIn('"parts_count"', SOURCE)
 
     def test_https_uses_verified_certifi_ca_bundle(self):
         self.assertIn("import certifi", SOURCE)
@@ -147,27 +149,11 @@ class AppRegressionTests(unittest.TestCase):
         )
         self.assertEqual(worker.requests, [(0, 0), (None, None)])
 
-    def test_adaptive_part_count_thresholds(self):
-        tree = ast.parse(SOURCE)
-        method = next(
-            node for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == "_choose_part_count"
-        )
-        namespace = {"CONNECTIONS": 8}
-        exec(compile(ast.Module(body=[method], type_ignores=[]), "<adaptive>", "exec"), namespace)
-        Worker = type("Worker", (), {"_choose_part_count": namespace["_choose_part_count"]})
-        worker = Worker()
-        mib = 1024 * 1024
-        self.assertEqual(worker._choose_part_count(1 * mib, 8 * mib), 1)
-        self.assertEqual(worker._choose_part_count(20 * mib, 128 * 1024), 1)
-        self.assertEqual(worker._choose_part_count(20 * mib, 512 * 1024), 2)
-        self.assertEqual(worker._choose_part_count(20 * mib, 2 * mib), 4)
-        self.assertEqual(worker._choose_part_count(20 * mib, 8 * mib), 8)
-
-
     def test_about_credits_and_github_updater(self):
         self.assertIn("Created by MeysamGNS", SOURCE)
         self.assertIn("Developed with assistance from ChatGPT", SOURCE)
+        self.assertIn("configurable multi-part downloads (up to 16 connections)", SOURCE)
+        self.assertNotIn("adaptive download manager", SOURCE)
         self.assertIn("class GitHubUpdateWorker(QThread):", SOURCE)
         self.assertIn("class GitHubUpdateDownloadWorker(QThread):", SOURCE)
         self.assertIn("update_available = Signal(str, str, str, str, int, str)", SOURCE)
@@ -241,7 +227,7 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('"parts_count", self.parts_count.value()', SOURCE)
         self.assertIn('self.parts_count.value())', SOURCE)
         self.assertIn('parts_count = min(self.configured_part_count, total)', SOURCE)
-        self.assertNotIn('parts_count = self._choose_part_count(total, measured_speed)', SOURCE)
+        self.assertNotIn("_choose_part_count", SOURCE)
 
     def test_updater_uses_one_pre_download_confirmation(self):
         tree = ast.parse(SOURCE)
