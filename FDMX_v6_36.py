@@ -3043,7 +3043,7 @@ class FDMX(QWidget):
             os.makedirs(folder, exist_ok=True)
             elapsed = time.perf_counter() - getattr(self, "_startup_started", _MODULE_STARTED_AT)
             with open(os.path.join(folder, "startup.log"), "a", encoding="utf-8") as log:
-                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\\n")
+                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\n")
         except OSError:
             pass
 
@@ -4042,9 +4042,9 @@ class FDMX(QWidget):
     def show_about(self):
         QMessageBox.about(
             self, f"About {APP_NAME}",
-            f"{APP_NAME} {APP_VERSION}\\n\\n"
-            "Created by MeysamGNS\\n"
-            "Developed with assistance from ChatGPT\\n\\n"
+            f"{APP_NAME} {APP_VERSION}\n\n"
+            "Created by MeysamGNS\n"
+            "Developed with assistance from ChatGPT\n\n"
             "A lightweight download manager with configurable multi-part downloads (up to 16 connections), pause and resume, speed limits, and download queue management."
         )
 
@@ -4069,18 +4069,18 @@ class FDMX(QWidget):
 
     def on_update_check_failed(self, message):
         self.status.setText("GitHub update check failed.")
-        QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\\n{message}")
+        QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\n{message}")
 
     def on_update_available(self, version, notes, release_url, asset_url, asset_size, asset_digest):
         summary = (
-            f"GNS Downloader {version} is available.\\n"
-            f"Current version: {APP_VERSION}\\n\\n"
-            "Release notes:\\n"
+            f"GNS Downloader {version} is available.\n"
+            f"Current version: {APP_VERSION}\n\n"
+            "Release notes:\n"
             + (notes[:12000] if notes else "No release notes were provided.")
         )
         if not asset_url:
             answer = QMessageBox.question(
-                self, "Update available", summary + "\\n\\nOpen GitHub Releases to download the portable package?",
+                self, "Update available", summary + "\n\nOpen GitHub Releases to download the portable package?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
             )
             if answer == QMessageBox.Yes:
@@ -4088,7 +4088,7 @@ class FDMX(QWidget):
             return
 
         answer = QMessageBox.question(
-            self, "Update available", summary + "\\n\\nDownload and install this update now? The application will close automatically after verification.",
+            self, "Update available", summary + "\n\nDownload and install this update now? The application will close automatically after verification.",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
         )
         if answer != QMessageBox.Yes:
@@ -4125,11 +4125,11 @@ class FDMX(QWidget):
             progress.setValue(percent)
             progress.setLabelText(
                 f"Downloaded {format_bytes(downloaded)} of {format_bytes(total)} "
-                f"({percent}%)\\nSpeed: {format_bytes(speed)}/s"
+                f"({percent}%)\nSpeed: {format_bytes(speed)}/s"
             )
         else:
             progress.setRange(0, 0)
-            progress.setLabelText(f"Downloaded {format_bytes(downloaded)}\\nSpeed: {format_bytes(speed)}/s")
+            progress.setLabelText(f"Downloaded {format_bytes(downloaded)}\nSpeed: {format_bytes(speed)}/s")
 
     def on_update_download_failed(self, message):
         progress = getattr(self, "_update_progress", None)
@@ -4158,7 +4158,7 @@ class FDMX(QWidget):
         if active_downloads:
             QMessageBox.information(
                 self, "Update postponed",
-                "Finish or cancel active downloads before installing the update.\\n\\n"
+                "Finish or cancel active downloads before installing the update.\n\n"
                 + "Active downloads: " + ", ".join(active_downloads[:5])
             )
             try:
@@ -4740,7 +4740,7 @@ class FDMX(QWidget):
         answer = QMessageBox.question(
             self,
             "Delete downloaded file",
-            f"Permanently delete this file from your drive?\\n\\n{path}\\n\\n"
+            f"Permanently delete this file from your drive?\n\n{path}\n\n"
             "This action permanently removes the file. Its entry will also be removed from the download list.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -4750,7 +4750,7 @@ class FDMX(QWidget):
         try:
             os.remove(path)
         except OSError as exc:
-            QMessageBox.warning(self, "Delete failed", f"Could not delete the file:\\n{exc}")
+            QMessageBox.warning(self, "Delete failed", f"Could not delete the file:\n{exc}")
             return
         self.tasks.pop(task_id, None)
         self.save_tasks()
