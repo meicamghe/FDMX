@@ -174,7 +174,7 @@ class AppRegressionTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
         }
         handler = ast.get_source_segment(SOURCE, methods["on_update_downloaded"])
-        self.assertIn('active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")', handler)
+        self.assertIn('active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Paused")', handler)
         self.assertIn('if active_downloads:', handler)
         self.assertIn('if not self.close():', handler)
         self.assertNotIn('self.close()\\n        if self.isVisible():', handler)
@@ -186,6 +186,10 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('if _is_installed_windows_build():', SOURCE)
         self.assertIn("Open GitHub Releases to download the portable package?", SOURCE)
         self.assertIn("QDesktopServices.openUrl(QUrl(release_url))", SOURCE)
+
+    def test_linux_app_icon_uses_same_font_family_as_package_icon(self):
+        self.assertIn('QFont("DejaVu Sans", 184, QFont.Bold)', SOURCE)
+        self.assertNotIn('QFont("Arial", 184, QFont.Bold)', SOURCE)
 
     def test_ubuntu_yaru_theme_is_selected_only_on_linux(self):
         self.assertIn('self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")', SOURCE)
