@@ -79,7 +79,7 @@ jobs:
           draw.rounded_rectangle((38, 38, 218, 218), radius=34, fill=(255,255,255,255))
           draw.polygon([(82, 80), (174, 80), (128, 150)], fill=(233,84,32,255))
           draw.rounded_rectangle((116, 142, 140, 190), radius=8, fill=(233,84,32,255))
-          image.save("$ROOT/usr/share/icons/hicolor/256x256/apps/gns-downloader.png")
+          image.save("build/deb-root/usr/share/icons/hicolor/256x256/apps/gns-downloader.png")
           PY
           cat > "$ROOT/usr/share/applications/gns-downloader.desktop" <<'EOF'
           [Desktop Entry]
