@@ -73,12 +73,12 @@ jobs:
           EOF
           chmod 0755 "$ROOT/usr/bin/gns-downloader"
           python - <<'PY'
-          from PIL import Image, ImageDraw
-          image = Image.new("RGBA", (256, 256), (233, 84, 32, 255))
+          from PIL import Image, ImageDraw, ImageFont
+          image = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
           draw = ImageDraw.Draw(image)
-          draw.rounded_rectangle((38, 38, 218, 218), radius=34, fill=(255,255,255,255))
-          draw.polygon([(82, 80), (174, 80), (128, 150)], fill=(233,84,32,255))
-          draw.rounded_rectangle((116, 142, 140, 190), radius=8, fill=(233,84,32,255))
+          draw.rounded_rectangle((8, 8, 248, 248), radius=44, fill=(255, 255, 255, 255))
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 184)
+          draw.text((128, 128), "G", font=font, fill=(226, 35, 26, 255), anchor="mm")
           image.save("build/deb-root/usr/share/icons/hicolor/256x256/apps/gns-downloader.png")
           PY
           cat > "$ROOT/usr/share/applications/gns-downloader.desktop" <<'EOF'
