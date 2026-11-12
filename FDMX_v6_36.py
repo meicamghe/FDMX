@@ -288,7 +288,7 @@ class RangeNotSupportedError(RuntimeError):
 
 class DownloadWorker(QThread):
     progress = Signal(int, int, float, float)
-    parts_configured = Signal(int, float)
+    parts_configured = Signal(int)
     completed = Signal(str)
     failed = Signal(str)
     canceled = Signal()
@@ -318,7 +318,6 @@ class DownloadWorker(QThread):
         self.temp_path = None
         self.part_count = CONNECTIONS
         self.configured_part_count = max(1, min(MAX_PARTS, int(parts_count or CONNECTIONS)))
-        self.measured_speed = 0.0
 
     def _interrupt_active_sockets(self):
         with self._socket_lock:
@@ -679,73 +678,17 @@ class DownloadWorker(QThread):
             finally:
                 self.unregister_socket(sock)
 
-    def _write_parts_manifest(self, temp_folder, total, count, measured_speed):
+    def _write_parts_manifest(self, temp_folder, total, count):
         manifest_path = os.path.join(temp_folder, "parts.json")
         temp_path = manifest_path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as file:
             json.dump({
                 "total": int(total), "count": int(count),
-                "measured_speed": float(measured_speed), "version": 1
+                "version": 1
             }, file)
             file.flush()
             os.fsync(file.fileno())
         os.replace(temp_path, manifest_path)
-
-    def _measure_initial_speed(self, temp_folder, total):
-        """Measure a real initial byte range and retain it as the beginning of part 1."""
-        sample_size = min(512 * 1024, max(1, total // CONNECTIONS), total)
-        sample_path = os.path.join(temp_folder, "part_00.tmp")
-        request = urllib.request.Request(
-            self.url, headers=self.request_headers(0, sample_size - 1)
-        )
-        sock = None
-        started = time.monotonic()
-        received = 0
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                if response.status != 206:
-                    raise RuntimeError("Server stopped supporting HTTP Range during speed check")
-                content_range = response.headers.get("Content-Range", "")
-                if not content_range.startswith(f"bytes 0-{sample_size - 1}/"):
-                    raise RuntimeError("Invalid Content-Range during speed check")
-                sock = self.get_response_socket(response)
-                self.register_socket(sock)
-                with open(sample_path, "wb") as output:
-                    while received < sample_size:
-                        self.wait_if_paused()
-                        chunk = self.read_chunk(response)
-                        self.wait_if_paused()
-                        if not chunk:
-                            break
-                        chunk = chunk[:sample_size - received]
-                        self.limiter.acquire(len(chunk), self)
-                        self.wait_if_paused()
-                        output.write(chunk)
-                        received += len(chunk)
-                        self.update_progress(len(chunk))
-                    output.flush()
-                    os.fsync(output.fileno())
-        except InterruptedError:
-            raise
-        except Exception:
-            # The speed probe is advisory; keep the download working with one safe range.
-            return 0.0
-        finally:
-            self.unregister_socket(sock)
-        if received != sample_size:
-            return 0.0
-        elapsed = max(0.05, time.monotonic() - started)
-        return received / elapsed
-
-    def _choose_part_count(self, total, measured_speed):
-        """Select parallelism conservatively from file size and measured throughput."""
-        if total < 2 * 1024 * 1024 or measured_speed < 256 * 1024:
-            return 1
-        if measured_speed < 1024 * 1024:
-            return min(2, total)
-        if measured_speed < 4 * 1024 * 1024:
-            return min(4, total)
-        return min(CONNECTIONS, total)
 
     def download_multi(self, destination, total):
         self.reset_progress(total)
@@ -782,22 +725,17 @@ class DownloadWorker(QThread):
             if manifest:
                 # Keep the original partition map so resume never mixes byte ranges.
                 parts_count = int(manifest["count"])
-                measured_speed = float(manifest.get("measured_speed", 0.0))
             elif existing_parts:
                 # Legacy fixed-eight fragments must keep their original byte-range map.
                 parts_count = min(CONNECTIONS, total)
-                measured_speed = 0.0
-                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+                self._write_parts_manifest(temp_folder, total, parts_count)
             else:
-                # Use the user-selected fixed connection count; skip the speed probe
-                # and automatic heuristic so each new download starts with that count.
-                measured_speed = 0.0
+                # New downloads always use the configured fixed connection count.
                 parts_count = min(self.configured_part_count, total)
-                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+                self._write_parts_manifest(temp_folder, total, parts_count)
 
             self.part_count = parts_count
-            self.measured_speed = measured_speed
-            self.parts_configured.emit(parts_count, measured_speed)
+            self.parts_configured.emit(parts_count)
             ranges = []
             for index in range(parts_count):
                 start = (total * index) // parts_count
@@ -1267,13 +1205,7 @@ class DownloadDetailsDialog(QDialog):
             self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
         elif task.get("kind") != "torrent":
             selected_parts = int(task.get("parts_count") or 0)
-            measured_speed = float(task.get("measured_speed") or 0.0)
-            if selected_parts and measured_speed > 0:
-                self.summary_label.setText(
-                    self.summary_label.text()
-                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
-                )
-            elif selected_parts:
+            if selected_parts:
                 self.summary_label.setText(
                     self.summary_label.text()
                     + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
@@ -4113,7 +4045,7 @@ class FDMX(QWidget):
             f"{APP_NAME} {APP_VERSION}\\n\\n"
             "Created by MeysamGNS\\n"
             "Developed with assistance from ChatGPT\\n\\n"
-            "A lightweight, adaptive download manager."
+            "A lightweight download manager with configurable multi-part downloads (up to 16 connections), pause and resume, speed limits, and download queue management."
         )
 
     def check_for_updates(self):
@@ -4628,7 +4560,7 @@ class FDMX(QWidget):
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
             if hasattr(worker, "parts_configured"):
-                worker.parts_configured.connect(lambda count, speed, tid=task_id: self.on_parts_configured(tid, count, speed))
+                worker.parts_configured.connect(lambda count, tid=task_id: self.on_parts_configured(tid, count))
             worker.completed.connect(self.on_completed)
             worker.failed.connect(self.on_failed)
             worker.canceled.connect(self.on_canceled)
@@ -4825,12 +4757,11 @@ class FDMX(QWidget):
         self.refresh_table()
         self.status.setText(f"Deleted from disk: {path}")
 
-    def on_parts_configured(self, task_id, count, measured_speed):
+    def on_parts_configured(self, task_id, count):
         task = self.tasks.get(task_id)
         if not task:
             return
         task["parts_count"] = int(count)
-        task["measured_speed"] = float(measured_speed)
         self.save_tasks()
         dialog = self.detail_windows.get(task_id)
         if dialog is not None:
@@ -5074,7 +5005,6 @@ class FDMX(QWidget):
                 "post_action": entry.get("post_action", "none"),
                 "post_action_done": bool(entry.get("post_action_done", False)),
                 "parts_count": int(entry.get("parts_count", 0) or 0),
-                "measured_speed": float(entry.get("measured_speed", 0.0) or 0.0)
             }
 
     def prompt_recovery(self):
@@ -5108,7 +5038,7 @@ class FDMX(QWidget):
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
                 "category", "kind", "scheduled_at", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
-                "parts_count", "measured_speed"
+                "parts_count"
             )})
         temp_path = TASKS_FILE + ".tmp"
         backup_temp = TASKS_BACKUP_FILE + ".tmp"
