@@ -49,6 +49,27 @@ Release workflow: [Build GNS Downloader Windows packages](https://github.com/mei
 
 A native **Ubuntu/Debian `.deb` package** is now built by the Linux GitHub Actions workflow for version 6.40.3. The package is generated as a CI artifact on pull requests and branch builds; it is attached to the public GitHub Release when the matching version tag is published. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
+### Quick install: official Linux package
+
+The v6.40.3 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
+
+Check the system architecture (it should print `amd64`):
+
+```bash
+dpkg --print-architecture
+```
+
+Download and install the package (APT will resolve its declared system dependencies):
+
+```bash
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-6.40.3-amd64.deb" -o /tmp/GNS-Downloader-6.40.3-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.40.3-amd64.deb
+```
+
+Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
+
+### Alternative: run from source (requires Git and Python 3.12)
+
 1. Install the Qt runtime libraries (Ubuntu/Debian):
 
 ```bash

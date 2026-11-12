@@ -48,6 +48,27 @@ Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://
 
 برای لینوکس، ساخت بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** به Workflow پروژه اضافه شده است. در Pull Request و ساخت‌های شاخه، فایل DEB به‌صورت Artifact آزمایشی تولید می‌شود و پس از انتشار Tag نسخه، به Release عمومی همان نسخه پیوست خواهد شد. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
+### نصب سریع: بسته آماده لینوکس
+
+نسخه 6.40.3 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
+
+معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
+
+```bash
+dpkg --print-architecture
+```
+
+دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
+
+```bash
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-6.40.3-amd64.deb" -o /tmp/GNS-Downloader-6.40.3-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.40.3-amd64.deb
+```
+
+پس از نصب، برنامه را از منوی برنامه‌های دسکتاپ اجرا کنید یا در ترمینال دستور `gns-downloader` را بزنید. بسته روی Ubuntu 22.04 با معماری AMD64 ساخته و تست نصب و اجرا شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند.
+
+### روش جایگزین: اجرا از سورس (نیازمند Git و Python 3.12)
+
 ### ۱. نصب کتابخانه‌های موردنیاز سیستم
 
 در ترمینال Ubuntu یا Debian اجرا کنید:
