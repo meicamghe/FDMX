@@ -32,7 +32,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-لینک‌های پایدار زیر به آخرین انتشار GitHub متصل هستند:
+لینک‌های زیر برای انتشار آماده‌شده v6.40.3 هستند و پس از انتشار Tag نسخه فعال می‌شوند:
 
 - **[نسخه Portable ZIP — نسخه 6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
 - **[نسخه Setup — نسخه 6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
@@ -40,7 +40,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه پایدار فعلی [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) است. ساخت روی شاخه Artifact موقت تولید می‌کند و انتشار Tag نسخه، فایل‌های Release را منتشر می‌کند.
+Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه آماده انتشار [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) است؛ Tag و فایل‌های عمومی آن هنوز منتشر نشده‌اند. ساخت روی شاخه Artifact موقت تولید می‌کند و انتشار Tag نسخه، فایل‌های Release را منتشر می‌کند.
 
 
 
