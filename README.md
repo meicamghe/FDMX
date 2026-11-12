@@ -47,7 +47,7 @@ Release workflow: [Build GNS Downloader Windows packages](https://github.com/mei
 
 ## Linux installation (Ubuntu and Debian)
 
-Linux currently runs the application from source; a native DEB, AppImage, or Flatpak package is not published yet. You do **not** need Wine. The Linux launcher starts the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** is now built by the Linux GitHub Actions workflow for version 6.40.3. The package is generated as a CI artifact on pull requests and branch builds; it is attached to the public GitHub Release when the matching version tag is published. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 1. Install the Qt runtime libraries (Ubuntu/Debian):
 
