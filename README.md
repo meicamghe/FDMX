@@ -62,14 +62,46 @@ sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
 python3.12 --version
 ```
 
-If the command is missing, install Python 3.12 and its `venv` support using the package source appropriate for your Linux distribution before continuing.
+If Python 3.12 is missing, install it for your distribution:
+
+**Ubuntu 24.04 LTS** (available in the standard repositories):
+
+```bash
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3-pip
+```
+
+**Ubuntu 22.04 or Debian 12:** the standard repositories do not provide Python 3.12 as the default interpreter. Install the standalone Python manager `uv`, then download Python 3.12:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.12
+```
+
+If `uv` is not found, open a new terminal.
 
 3. Download the source and create an isolated environment:
 
 ```bash
 git clone https://github.com/meicamghe/FDMX.git
 cd FDMX
+```
+
+On Ubuntu 24.04, create the environment with:
+
+```bash
 python3.12 -m venv .venv
+```
+
+On Ubuntu 22.04 or Debian 12, use:
+
+```bash
+uv venv --python 3.12 --seed .venv
+```
+
+Then activate the environment and install the application dependency:
+
+```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
