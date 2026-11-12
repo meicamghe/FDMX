@@ -4219,13 +4219,30 @@ class FDMX(QWidget):
                 pass
             self.status.setText("Update downloaded; installation postponed.")
             return
-        self.close()
-        if self.isVisible():
-            QMessageBox.information(self, "Update postponed", "Close active downloads before installing the update.")
+        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")
+        active_downloads = [
+            task.get("name", "download")
+            for task in self.tasks.values()
+            if task.get("status") in active_states
+        ]
+        if active_downloads:
+            QMessageBox.information(
+                self, "Update postponed",
+                "Pause or finish active downloads before installing the update.\\n\\n"
+                + "Active downloads: " + ", ".join(active_downloads[:5])
+            )
             try:
                 os.remove(installer_path)
             except OSError:
                 pass
+            self.status.setText("Update downloaded; installation postponed until downloads finish.")
+            return
+        if not self.close():
+            try:
+                os.remove(installer_path)
+            except OSError:
+                pass
+            self.status.setText("Update postponed because the application could not close.")
             return
         try:
             subprocess.Popen([installer_path], close_fds=True)

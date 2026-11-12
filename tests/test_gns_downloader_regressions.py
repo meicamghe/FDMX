@@ -180,6 +180,20 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
 
 
+    def test_updater_does_not_install_while_downloads_are_active(self):
+        tree = ast.parse(SOURCE)
+        methods = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+        }
+        handler = ast.get_source_segment(SOURCE, methods["on_update_downloaded"])
+        self.assertIn('active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")', handler)
+        self.assertIn('if active_downloads:', handler)
+        self.assertIn('if not self.close():', handler)
+        self.assertNotIn('self.close()\\n        if self.isVisible():', handler)
+
+
     def test_updater_distinguishes_installed_and_portable_builds(self):
         self.assertIn("def _is_installed_windows_build():", SOURCE)
         self.assertIn('os.path.commonpath([root, executable]) == root', SOURCE)
