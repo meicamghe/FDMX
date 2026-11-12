@@ -33,7 +33,7 @@ The adaptive engine keeps a stable part layout during each transfer so pause/res
 
 ## Windows downloads
 
-Release asset links for v6.40.3 (will become available after the version tag is published):
+Release assets for v6.40.3:
 
 - **[Portable ZIP — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
 - **[Setup installer — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
@@ -41,7 +41,7 @@ Release asset links for v6.40.3 (will become available after the version tag is 
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The prepared release target is [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3); the tag and public assets have not been published yet. Branch builds create CI artifacts; version-tag builds publish release assets.
+Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The [v6.40.3 release](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) contains the Windows packages and Linux DEB package. Branch builds create CI artifacts; version-tag builds publish release assets.
 
 
 
@@ -62,14 +62,46 @@ sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
 python3.12 --version
 ```
 
-If the command is missing, install Python 3.12 and its `venv` support using the package source appropriate for your Linux distribution before continuing.
+If Python 3.12 is missing, install it for your distribution:
+
+**Ubuntu 24.04 LTS** (available in the standard repositories):
+
+```bash
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3-pip
+```
+
+**Ubuntu 22.04 or Debian 12:** the standard repositories do not provide Python 3.12 as the default interpreter. Install the standalone Python manager `uv`, then download Python 3.12:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.12
+```
+
+If `uv` is not found, open a new terminal.
 
 3. Download the source and create an isolated environment:
 
 ```bash
 git clone https://github.com/meicamghe/FDMX.git
 cd FDMX
+```
+
+On Ubuntu 24.04, create the environment with:
+
+```bash
 python3.12 -m venv .venv
+```
+
+On Ubuntu 22.04 or Debian 12, use:
+
+```bash
+uv venv --python 3.12 --seed .venv
+```
+
+Then activate the environment and install the application dependency:
+
+```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials

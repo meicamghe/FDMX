@@ -32,7 +32,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-لینک‌های زیر برای انتشار آماده‌شده v6.40.3 هستند و پس از انتشار Tag نسخه فعال می‌شوند:
+فایل‌های انتشار نسخه 6.40.3 از لینک‌های زیر قابل دریافت هستند:
 
 - **[نسخه Portable ZIP — نسخه 6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
 - **[نسخه Setup — نسخه 6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
@@ -40,7 +40,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه آماده انتشار [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) است؛ Tag و فایل‌های عمومی آن هنوز منتشر نشده‌اند. ساخت روی شاخه Artifact موقت تولید می‌کند و انتشار Tag نسخه، فایل‌های Release را منتشر می‌کند.
+Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). [انتشار رسمی نسخه v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3) شامل بسته‌های ویندوز و بسته DEB لینوکس است. ساخت روی شاخه Artifact موقت تولید می‌کند و ساخت Tag نسخه، فایل‌های Release را منتشر می‌کند.
 
 
 
@@ -57,22 +57,56 @@ sudo apt update
 sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
 ```
 
-### ۲. بررسی Python
+### ۲. بررسی و نصب Python 3.12
 
-نسخه **Python 3.12** نسخه‌ای است که در CI پروژه استفاده و آزمایش می‌شود. بررسی کنید نصب باشد:
+نسخه **Python 3.12** نسخه‌ای است که در CI پروژه استفاده و آزمایش می‌شود. ابتدا بررسی کنید نصب باشد:
 
 ```bash
 python3.12 --version
 ```
 
-اگر دستور پیدا نشد، ابتدا Python 3.12 و پشتیبانی محیط مجازی `venv` را متناسب با مخزن بسته‌های توزیع لینوکس خود نصب کنید.
+اگر نصب نیست، روش متناسب با توزیع خود را اجرا کنید:
+
+**Ubuntu 24.04 LTS** (نسخه Python 3.12 در مخزن رسمی اوبونتو موجود است):
+
+```bash
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3-pip
+```
+
+**Ubuntu 22.04 یا Debian 12:** مخزن استاندارد این نسخه‌ها Python 3.12 را به‌عنوان مفسر پیش‌فرض ارائه نمی‌کند. مدیر مستقل Python با نام `uv` را نصب کنید و با آن Python 3.12 را دریافت کنید:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv python install 3.12
+```
+
+اگر دستور `uv` شناخته نشد، یک ترمینال جدید باز کنید.
 
 ### ۳. دریافت سورس و ساخت محیط مجازی
+
+ابتدا سورس را دریافت کنید:
 
 ```bash
 git clone https://github.com/meicamghe/FDMX.git
 cd FDMX
+```
+
+در Ubuntu 24.04 محیط مجازی را با دستور زیر بسازید:
+
+```bash
 python3.12 -m venv .venv
+```
+
+در Ubuntu 22.04 یا Debian 12 از دستور زیر استفاده کنید:
+
+```bash
+uv venv --python 3.12 --seed .venv
+```
+
+سپس محیط مجازی را فعال و وابستگی برنامه را نصب کنید:
+
+```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
