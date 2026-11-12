@@ -784,7 +784,7 @@ class DownloadWorker(QThread):
                 parts_count = int(manifest["count"])
                 measured_speed = float(manifest.get("measured_speed", 0.0))
             elif existing_parts:
-                # Legacy fragments used the historical eight-part map.
+                # Legacy fixed-eight fragments must keep their original byte-range map.
                 parts_count = min(CONNECTIONS, total)
                 measured_speed = 0.0
                 self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
