@@ -44,21 +44,80 @@ Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://
 
 
 
-## اجرای برنامه از سورس
+## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-Python **3.12** را نصب کنید و در پوشه پروژه اجرا کنید:
+در حال حاضر نسخه لینوکس به‌صورت اجرای مستقیم از سورس ارائه می‌شود و هنوز بسته نصب مستقل DEB، AppImage یا Flatpak منتشر نشده است. برای اجرای برنامه به Wine نیاز ندارید؛ برنامه با Python اجرا می‌شود و تم Ubuntu Yaru را به‌صورت خودکار انتخاب می‌کند.
 
-### لینوکس
+### ۱. نصب کتابخانه‌های موردنیاز سیستم
+
+در ترمینال Ubuntu یا Debian اجرا کنید:
 
 ```bash
+sudo apt update
+sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
+```
+
+### ۲. بررسی Python
+
+نسخه **Python 3.12** نسخه‌ای است که در CI پروژه استفاده و آزمایش می‌شود. بررسی کنید نصب باشد:
+
+```bash
+python3.12 --version
+```
+
+اگر دستور پیدا نشد، ابتدا Python 3.12 و پشتیبانی محیط مجازی `venv` را متناسب با مخزن بسته‌های توزیع لینوکس خود نصب کنید.
+
+### ۳. دریافت سورس و ساخت محیط مجازی
+
+```bash
+git clone https://github.com/meicamghe/FDMX.git
+cd FDMX
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
+```
+
+محیط مجازی باعث می‌شود وابستگی‌های برنامه از Python و بسته‌های سیستمی جدا بمانند.
+
+### ۴. اجرای برنامه
+
+```bash
 python ubuntu.py
 ```
 
-### ویندوز PowerShell
+همچنین می‌توانید فایل اصلی را مستقیماً اجرا کنید:
+
+```bash
+python FDMX_v6_36.py
+```
+
+برای اجرای دوباره در ترمینال جدید، وارد پوشه پروژه شوید و محیط مجازی را فعال کنید:
+
+```bash
+cd FDMX
+source .venv/bin/activate
+python ubuntu.py
+```
+
+### رفع خطاهای رایج
+
+- اگر Qt درباره افزونه `xcb` یا کتابخانه اشتراکیِ گم‌شده خطا داد، کتابخانه‌های تکمیلی زیر را نصب و برنامه را دوباره اجرا کنید:
+
+```bash
+sudo apt install -y libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+```
+
+- برنامه باید در نشست گرافیکی دسکتاپ اجرا شود؛ اجرای آن از SSH متنی و بدون نمایشگر گرافیکی معمولاً پنجره‌ای نشان نمی‌دهد.
+- برای نصب مجدد وابستگی Python، درحالی‌که محیط مجازی فعال است اجرا کنید:
+
+```bash
+python -m pip install --force-reinstall PySide6-Essentials
+```
+
+## اجرای برنامه از سورس در ویندوز
+
+Python **3.12** را نصب کنید و در PowerShell، در پوشه پروژه اجرا کنید:
 
 ```powershell
 py -3.12 -m venv .venv
