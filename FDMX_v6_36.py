@@ -3063,7 +3063,7 @@ class FDMX(QWidget):
         painter.setBrush(QColor("#ffffff"))
         painter.drawRoundedRect(8, 8, 240, 240, 44, 44)
         painter.setPen(QColor("#e2231a"))
-        painter.setFont(QFont("Arial", 184, QFont.Bold))
+        painter.setFont(QFont("DejaVu Sans", 184, QFont.Bold))
         painter.drawText(pixmap.rect().adjusted(0, -3, 0, 0), Qt.AlignCenter, "G")
         painter.end()
         return QIcon(pixmap)
@@ -4149,7 +4149,7 @@ class FDMX(QWidget):
         if progress is not None:
             progress.close()
         # Consent was requested before download; launch after verification without a second prompt.
-        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")
+        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Paused")
         active_downloads = [
             task.get("name", "download")
             for task in self.tasks.values()
@@ -4158,7 +4158,7 @@ class FDMX(QWidget):
         if active_downloads:
             QMessageBox.information(
                 self, "Update postponed",
-                "Pause or finish active downloads before installing the update.\\n\\n"
+                "Finish or cancel active downloads before installing the update.\\n\\n"
                 + "Active downloads: " + ", ".join(active_downloads[:5])
             )
             try:
