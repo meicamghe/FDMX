@@ -57,15 +57,15 @@ sudo apt update
 sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
 ```
 
-### ۲. بررسی Python
+### ۲. بررسی و نصب Python 3.12
 
-نسخه **Python 3.12** نسخه‌ای است که در CI پروژه استفاده و آزمایش می‌شود. بررسی کنید نصب باشد:
+نسخه **Python 3.12** نسخه‌ای است که در CI پروژه استفاده و آزمایش می‌شود. ابتدا بررسی کنید نصب باشد:
 
 ```bash
 python3.12 --version
 ```
 
-اگر Python 3.12 نصب نیست، روش متناسب با توزیع خود را اجرا کنید:
+اگر نصب نیست، روش متناسب با توزیع خود را اجرا کنید:
 
 **Ubuntu 24.04 LTS** (نسخه Python 3.12 در مخزن رسمی اوبونتو موجود است):
 
@@ -74,28 +74,39 @@ sudo apt update
 sudo apt install -y python3.12 python3.12-venv python3-pip
 ```
 
-**Ubuntu 22.04 یا Debian 12:** مخزن استاندارد این نسخه‌ها Python 3.12 را به‌عنوان مفسر پیش‌فرض ارائه نمی‌کند. یک روش ساده، نصب مدیر مستقل Python با نام `uv` و سپس دریافت Python 3.12 با آن است:
+**Ubuntu 22.04 یا Debian 12:** مخزن استاندارد این نسخه‌ها Python 3.12 را به‌عنوان مفسر پیش‌فرض ارائه نمی‌کند. مدیر مستقل Python با نام `uv` را نصب کنید و با آن Python 3.12 را دریافت کنید:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv python install 3.12
 ```
 
-اگر دستور `uv` شناخته نشد، یک ترمینال جدید باز کنید. سپس محیط مجازی را بسازید. در Ubuntu 24.04 می‌توانید از دستور `python3.12 -m venv .venv` استفاده کنید؛ در توزیع‌های قدیمی‌تر دستورهای زیر را اجرا کنید:
-
-```bash
-uv venv --python 3.12 --seed .venv
-source .venv/bin/activate
-```
-
-اگر از `uv` استفاده کردید، محیط مجازی از قبل ساخته و فعال شده است؛ آن را دوباره نسازید و به مرحله نصب وابستگی برنامه بروید.
+اگر دستور `uv` شناخته نشد، یک ترمینال جدید باز کنید.
 
 ### ۳. دریافت سورس و ساخت محیط مجازی
+
+ابتدا سورس را دریافت کنید:
 
 ```bash
 git clone https://github.com/meicamghe/FDMX.git
 cd FDMX
+```
+
+در Ubuntu 24.04 محیط مجازی را با دستور زیر بسازید:
+
+```bash
 python3.12 -m venv .venv
+```
+
+در Ubuntu 22.04 یا Debian 12 از دستور زیر استفاده کنید:
+
+```bash
+uv venv --python 3.12 --seed .venv
+```
+
+سپس محیط مجازی را فعال و وابستگی برنامه را نصب کنید:
+
+```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
