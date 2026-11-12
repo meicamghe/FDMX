@@ -42,7 +42,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+          sudo apt-get install -y dpkg-dev fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
 
       - name: Install Python build dependencies
         run: |
