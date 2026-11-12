@@ -8,8 +8,7 @@ on:
       - feature/fdmx-6.40-github-updater-ubuntu-theme
       - fix/http-download-compatibility
     tags:
-      - "v6.40"
-      - "v6.40.2"
+      - "v*"
     paths:
       - "FDMX_v6_36.py"
       - "ubuntu.py"
@@ -142,12 +141,11 @@ jobs:
           retention-days: 14
 
       - name: Publish permanent GitHub Release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref == 'refs/heads/main' && 'v6.40.2' || github.ref_name }}
-          target_commitish: main
-          name: GNS Downloader ${{ github.ref == 'refs/heads/main' && 'v6.40.2' || github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          name: GNS Downloader ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             dist/GNS-Downloader-Portable-Windows-x64.zip
