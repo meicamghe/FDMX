@@ -784,8 +784,8 @@ class DownloadWorker(QThread):
                 parts_count = int(manifest["count"])
                 measured_speed = float(manifest.get("measured_speed", 0.0))
             elif existing_parts:
-                # Legacy fixed-eight fragments must keep their original byte-range map.
-                parts_count = min(self.configured_part_count, total)
+                # Legacy fragments used the historical eight-part map.
+                parts_count = min(CONNECTIONS, total)
                 measured_speed = 0.0
                 self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
             else:
@@ -1271,15 +1271,15 @@ class DownloadDetailsDialog(QDialog):
             if selected_parts and measured_speed > 0:
                 self.summary_label.setText(
                     self.summary_label.text()
-                    + f"\nSmart engine: {selected_parts} parts selected from an initial speed of {format_bytes(measured_speed)}/s"
+                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
                 )
             elif selected_parts:
                 self.summary_label.setText(
                     self.summary_label.text()
-                    + f"\nSmart engine: speed sample unavailable; using {selected_parts} safe part(s)"
+                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
                 )
             elif status in ("Downloading", "Checking server", "Retrying"):
-                self.summary_label.setText(self.summary_label.text() + "\nSmart engine: measuring speed and selecting download parts…")
+                self.summary_label.setText(self.summary_label.text() + "\nFixed connection mode: waiting to start configured parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
