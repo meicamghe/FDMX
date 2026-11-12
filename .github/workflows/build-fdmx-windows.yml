@@ -18,6 +18,18 @@ on:
       - "installer/**"
       - "tests/**"
       - ".github/workflows/build-fdmx-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "FDMX_v6_36.py"
+      - "ubuntu.py"
+      - "README.md"
+      - "docs/README_FA.md"
+      - "fdmx_plugin_*.py"
+      - "installer/**"
+      - "tests/**"
+      - ".github/workflows/build-fdmx-windows.yml"
 
 permissions:
   contents: write
