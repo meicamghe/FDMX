@@ -1,4 +1,4 @@
-# GNS Downloader 6.40
+# GNS Downloader 6.40.2
 
 GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
@@ -6,7 +6,7 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 ## Current version
 
-- Application version: **6.40**
+- Application version: **6.40.2**
 - Main source: `FDMX_v6_36.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
@@ -14,7 +14,12 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## What's new in 6.40
+## What's new in 6.40.2
+
+- Version metadata is now aligned across the application, Windows installer, and release packages. This fixes the repeated-update offer that occurred when the installed app reported an older version than the release tag.
+- [Release v6.40.2](https://github.com/meicamghe/FDMX/releases/tag/v6.40.2) was published on 2026-11-11. The Windows Setup and Portable ZIP assets are available below.
+
+## Features introduced in 6.40
 
 - **Help → Check for updates** checks the latest public GitHub Release, compares versions, downloads the Windows Setup asset, validates its size and SHA-256 digest when provided by GitHub, and offers to launch the installer.
 - About dialog credits: **Created by MeysamGNS**, developed with assistance from **ChatGPT**.
@@ -28,13 +33,15 @@ The adaptive engine keeps a stable part layout during each transfer so pause/res
 
 Permanent release links (updated when a new stable release is published):
 
-- **[Portable ZIP — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Portable ZIP — v6.40.2](https://github.com/meicamghe/FDMX/releases/download/v6.40.2/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.40.2](https://github.com/meicamghe/FDMX/releases/download/v6.40.2/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-To publish a permanent release, create and push the tag **v6.40** on this feature branch after the source is ready. The tag push runs both the Windows packaging and Linux theme smoke test, then publishes the Portable ZIP and Setup as permanent GitHub Release assets. Ordinary branch builds create temporary CI artifacts only.
+Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The current stable release is [v6.40.2](https://github.com/meicamghe/FDMX/releases/tag/v6.40.2). Branch builds create CI artifacts; version-tag builds publish release assets.
+
+The next updater UX improvement (release notes and version shown before download, explicit download/install confirmations, and live download progress) is tracked in [PR #18](https://github.com/meicamghe/FDMX/pull/18). It is not included in the already-published v6.40.2 installer.
 
 ## Run from source
 

@@ -169,16 +169,23 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn("Created by MeysamGNS", SOURCE)
         self.assertIn("Developed with assistance from ChatGPT", SOURCE)
         self.assertIn("class GitHubUpdateWorker(QThread):", SOURCE)
+        self.assertIn("class GitHubUpdateDownloadWorker(QThread):", SOURCE)
+        self.assertIn("update_available = Signal(str, str, str, str, int, str)", SOURCE)
         self.assertIn("https://api.github.com/repos/meicamghe/FDMX/releases/latest", SOURCE)
-        self.assertIn('expected_digest.startswith("sha256:")', SOURCE)
+        self.assertIn('self.expected_digest.startswith("sha256:")', SOURCE)
+        self.assertIn("progress = Signal(int, int, float)", SOURCE)
+        self.assertIn("def start_update_download(self, version, asset_url, asset_size, asset_digest):", SOURCE)
+        self.assertIn("Download this update now?", SOURCE)
+        self.assertIn("The update has been downloaded and verified.", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
 
 
     def test_updater_distinguishes_installed_and_portable_builds(self):
         self.assertIn("def _is_installed_windows_build():", SOURCE)
         self.assertIn('os.path.commonpath([root, executable]) == root', SOURCE)
-        self.assertIn('if not _is_installed_windows_build():', SOURCE)
-        self.assertIn("Portable ZIP for a portable or source-based copy", SOURCE)
+        self.assertIn('if _is_installed_windows_build():', SOURCE)
+        self.assertIn("Open GitHub Releases to download the portable package?", SOURCE)
+        self.assertIn("QDesktopServices.openUrl(QUrl(release_url))", SOURCE)
 
     def test_ubuntu_yaru_theme_is_selected_only_on_linux(self):
         self.assertIn('self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")', SOURCE)

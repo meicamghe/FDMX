@@ -1,10 +1,10 @@
-# راهنمای GNS Downloader نسخه 6.40
+# راهنمای GNS Downloader نسخه 6.40.2
 
 GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python و PySide6 است.
 
 ## نسخه و محیط اجرا
 
-- **نسخه برنامه:** 6.40
+- **نسخه برنامه:** 6.40.2
 - **فایل اصلی و مرجع پروژه:** `FDMX_v6_36.py`
 - **نسخه Python:** **3.12**
 - **ویندوز:** بسته‌های اجرایی Windows 10/11 نسخه ۶۴ بیتی
@@ -12,7 +12,12 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 - **ظاهر برنامه:** در ویندوز تم Windows 11 Fluent و در لینوکس تم Ubuntu Yaru به‌صورت خودکار انتخاب می‌شود.
 - تب Theme Studio و Plugin Manager در رابط برنامه وجود ندارند.
 
-## تغییرات نسخه 6.40
+## تغییرات نسخه 6.40.2
+
+- شماره نسخه در سورس برنامه، نصب‌کننده ویندوز و بسته انتشار هماهنگ شد. این اصلاح مشکل پیشنهاد دانلود تکراری همان نسخه پس از نصب را برطرف می‌کند.
+- انتشار رسمی [نسخه 6.40.2](https://github.com/meicamghe/FDMX/releases/tag/v6.40.2) در تاریخ 2026-11-11 انجام شده و فایل‌های نصب ویندوز در ادامه لینک شده‌اند.
+
+## قابلیت‌های معرفی‌شده در نسخه 6.40
 
 - بخش **About** اکنون سازنده را با نام **MeysamGNS** معرفی می‌کند و ذکر می‌کند که توسعه با کمک **ChatGPT** انجام شده است.
 - از منوی **Help → Check for updates** می‌توان نسخه پایدار جدید را در GitHub بررسی کرد. در ویندوز، فایل Setup نسخه جدید دریافت می‌شود و پس از بررسی اندازه و در صورت وجود، SHA-256، امکان اجرای نصب‌کننده نمایش داده می‌شود.
@@ -26,13 +31,15 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 لینک‌های پایدار زیر به آخرین انتشار GitHub متصل هستند:
 
-- **[نسخه Portable ZIP — نسخه 6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.40](https://github.com/meicamghe/FDMX/releases/latest/download/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[نسخه Portable ZIP — نسخه 6.40.2](https://github.com/meicamghe/FDMX/releases/download/v6.40.2/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Setup — نسخه 6.40.2](https://github.com/meicamghe/FDMX/releases/download/v6.40.2/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-برای انتشار پایدار، پس از آماده‌شدن سورس، یک Tag با نام **v6.40** روی همین شاخه بسازید و Push کنید. با Push شدن Tag، تست تم Ubuntu و ساخت بسته‌های ویندوز اجرا می‌شوند و در پایان Portable ZIP و Setup به‌صورت Release دائمی منتشر می‌شوند. اجرای عادی روی شاخه فقط Artifact موقت می‌سازد.
+Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه پایدار فعلی [v6.40.2](https://github.com/meicamghe/FDMX/releases/tag/v6.40.2) است. ساخت روی شاخه Artifact موقت تولید می‌کند و انتشار Tag نسخه، فایل‌های Release را منتشر می‌کند.
+
+بهبود بعدی رابط آپدیتر شامل نمایش توضیحات نسخه پیش از دانلود، تأیید جداگانه دانلود و نصب و نمایش درصد/سرعت دانلود در [PR شماره ۱۸](https://github.com/meicamghe/FDMX/pull/18) در حال بررسی است و هنوز داخل نصب‌کننده منتشرشده 6.40.2 قرار ندارد.
 
 ## اجرای برنامه از سورس
 
