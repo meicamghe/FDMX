@@ -45,25 +45,61 @@ Release workflow: [Build GNS Downloader Windows packages](https://github.com/mei
 
 
 
-## Run from source
+## Linux installation (Ubuntu and Debian)
 
-Install **Python 3.12** and the application dependency:
+Linux currently runs the application from source; a native DEB, AppImage, or Flatpak package is not published yet. You do **not** need Wine. The Linux launcher starts the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+
+1. Install the Qt runtime libraries (Ubuntu/Debian):
 
 ```bash
+sudo apt update
+sudo apt install -y git libegl1 libgl1 libxkbcommon0 libdbus-1-3
+```
+
+2. Make sure **Python 3.12** is installed. This is the Python version used by the project CI. Check it with:
+
+```bash
+python3.12 --version
+```
+
+If the command is missing, install Python 3.12 and its `venv` support using the package source appropriate for your Linux distribution before continuing.
+
+3. Download the source and create an isolated environment:
+
+```bash
+git clone https://github.com/meicamghe/FDMX.git
+cd FDMX
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
-python FDMX_v6_36.py
 ```
 
-On Linux, the compatibility launcher is also available:
+4. Start the application:
 
 ```bash
 python ubuntu.py
 ```
 
-On Windows PowerShell:
+You can also launch the maintained source directly with `python FDMX_v6_36.py`. Run these commands from the project directory and activate `.venv` again after opening a new terminal:
+
+```bash
+cd FDMX
+source .venv/bin/activate
+python ubuntu.py
+```
+
+**Troubleshooting:** If Qt reports that the `xcb` platform plugin or a shared library is missing, install the additional Ubuntu/Debian Qt XCB libraries and retry:
+
+```bash
+sudo apt install -y libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+```
+
+If the window does not appear, make sure you are running inside a graphical desktop session (not a text-only SSH session). For a clean reinstall of Python dependencies, run `python -m pip install --force-reinstall PySide6-Essentials` while the virtual environment is active.
+
+## Run from source on Windows
+
+Install **Python 3.12** and the application dependency:
 
 ```powershell
 py -3.12 -m venv .venv
