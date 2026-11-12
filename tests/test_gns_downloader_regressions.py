@@ -175,8 +175,8 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('self.expected_digest.startswith("sha256:")', SOURCE)
         self.assertIn("progress = Signal(int, int, float)", SOURCE)
         self.assertIn("def start_update_download(self, version, asset_url, asset_size, asset_digest):", SOURCE)
-        self.assertIn("Download this update now?", SOURCE)
-        self.assertIn("The update has been downloaded and verified.", SOURCE)
+        self.assertIn("Download and install this update now?", SOURCE)
+        self.assertIn("Consent was requested before download", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
 
 
@@ -233,6 +233,25 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_paused_tasks_do_not_trigger_recovery_prompt_every_launch(self):
         self.assertIn('interrupted_states = ("Downloading", "Checking server", "Retrying", "Seeding")', SOURCE)
+
+    def test_download_parts_are_fixed_and_user_configurable(self):
+        self.assertIn("MAX_PARTS = 16", SOURCE)
+        self.assertIn('self.parts_count.setRange(1, MAX_PARTS)', SOURCE)
+        self.assertIn('self.parts_count.setValue(CONNECTIONS)', SOURCE)
+        self.assertIn('"parts_count", self.parts_count.value()', SOURCE)
+        self.assertIn('self.parts_count.value())', SOURCE)
+        self.assertIn('parts_count = min(self.configured_part_count, total)', SOURCE)
+        self.assertNotIn('parts_count = self._choose_part_count(total, measured_speed)', SOURCE)
+
+    def test_updater_uses_one_pre_download_confirmation(self):
+        tree = ast.parse(SOURCE)
+        methods = {
+            node.name: node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+        }
+        handler = ast.get_source_segment(SOURCE, methods["on_update_downloaded"])
+        self.assertNotIn("QMessageBox.question", handler)
+        self.assertIn("Consent was requested before download", handler)
 
 
 if __name__ == "__main__":
