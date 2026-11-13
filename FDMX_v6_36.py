@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.41"
+APP_VERSION = "6.42"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -2913,9 +2913,9 @@ class GitHubUpdateWorker(QThread):
                     "Highlights:\n"
                     "- Configurable download parts (1–16 connections).\n"
                     "- Safer resume behavior for interrupted multi-part downloads.\n"
-                    "- Improved update installation and verification flow.\n"
-                    "- Linux package and application icon consistency updates.\n"
-                    "- Windows and Linux build and packaging improvements."
+                    "- Fixed release-note line breaks and added a useful fallback when release notes are empty.\n"
+                    "- Fixed the Windows installer icon path.\n"
+                    "- Includes the 6.41 download engine and resume improvements."
                 )
             asset_url = ""
             asset_size = 0

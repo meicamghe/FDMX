@@ -94,7 +94,7 @@ jobs:
           EOF
           cat > "$ROOT/DEBIAN/control" <<'EOF'
           Package: gns-downloader
-          Version: 6.41
+          Version: 6.42
           Section: net
           Priority: optional
           Architecture: amd64
@@ -103,21 +103,21 @@ jobs:
           Description: GNS Downloader
            Multi-connection graphical download manager.
           EOF
-          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.41-amd64.deb"
-          dpkg-deb --info "dist/GNS-Downloader-6.41-amd64.deb"
-          dpkg-deb --contents "dist/GNS-Downloader-6.41-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
+          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.42-amd64.deb"
+          dpkg-deb --info "dist/GNS-Downloader-6.42-amd64.deb"
+          dpkg-deb --contents "dist/GNS-Downloader-6.42-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
 
       - name: Install package and smoke-test launcher
         run: |
-          sudo apt-get install -y ./dist/GNS-Downloader-6.41-amd64.deb
+          sudo apt-get install -y ./dist/GNS-Downloader-6.42-amd64.deb
           test -x /usr/bin/gns-downloader
           QT_QPA_PLATFORM=offscreen timeout 8s gns-downloader || test "$?" -eq 124
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Linux-DEB-v6.41
-          path: dist/GNS-Downloader-6.41-amd64.deb
+          name: GNS-Downloader-Linux-DEB-v6.42
+          path: dist/GNS-Downloader-6.42-amd64.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -126,5 +126,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          files: dist/GNS-Downloader-6.41-amd64.deb
+          files: dist/GNS-Downloader-6.42-amd64.deb
           fail_on_unmatched_files: true
