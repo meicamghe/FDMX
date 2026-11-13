@@ -42,7 +42,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 لینک‌های فایل‌های نسخه 6.42 پس از انتشار Tag نسخه فعال می‌شوند:
 
 - **[نسخه Portable ZIP — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[نسخه Setup — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
@@ -68,8 +68,8 @@ dpkg --print-architecture
 دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.41-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.41-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.42-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.42-amd64.deb
 ```
 
 پس از نصب، برنامه را از منوی برنامه‌های دسکتاپ اجرا کنید یا در ترمینال دستور `gns-downloader` را بزنید. بسته روی Ubuntu 22.04 با معماری AMD64 ساخته و تست نصب و اجرا شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند.
