@@ -1,16 +1,22 @@
-# راهنمای GNS Downloader نسخه 6.41
+# راهنمای GNS Downloader نسخه 6.42
 
 GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python و PySide6 است.
 
 ## نسخه و محیط اجرا
 
-- **نسخه برنامه:** 6.41
+- **نسخه برنامه:** 6.42
 - **فایل اصلی و مرجع پروژه:** `FDMX_v6_36.py`
 - **نسخه Python:** **3.12**
 - **ویندوز:** بسته‌های اجرایی Windows 10/11 نسخه ۶۴ بیتی
 - **لینوکس:** اجرای سورس فعلی با دستور `python ubuntu.py` یا `python FDMX_v6_36.py`
 - **ظاهر برنامه:** در ویندوز تم Windows 11 Fluent و در لینوکس تم Ubuntu Yaru به‌صورت خودکار انتخاب می‌شود.
 - تب Theme Studio و Plugin Manager در رابط برنامه وجود ندارند.
+
+## تغییرات نسخه 6.42
+
+- نمایش شکست خط توضیحات انتشار در آپدیتر اصلاح شد؛ اگر توضیحات خالی باشد، متن جایگزین کاربردی نمایش داده می‌شود.
+- مسیر آیکون نصب‌کننده ویندوز اصلاح شد تا فایل آیکون تولیدشده هنگام ساخت Setup به‌درستی پیدا شود.
+- بهبودهای موتور دانلود نسخه 6.41، تنظیم تعداد پارت‌ها و حفظ اطلاعات Resume در این نسخه نیز حفظ شده‌اند.
 
 ## تغییرات نسخه 6.41
 
@@ -33,15 +39,15 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-لینک‌های فایل‌های نسخه 6.41 پس از انتشار Tag نسخه فعال می‌شوند:
+لینک‌های فایل‌های نسخه 6.42 پس از انتشار Tag نسخه فعال می‌شوند:
 
-- **[نسخه Portable ZIP — نسخه 6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Portable ZIP — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
 - **[نسخه Setup — نسخه 6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه آماده انتشار [v6.41](https://github.com/meicamghe/FDMX/releases/tag/v6.41) است. با انتشار Tag این نسخه، Workflow انتشار اجرا شده و بسته‌های ویندوز و لینوکس را می‌سازد و به Release پیوست می‌کند. ساخت روی شاخه فقط Artifact موقت تولید می‌کند.
+Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه آماده انتشار [v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42) است. با انتشار Tag این نسخه، Workflow انتشار اجرا شده و بسته‌های ویندوز و لینوکس را می‌سازد و به Release پیوست می‌کند. ساخت روی شاخه فقط Artifact موقت تولید می‌کند.
 
 
 
@@ -51,7 +57,7 @@ Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://
 
 ### نصب سریع: بسته آماده لینوکس
 
-نسخه 6.41 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
+نسخه 6.42 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
 
 معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
 
@@ -62,7 +68,7 @@ dpkg --print-architecture
 دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-6.41-amd64.deb" -o /tmp/GNS-Downloader-6.41-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.41-amd64.deb
 sudo apt install /tmp/GNS-Downloader-6.41-amd64.deb
 ```
 
