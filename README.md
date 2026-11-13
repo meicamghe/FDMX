@@ -1,4 +1,4 @@
-# GNS Downloader 6.40.3
+# GNS Downloader 6.41
 
 GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
@@ -6,7 +6,7 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 ## Current version
 
-- Application version: **6.40.3**
+- Application version: **6.41**
 - Main source: `FDMX_v6_36.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
@@ -14,44 +14,45 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## What's new in 6.40.3
+## What's new in 6.41
 
-- The updater now displays the target version and GitHub release notes before downloading, asks for confirmation, and shows live download progress with cancellation.
-- Downloaded Setup files are checked against the release asset size and SHA-256 digest when provided. A separate confirmation is required before launching the installer.
-- Update installation is blocked while downloads are active, and is postponed if the application cannot close safely.
+- New downloads use a fixed **8-part** layout by default; the setting allows **1–16 parts** per file. Adaptive speed probing and automatic part selection have been removed.
+- Existing partial downloads keep their saved byte-range layout, so changing the setting does not corrupt resume data.
+- The updater shows the target version and release notes and asks once before downloading. After download and integrity verification, installation starts without a second confirmation.
+- The Linux application icon and the in-app icon now share the white tile and red G branding.
 - CI branch builds create temporary artifacts; permanent GitHub Releases are published only from version tags.
 
-## Features introduced in 6.40
+## Features introduced in 6.40 (historical)
 
 - **Help → Check for updates** checks the latest public GitHub Release, compares versions, downloads the Windows Setup asset, validates its size and SHA-256 digest when provided by GitHub, and offers to launch the installer.
 - About dialog credits: **Created by MeysamGNS**, developed with assistance from **ChatGPT**.
 - Ubuntu Yaru appearance automatically selected on Linux while preserving Windows 11 Fluent on Windows.
-- Adaptive download engine measures initial throughput, selects a safe number of parts, persists byte-range maps for resume, and falls back to one stream when HTTP Range is unavailable.
+- The earlier adaptive download engine has been replaced in 6.41 by predictable, user-configurable fixed part counts.
 - Per-download details switch to **Open** and **Close** after successful completion.
 
-The adaptive engine keeps a stable part layout during each transfer so pause/resume does not mix byte ranges. It does not dynamically repartition a running download.
+The download engine preserves each task's original byte-range map across pause/resume.
 
 ## Windows downloads
 
-Release asset links for v6.40.3 (available after the version tag is published):
+Release asset links for v6.41 (available after the version tag is published):
 
-- **[Portable ZIP — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.40.3](https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Portable ZIP — v6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The prepared release target is [v6.40.3](https://github.com/meicamghe/FDMX/releases/tag/v6.40.3). Publishing the version tag triggers the release workflow, which builds and attaches the Windows and Linux packages. Branch builds create CI artifacts only.
+Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The prepared release target is [v6.41](https://github.com/meicamghe/FDMX/releases/tag/v6.41). Publishing the version tag triggers the release workflow, which builds and attaches the Windows and Linux packages. Branch builds create CI artifacts only.
 
 
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** is now built by the Linux GitHub Actions workflow for version 6.40.3. The package is generated as a CI artifact on pull requests and branch builds; it is attached to the public GitHub Release when the matching version tag is published. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** is now built by the Linux GitHub Actions workflow for version 6.41. The package is generated as a CI artifact on pull requests and branch builds; it is attached to the public GitHub Release when the matching version tag is published. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
-The v6.40.3 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
+The v6.41 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
 
 Check the system architecture (it should print `amd64`):
 
@@ -62,8 +63,8 @@ dpkg --print-architecture
 Download and install the package (APT will resolve its declared system dependencies):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.40.3/GNS-Downloader-6.40.3-amd64.deb" -o /tmp/GNS-Downloader-6.40.3-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.40.3-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-6.41-amd64.deb" -o /tmp/GNS-Downloader-6.41-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.41-amd64.deb
 ```
 
 Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
