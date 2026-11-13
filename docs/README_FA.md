@@ -39,21 +39,22 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-لینک‌های فایل‌های نسخه 6.42 پس از انتشار Tag نسخه فعال می‌شوند:
+انتشار رسمی نسخه 6.42 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
 
 - **[نسخه Portable ZIP — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
 - **[نسخه Setup — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[بسته لینوکس Ubuntu/Debian — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb)** — مخصوص AMD64.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). نسخه آماده انتشار [v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42) است. با انتشار Tag این نسخه، Workflow انتشار اجرا شده و بسته‌های ویندوز و لینوکس را می‌سازد و به Release پیوست می‌کند. ساخت روی شاخه فقط Artifact موقت تولید می‌کند.
+Workflow ساخت ویندوز: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). انتشار رسمی [GNS Downloader v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42) انجام شده و بسته‌های ویندوز و لینوکس در دسترس هستند. ساخت روی شاخه فقط Artifact موقت تولید می‌کند.
 
 
 
 ## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-برای لینوکس، ساخت بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** به Workflow پروژه اضافه شده است. در Pull Request و ساخت‌های شاخه، فایل DEB به‌صورت Artifact آزمایشی تولید می‌شود و پس از انتشار Tag نسخه، به Release عمومی همان نسخه پیوست خواهد شد. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
+بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.42 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
 ### نصب سریع: بسته آماده لینوکس
 
