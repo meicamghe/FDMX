@@ -1,4 +1,5 @@
 name: Attach GNS Downloader 6.41 release assets
+# This workflow is intentionally updated through a PR merge to trigger GitHub Actions.
 
 on:
   push:
