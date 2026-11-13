@@ -2,9 +2,10 @@
 #define AppName "GNS Downloader"
 #define AppVersion "6.41"
 #define AppPublisher "MeysamGNS"
+#define AppIconFile AddBackslash(SourcePath) + "gns-downloader.ico"
 
 [Setup]
-SetupIconFile=gns-downloader.ico
+SetupIconFile={#AppIconFile}
 AppId={{7E58A21D-6D3D-4F12-9C73-2C16A5F03636}
 AppName={#AppName}
 AppVersion={#AppVersion}

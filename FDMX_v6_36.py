@@ -2900,6 +2900,23 @@ class GitHubUpdateWorker(QThread):
 
             release_url = release.get("html_url") or "https://github.com/meicamghe/FDMX/releases/latest"
             notes = str(release.get("body") or "").strip()
+            if notes:
+                # GitHub release bodies may contain literal escaped newlines.
+                notes = (
+                    notes.replace("\\r\\n", "\n")
+                    .replace("\\n", "\n")
+                    .replace("\\r", "\n")
+                )
+            else:
+                # Keep the in-app updater useful even when a release has no body.
+                notes = (
+                    "Highlights:\n"
+                    "- Configurable download parts (1–16 connections).\n"
+                    "- Safer resume behavior for interrupted multi-part downloads.\n"
+                    "- Improved update installation and verification flow.\n"
+                    "- Linux package and application icon consistency updates.\n"
+                    "- Windows and Linux build and packaging improvements."
+                )
             asset_url = ""
             asset_size = 0
             asset_digest = ""
