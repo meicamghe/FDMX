@@ -19,7 +19,7 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_product_brand_and_version(self):
         self.assertIn('APP_NAME = "GNS Downloader"', SOURCE)
-        self.assertIn('APP_VERSION = "6.40.3"', SOURCE)
+        self.assertIn('APP_VERSION = "6.41"', SOURCE)
 
     def test_theme_studio_and_plugin_manager_are_removed(self):
         self.assertNotIn("Theme Studio", SOURCE)
@@ -48,14 +48,16 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('self.post_action_enabled.setEnabled(not completed)', SOURCE)
         self.assertIn('QDesktopServices.openUrl(QUrl.fromLocalFile', SOURCE)
 
-    def test_adaptive_speed_probe_selects_and_persists_safe_part_layout(self):
-        self.assertIn('def _measure_initial_speed(self, temp_folder, total):', SOURCE)
-        self.assertIn('def _choose_part_count(self, total, measured_speed):', SOURCE)
-        self.assertIn('self.parts_configured.emit(parts_count, measured_speed)', SOURCE)
+    def test_adaptive_engine_is_removed_and_parts_are_user_configured(self):
+        self.assertNotIn("_measure_initial_speed", SOURCE)
+        self.assertNotIn("_choose_part_count", SOURCE)
+        self.assertNotIn("measured_speed", SOURCE)
+        self.assertIn("self.configured_part_count", SOURCE)
+        self.assertIn("parts_count = min(self.configured_part_count, total)", SOURCE)
+        self.assertIn("parts_configured = Signal(int)", SOURCE)
         self.assertIn('"parts.json"', SOURCE)
         self.assertIn('candidate_count = int(candidate.get("count", 0))', SOURCE)
-        self.assertIn('Legacy fixed-eight fragments must keep their original byte-range map.', SOURCE)
-        self.assertIn('"parts_count", "measured_speed"', SOURCE)
+        self.assertIn('"parts_count"', SOURCE)
 
     def test_https_uses_verified_certifi_ca_bundle(self):
         self.assertIn("import certifi", SOURCE)
@@ -147,27 +149,11 @@ class AppRegressionTests(unittest.TestCase):
         )
         self.assertEqual(worker.requests, [(0, 0), (None, None)])
 
-    def test_adaptive_part_count_thresholds(self):
-        tree = ast.parse(SOURCE)
-        method = next(
-            node for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == "_choose_part_count"
-        )
-        namespace = {"CONNECTIONS": 8}
-        exec(compile(ast.Module(body=[method], type_ignores=[]), "<adaptive>", "exec"), namespace)
-        Worker = type("Worker", (), {"_choose_part_count": namespace["_choose_part_count"]})
-        worker = Worker()
-        mib = 1024 * 1024
-        self.assertEqual(worker._choose_part_count(1 * mib, 8 * mib), 1)
-        self.assertEqual(worker._choose_part_count(20 * mib, 128 * 1024), 1)
-        self.assertEqual(worker._choose_part_count(20 * mib, 512 * 1024), 2)
-        self.assertEqual(worker._choose_part_count(20 * mib, 2 * mib), 4)
-        self.assertEqual(worker._choose_part_count(20 * mib, 8 * mib), 8)
-
-
     def test_about_credits_and_github_updater(self):
         self.assertIn("Created by MeysamGNS", SOURCE)
         self.assertIn("Developed with assistance from ChatGPT", SOURCE)
+        self.assertIn("configurable multi-part downloads (up to 16 connections)", SOURCE)
+        self.assertNotIn("adaptive download manager", SOURCE)
         self.assertIn("class GitHubUpdateWorker(QThread):", SOURCE)
         self.assertIn("class GitHubUpdateDownloadWorker(QThread):", SOURCE)
         self.assertIn("update_available = Signal(str, str, str, str, int, str)", SOURCE)
@@ -175,8 +161,8 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('self.expected_digest.startswith("sha256:")', SOURCE)
         self.assertIn("progress = Signal(int, int, float)", SOURCE)
         self.assertIn("def start_update_download(self, version, asset_url, asset_size, asset_digest):", SOURCE)
-        self.assertIn("Download this update now?", SOURCE)
-        self.assertIn("The update has been downloaded and verified.", SOURCE)
+        self.assertIn("Download and install this update now?", SOURCE)
+        self.assertIn("Consent was requested before download", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
 
 
@@ -188,7 +174,7 @@ class AppRegressionTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
         }
         handler = ast.get_source_segment(SOURCE, methods["on_update_downloaded"])
-        self.assertIn('active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")', handler)
+        self.assertIn('active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Paused")', handler)
         self.assertIn('if active_downloads:', handler)
         self.assertIn('if not self.close():', handler)
         self.assertNotIn('self.close()\\n        if self.isVisible():', handler)
@@ -200,6 +186,10 @@ class AppRegressionTests(unittest.TestCase):
         self.assertIn('if _is_installed_windows_build():', SOURCE)
         self.assertIn("Open GitHub Releases to download the portable package?", SOURCE)
         self.assertIn("QDesktopServices.openUrl(QUrl(release_url))", SOURCE)
+
+    def test_linux_app_icon_uses_same_font_family_as_package_icon(self):
+        self.assertIn('QFont("DejaVu Sans", 184, QFont.Bold)', SOURCE)
+        self.assertNotIn('QFont("Arial", 184, QFont.Bold)', SOURCE)
 
     def test_ubuntu_yaru_theme_is_selected_only_on_linux(self):
         self.assertIn('self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")', SOURCE)
@@ -233,6 +223,25 @@ class AppRegressionTests(unittest.TestCase):
 
     def test_paused_tasks_do_not_trigger_recovery_prompt_every_launch(self):
         self.assertIn('interrupted_states = ("Downloading", "Checking server", "Retrying", "Seeding")', SOURCE)
+
+    def test_download_parts_are_fixed_and_user_configurable(self):
+        self.assertIn("MAX_PARTS = 16", SOURCE)
+        self.assertIn('self.parts_count.setRange(1, MAX_PARTS)', SOURCE)
+        self.assertIn('self.parts_count.setValue(CONNECTIONS)', SOURCE)
+        self.assertIn('"parts_count", self.parts_count.value()', SOURCE)
+        self.assertIn('self.parts_count.value())', SOURCE)
+        self.assertIn('parts_count = min(self.configured_part_count, total)', SOURCE)
+        self.assertNotIn("_choose_part_count", SOURCE)
+
+    def test_updater_uses_one_pre_download_confirmation(self):
+        tree = ast.parse(SOURCE)
+        methods = {
+            node.name: node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+        }
+        handler = ast.get_source_segment(SOURCE, methods["on_update_downloaded"])
+        self.assertNotIn("QMessageBox.question", handler)
+        self.assertIn("Consent was requested before download", handler)
 
 
 if __name__ == "__main__":

@@ -42,8 +42,9 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.40.3"
+APP_VERSION = "6.41"
 CONNECTIONS = 8
+MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
 
@@ -287,13 +288,13 @@ class RangeNotSupportedError(RuntimeError):
 
 class DownloadWorker(QThread):
     progress = Signal(int, int, float, float)
-    parts_configured = Signal(int, float)
+    parts_configured = Signal(int)
     completed = Signal(str)
     failed = Signal(str)
     canceled = Signal()
     state = Signal(str)
 
-    def __init__(self, task_id, url, folder, speed_limit_kbps=0):
+    def __init__(self, task_id, url, folder, speed_limit_kbps=0, parts_count=CONNECTIONS):
         super().__init__()
         self.task_id = task_id
         self.url = url
@@ -316,7 +317,7 @@ class DownloadWorker(QThread):
         self.destination_path = None
         self.temp_path = None
         self.part_count = CONNECTIONS
-        self.measured_speed = 0.0
+        self.configured_part_count = max(1, min(MAX_PARTS, int(parts_count or CONNECTIONS)))
 
     def _interrupt_active_sockets(self):
         with self._socket_lock:
@@ -677,73 +678,17 @@ class DownloadWorker(QThread):
             finally:
                 self.unregister_socket(sock)
 
-    def _write_parts_manifest(self, temp_folder, total, count, measured_speed):
+    def _write_parts_manifest(self, temp_folder, total, count):
         manifest_path = os.path.join(temp_folder, "parts.json")
         temp_path = manifest_path + ".tmp"
         with open(temp_path, "w", encoding="utf-8") as file:
             json.dump({
                 "total": int(total), "count": int(count),
-                "measured_speed": float(measured_speed), "version": 1
+                "version": 1
             }, file)
             file.flush()
             os.fsync(file.fileno())
         os.replace(temp_path, manifest_path)
-
-    def _measure_initial_speed(self, temp_folder, total):
-        """Measure a real initial byte range and retain it as the beginning of part 1."""
-        sample_size = min(512 * 1024, max(1, total // CONNECTIONS), total)
-        sample_path = os.path.join(temp_folder, "part_00.tmp")
-        request = urllib.request.Request(
-            self.url, headers=self.request_headers(0, sample_size - 1)
-        )
-        sock = None
-        started = time.monotonic()
-        received = 0
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                if response.status != 206:
-                    raise RuntimeError("Server stopped supporting HTTP Range during speed check")
-                content_range = response.headers.get("Content-Range", "")
-                if not content_range.startswith(f"bytes 0-{sample_size - 1}/"):
-                    raise RuntimeError("Invalid Content-Range during speed check")
-                sock = self.get_response_socket(response)
-                self.register_socket(sock)
-                with open(sample_path, "wb") as output:
-                    while received < sample_size:
-                        self.wait_if_paused()
-                        chunk = self.read_chunk(response)
-                        self.wait_if_paused()
-                        if not chunk:
-                            break
-                        chunk = chunk[:sample_size - received]
-                        self.limiter.acquire(len(chunk), self)
-                        self.wait_if_paused()
-                        output.write(chunk)
-                        received += len(chunk)
-                        self.update_progress(len(chunk))
-                    output.flush()
-                    os.fsync(output.fileno())
-        except InterruptedError:
-            raise
-        except Exception:
-            # The speed probe is advisory; keep the download working with one safe range.
-            return 0.0
-        finally:
-            self.unregister_socket(sock)
-        if received != sample_size:
-            return 0.0
-        elapsed = max(0.05, time.monotonic() - started)
-        return received / elapsed
-
-    def _choose_part_count(self, total, measured_speed):
-        """Select parallelism conservatively from file size and measured throughput."""
-        if total < 2 * 1024 * 1024 or measured_speed < 256 * 1024:
-            return 1
-        if measured_speed < 1024 * 1024:
-            return min(2, total)
-        if measured_speed < 4 * 1024 * 1024:
-            return min(4, total)
-        return min(CONNECTIONS, total)
 
     def download_multi(self, destination, total):
         self.reset_progress(total)
@@ -754,7 +699,7 @@ class DownloadWorker(QThread):
                 with open(manifest_path, "r", encoding="utf-8") as file:
                     candidate = json.load(file)
                 candidate_count = int(candidate.get("count", 0))
-                if int(candidate.get("total", 0)) == total and 1 <= candidate_count <= min(CONNECTIONS, total):
+                if int(candidate.get("total", 0)) == total and 1 <= candidate_count <= min(MAX_PARTS, total):
                     manifest = candidate
             except (OSError, ValueError, TypeError, AttributeError):
                 manifest = None
@@ -775,25 +720,22 @@ class DownloadWorker(QThread):
 
             existing_parts = any(
                 os.path.isfile(os.path.join(temp_folder, f"part_{index:02d}.tmp"))
-                for index in range(CONNECTIONS)
+                for index in range(MAX_PARTS)
             )
             if manifest:
                 # Keep the original partition map so resume never mixes byte ranges.
                 parts_count = int(manifest["count"])
-                measured_speed = float(manifest.get("measured_speed", 0.0))
             elif existing_parts:
                 # Legacy fixed-eight fragments must keep their original byte-range map.
                 parts_count = min(CONNECTIONS, total)
-                measured_speed = 0.0
-                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+                self._write_parts_manifest(temp_folder, total, parts_count)
             else:
-                measured_speed = self._measure_initial_speed(temp_folder, total)
-                parts_count = self._choose_part_count(total, measured_speed)
-                self._write_parts_manifest(temp_folder, total, parts_count, measured_speed)
+                # New downloads always use the configured fixed connection count.
+                parts_count = min(self.configured_part_count, total)
+                self._write_parts_manifest(temp_folder, total, parts_count)
 
             self.part_count = parts_count
-            self.measured_speed = measured_speed
-            self.parts_configured.emit(parts_count, measured_speed)
+            self.parts_configured.emit(parts_count)
             ranges = []
             for index in range(parts_count):
                 start = (total * index) // parts_count
@@ -1263,19 +1205,13 @@ class DownloadDetailsDialog(QDialog):
             self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
         elif task.get("kind") != "torrent":
             selected_parts = int(task.get("parts_count") or 0)
-            measured_speed = float(task.get("measured_speed") or 0.0)
-            if selected_parts and measured_speed > 0:
+            if selected_parts:
                 self.summary_label.setText(
                     self.summary_label.text()
-                    + f"\nSmart engine: {selected_parts} parts selected from an initial speed of {format_bytes(measured_speed)}/s"
-                )
-            elif selected_parts:
-                self.summary_label.setText(
-                    self.summary_label.text()
-                    + f"\nSmart engine: speed sample unavailable; using {selected_parts} safe part(s)"
+                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
                 )
             elif status in ("Downloading", "Checking server", "Retrying"):
-                self.summary_label.setText(self.summary_label.text() + "\nSmart engine: measuring speed and selecting download parts…")
+                self.summary_label.setText(self.summary_label.text() + "\nFixed connection mode: waiting to start configured parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
@@ -3107,7 +3043,7 @@ class FDMX(QWidget):
             os.makedirs(folder, exist_ok=True)
             elapsed = time.perf_counter() - getattr(self, "_startup_started", _MODULE_STARTED_AT)
             with open(os.path.join(folder, "startup.log"), "a", encoding="utf-8") as log:
-                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\\n")
+                log.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} | {elapsed:.3f}s | {stage}\n")
         except OSError:
             pass
 
@@ -3127,7 +3063,7 @@ class FDMX(QWidget):
         painter.setBrush(QColor("#ffffff"))
         painter.drawRoundedRect(8, 8, 240, 240, 44, 44)
         painter.setPen(QColor("#e2231a"))
-        painter.setFont(QFont("Arial", 184, QFont.Bold))
+        painter.setFont(QFont("DejaVu Sans", 184, QFont.Bold))
         painter.drawText(pixmap.rect().adjusted(0, -3, 0, 0), Qt.AlignCenter, "G")
         painter.end()
         return QIcon(pixmap)
@@ -3274,23 +3210,29 @@ class FDMX(QWidget):
         self.max_downloads.setRange(1, 16)
         self.max_downloads.setValue(8)
         settings_grid.addWidget(self.max_downloads, 0, 1)
-        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 1, 0)
+        settings_grid.addWidget(QLabel("Download parts per file (1–16):"), 1, 0)
+        self.parts_count = QSpinBox()
+        self.parts_count.setRange(1, MAX_PARTS)
+        self.parts_count.setValue(CONNECTIONS)
+        self.parts_count.setToolTip("Fixed number of parallel connections for each file; default is 8.")
+        settings_grid.addWidget(self.parts_count, 1, 1)
+        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 2, 0)
         self.speed_limit = QSpinBox()
         self.speed_limit.setRange(0, 10_000_000)
         self.speed_limit.setValue(0)
-        settings_grid.addWidget(self.speed_limit, 1, 1)
-        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 2, 0)
+        settings_grid.addWidget(self.speed_limit, 2, 1)
+        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 3, 0)
         self.torrent_upload_limit = QSpinBox()
         self.torrent_upload_limit.setRange(0, 10_000_000)
         self.torrent_upload_limit.setValue(1)
         self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
         self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
-        settings_grid.addWidget(self.torrent_upload_limit, 2, 1)
+        settings_grid.addWidget(self.torrent_upload_limit, 3, 1)
         self.proxy_enabled = QCheckBox("Use HTTP/HTTPS proxy")
-        settings_grid.addWidget(self.proxy_enabled, 3, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_enabled, 4, 0, 1, 2)
         self.proxy_url = QLineEdit()
         self.proxy_url.setPlaceholderText("http://127.0.0.1:8080")
-        settings_grid.addWidget(self.proxy_url, 4, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_url, 5, 0, 1, 2)
         settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
@@ -4100,10 +4042,10 @@ class FDMX(QWidget):
     def show_about(self):
         QMessageBox.about(
             self, f"About {APP_NAME}",
-            f"{APP_NAME} {APP_VERSION}\\n\\n"
-            "Created by MeysamGNS\\n"
-            "Developed with assistance from ChatGPT\\n\\n"
-            "A lightweight, adaptive download manager."
+            f"{APP_NAME} {APP_VERSION}\n\n"
+            "Created by MeysamGNS\n"
+            "Developed with assistance from ChatGPT\n\n"
+            "A lightweight download manager with configurable multi-part downloads (up to 16 connections), pause and resume, speed limits, and download queue management."
         )
 
     def check_for_updates(self):
@@ -4127,18 +4069,18 @@ class FDMX(QWidget):
 
     def on_update_check_failed(self, message):
         self.status.setText("GitHub update check failed.")
-        QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\\n{message}")
+        QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\n{message}")
 
     def on_update_available(self, version, notes, release_url, asset_url, asset_size, asset_digest):
         summary = (
-            f"GNS Downloader {version} is available.\\n"
-            f"Current version: {APP_VERSION}\\n\\n"
-            "Release notes:\\n"
+            f"GNS Downloader {version} is available.\n"
+            f"Current version: {APP_VERSION}\n\n"
+            "Release notes:\n"
             + (notes[:12000] if notes else "No release notes were provided.")
         )
         if not asset_url:
             answer = QMessageBox.question(
-                self, "Update available", summary + "\\n\\nOpen GitHub Releases to download the portable package?",
+                self, "Update available", summary + "\n\nOpen GitHub Releases to download the portable package?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
             )
             if answer == QMessageBox.Yes:
@@ -4146,7 +4088,7 @@ class FDMX(QWidget):
             return
 
         answer = QMessageBox.question(
-            self, "Update available", summary + "\\n\\nDownload this update now?",
+            self, "Update available", summary + "\n\nDownload and install this update now? The application will close automatically after verification.",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
         )
         if answer != QMessageBox.Yes:
@@ -4183,11 +4125,11 @@ class FDMX(QWidget):
             progress.setValue(percent)
             progress.setLabelText(
                 f"Downloaded {format_bytes(downloaded)} of {format_bytes(total)} "
-                f"({percent}%)\\nSpeed: {format_bytes(speed)}/s"
+                f"({percent}%)\nSpeed: {format_bytes(speed)}/s"
             )
         else:
             progress.setRange(0, 0)
-            progress.setLabelText(f"Downloaded {format_bytes(downloaded)}\\nSpeed: {format_bytes(speed)}/s")
+            progress.setLabelText(f"Downloaded {format_bytes(downloaded)}\nSpeed: {format_bytes(speed)}/s")
 
     def on_update_download_failed(self, message):
         progress = getattr(self, "_update_progress", None)
@@ -4206,20 +4148,8 @@ class FDMX(QWidget):
         progress = getattr(self, "_update_progress", None)
         if progress is not None:
             progress.close()
-        answer = QMessageBox.question(
-            self, "Install update",
-            "The update has been downloaded and verified.\\n\\n"
-            "Launch the Setup installer now? The application will close.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
-        )
-        if answer != QMessageBox.Yes:
-            try:
-                os.remove(installer_path)
-            except OSError:
-                pass
-            self.status.setText("Update downloaded; installation postponed.")
-            return
-        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding")
+        # Consent was requested before download; launch after verification without a second prompt.
+        active_states = ("Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Paused")
         active_downloads = [
             task.get("name", "download")
             for task in self.tasks.values()
@@ -4228,7 +4158,7 @@ class FDMX(QWidget):
         if active_downloads:
             QMessageBox.information(
                 self, "Update postponed",
-                "Pause or finish active downloads before installing the update.\\n\\n"
+                "Finish or cancel active downloads before installing the update.\n\n"
                 + "Active downloads: " + ", ".join(active_downloads[:5])
             )
             try:
@@ -4625,12 +4555,12 @@ class FDMX(QWidget):
             if task.get("kind") == "torrent":
                 worker = TorrentWorker(task_id, task["url"], task["folder"], self.torrent_upload_limit.value())
             else:
-                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value())
+                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value())
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
             if hasattr(worker, "parts_configured"):
-                worker.parts_configured.connect(lambda count, speed, tid=task_id: self.on_parts_configured(tid, count, speed))
+                worker.parts_configured.connect(lambda count, tid=task_id: self.on_parts_configured(tid, count))
             worker.completed.connect(self.on_completed)
             worker.failed.connect(self.on_failed)
             worker.canceled.connect(self.on_canceled)
@@ -4810,7 +4740,7 @@ class FDMX(QWidget):
         answer = QMessageBox.question(
             self,
             "Delete downloaded file",
-            f"Permanently delete this file from your drive?\\n\\n{path}\\n\\n"
+            f"Permanently delete this file from your drive?\n\n{path}\n\n"
             "This action permanently removes the file. Its entry will also be removed from the download list.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -4820,19 +4750,18 @@ class FDMX(QWidget):
         try:
             os.remove(path)
         except OSError as exc:
-            QMessageBox.warning(self, "Delete failed", f"Could not delete the file:\\n{exc}")
+            QMessageBox.warning(self, "Delete failed", f"Could not delete the file:\n{exc}")
             return
         self.tasks.pop(task_id, None)
         self.save_tasks()
         self.refresh_table()
         self.status.setText(f"Deleted from disk: {path}")
 
-    def on_parts_configured(self, task_id, count, measured_speed):
+    def on_parts_configured(self, task_id, count):
         task = self.tasks.get(task_id)
         if not task:
             return
         task["parts_count"] = int(count)
-        task["measured_speed"] = float(measured_speed)
         self.save_tasks()
         dialog = self.detail_windows.get(task_id)
         if dialog is not None:
@@ -5076,7 +5005,6 @@ class FDMX(QWidget):
                 "post_action": entry.get("post_action", "none"),
                 "post_action_done": bool(entry.get("post_action_done", False)),
                 "parts_count": int(entry.get("parts_count", 0) or 0),
-                "measured_speed": float(entry.get("measured_speed", 0.0) or 0.0)
             }
 
     def prompt_recovery(self):
@@ -5110,7 +5038,7 @@ class FDMX(QWidget):
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
                 "category", "kind", "scheduled_at", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
-                "parts_count", "measured_speed"
+                "parts_count"
             )})
         temp_path = TASKS_FILE + ".tmp"
         backup_temp = TASKS_BACKUP_FILE + ".tmp"
@@ -5181,11 +5109,13 @@ class FDMX(QWidget):
         """Restore user preferences saved by the previous session."""
         self.settings = QSettings("GNS", "FDMX")
         self.max_downloads.setValue(self.settings.value("max_downloads", 8, type=int))
+        self.parts_count.setValue(max(1, min(MAX_PARTS, self.settings.value("parts_count", CONNECTIONS, type=int))))
         self.speed_limit.setValue(self.settings.value("speed_limit", 0, type=int))
         self.torrent_upload_limit.setValue(self.settings.value("torrent_upload_limit", 1, type=int))
         default_folder = os.path.join(os.path.expanduser("~"), "Downloads")
         self.folder.setText(self.settings.value("download_folder", default_folder, type=str))
         self.max_downloads.valueChanged.connect(self.save_preferences)
+        self.parts_count.valueChanged.connect(self.save_preferences)
         self.speed_limit.valueChanged.connect(self.save_preferences)
         self.torrent_upload_limit.valueChanged.connect(self.save_preferences)
         self.folder.editingFinished.connect(self.save_preferences)
@@ -5205,6 +5135,7 @@ class FDMX(QWidget):
         if not hasattr(self, "settings"):
             return
         self.settings.setValue("max_downloads", self.max_downloads.value())
+        self.settings.setValue("parts_count", self.parts_count.value())
         self.settings.setValue("speed_limit", self.speed_limit.value())
         self.settings.setValue("torrent_upload_limit", self.torrent_upload_limit.value())
         self.settings.setValue("download_folder", self.folder.text().strip())
