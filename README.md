@@ -43,7 +43,7 @@ The download engine preserves each task's original byte-range map across pause/r
 Release asset links for v6.42 (available after the version tag is published):
 
 - **[Portable ZIP — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.41](https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Setup installer — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
@@ -69,8 +69,8 @@ dpkg --print-architecture
 Download and install the package (APT will resolve its declared system dependencies):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.41/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.41-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.41-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.42-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.42-amd64.deb
 ```
 
 Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
