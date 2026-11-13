@@ -40,21 +40,22 @@ The download engine preserves each task's original byte-range map across pause/r
 
 ## Windows downloads
 
-Release asset links for v6.42 (available after the version tag is published):
+The official v6.42 release is published. Download the files:
 
 - **[Portable ZIP — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
 - **[Setup installer — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Ubuntu/Debian DEB — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb)** — AMD64 package.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The prepared release target is [v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42). Publishing the version tag triggers the release workflow, which builds and attaches the Windows and Linux packages. Branch builds create CI artifacts only.
+Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The published release is [GNS Downloader v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42); its Windows and Linux packages are available below. Branch builds create CI artifacts only.
 
 
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** is now built by the Linux GitHub Actions workflow for version 6.42. The package is generated as a CI artifact on pull requests and branch builds; it is attached to the public GitHub Release when the matching version tag is published. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** for version 6.42 has been built, smoke-tested, and attached to the public GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
