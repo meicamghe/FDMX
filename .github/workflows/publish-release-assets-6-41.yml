@@ -1,0 +1,66 @@
+name: Attach GNS Downloader 6.41 release assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-release-assets-6.41.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  attach-assets:
+    name: Attach verified 6.41 build artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows portable package
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Portable-v6.41
+          repository: ${{ github.repository }}
+          run-id: 43426584361
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Setup-v6.41
+          repository: ${{ github.repository }}
+          run-id: 43426584361
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets
+
+      - name: Download Linux DEB package
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Linux-DEB-v6.41
+          repository: ${{ github.repository }}
+          run-id: 43426584614
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets
+
+      - name: Verify release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -maxdepth 1 -type f -printf '%f %s bytes\\n'
+          test -s release-assets/GNS-Downloader-Portable-v6.41-Windows-x64.zip
+          test -s release-assets/GNS-Downloader-Setup-6.41.exe
+          test -s release-assets/GNS-Downloader-6.41-amd64.deb
+
+      - name: Upload assets to the existing 6.41 release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "6.41"
+          name: "GNS Downloader 6.41"
+          files: |
+            release-assets/GNS-Downloader-Portable-v6.41-Windows-x64.zip
+            release-assets/GNS-Downloader-Setup-6.41.exe
+            release-assets/GNS-Downloader-6.41-amd64.deb
+          fail_on_unmatched_files: true
+          make_latest: true
