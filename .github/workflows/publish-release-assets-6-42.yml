@@ -1,0 +1,74 @@
+name: Publish GNS Downloader 6.42 release assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-release-assets-6-42.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-release:
+    name: Publish verified Windows and Linux 6.42 packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release documentation
+        uses: actions/checkout@v4
+
+      - name: Download Windows portable package
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Portable-v6.42
+          repository: ${{ github.repository }}
+          run-id: 43434387655
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets/portable
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Setup-v6.42
+          repository: ${{ github.repository }}
+          run-id: 43434387655
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets/setup
+
+      - name: Download Ubuntu/Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: GNS-Downloader-Linux-DEB-v6.42
+          repository: ${{ github.repository }}
+          run-id: 43434387650
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-assets/linux
+
+      - name: Normalize and verify release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp release-assets/portable/GNS-Downloader-Portable-v6.42-Windows-x64.zip release-assets/GNS-Downloader-Portable-Windows-x64.zip
+          cp release-assets/setup/GNS-Downloader-Setup-6.42.exe release-assets/GNS-Downloader-Setup.exe
+          cp release-assets/linux/GNS-Downloader-6.42-amd64.deb release-assets/GNS-Downloader-6.42-amd64.deb
+          test -s release-assets/GNS-Downloader-Portable-Windows-x64.zip
+          test -s release-assets/GNS-Downloader-Setup.exe
+          test -s release-assets/GNS-Downloader-6.42-amd64.deb
+          sha256sum release-assets/GNS-Downloader-Portable-Windows-x64.zip release-assets/GNS-Downloader-Setup.exe release-assets/GNS-Downloader-6.42-amd64.deb
+
+      - name: Publish GNS Downloader 6.42
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "v6.42"
+          target_commitish: main
+          name: "GNS Downloader v6.42"
+          body_path: docs/releases/6.42.md
+          files: |
+            release-assets/GNS-Downloader-Portable-Windows-x64.zip
+            release-assets/GNS-Downloader-Setup.exe
+            release-assets/GNS-Downloader-6.42-amd64.deb
+          fail_on_unmatched_files: true
+          make_latest: true
