@@ -1,6 +1,6 @@
 ; GNS Downloader Windows installer — compressed onedir distribution
 #define AppName "GNS Downloader"
-#define AppVersion "6.40.3"
+#define AppVersion "6.41"
 #define AppPublisher "MeysamGNS"
 
 [Setup]
