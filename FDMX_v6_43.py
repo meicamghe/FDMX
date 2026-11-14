@@ -2956,6 +2956,32 @@ class GitHubUpdateWorker(QThread):
             self.failed.emit(str(exc))
 
 
+def _resolve_youtube_output_path(info, downloader):
+    """Return yt-dlp's final output path, including post-processed/merged files."""
+    candidates = []
+    if isinstance(info, dict):
+        candidates.append(info.get("filepath"))
+        requested = info.get("requested_downloads") or []
+        if isinstance(requested, list):
+            candidates.extend(
+                item.get("filepath") for item in requested if isinstance(item, dict)
+            )
+        candidates.append(info.get("_filename"))
+    try:
+        candidates.append(downloader.prepare_filename(info))
+    except Exception:
+        pass
+    for candidate in candidates:
+        if candidate:
+            path = os.fspath(candidate)
+            if os.path.isfile(path):
+                return path
+    for candidate in candidates:
+        if candidate:
+            return os.fspath(candidate)
+    return ""
+
+
 class YouTubeDownloadWorker(QThread):
     """Download a single YouTube video or audio stream using the optional yt-dlp package."""
     progress = Signal(int, int, float, float)
@@ -3025,7 +3051,8 @@ class YouTubeDownloadWorker(QThread):
             os.makedirs(self.folder, exist_ok=True)
             output_template = os.path.join(self.folder, "%(title).180B [%(id)s].%(ext)s")
             options = {
-                "format": "best[ext=mp4]/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio",
+                "format": "bestvideo*+bestaudio/best" if self.media_type == "video" else "bestaudio/best",
+                "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
                 "continuedl": True,
@@ -3040,7 +3067,7 @@ class YouTubeDownloadWorker(QThread):
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
                 info = downloader.extract_info(self.url, download=True)
-                path = downloader.prepare_filename(info)
+                path = _resolve_youtube_output_path(info, downloader)
             if self.cancel_event.is_set():
                 self.canceled.emit()
                 return
