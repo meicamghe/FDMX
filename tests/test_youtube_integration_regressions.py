@@ -936,5 +936,106 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                         self.assertIn("existing (1).%(ext)s", params["outtmpl"])
 
 
+    def test_youtube_cancel_during_transfer_preserves_partial_file_for_resume(self):
+        import sys
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        run_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+        calls = {"transfer": 0, "canceled": 0, "completed": 0, "failed": 0}
+
+        class FakeDownloader:
+            def __init__(self, options):
+                self.params = options
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"id": "partial-transfer"}
+
+            def prepare_filename(self, info):
+                return final_path
+
+            def process_ie_result(self, info, download=False):
+                calls["transfer"] += 1
+                Path(partial_path).write_bytes(b"partial download")
+                self_owner.cancel_event.set()
+                self.params["progress_hooks"][0]({
+                    "status": "downloading",
+                    "downloaded_bytes": len(b"partial download"),
+                    "total_bytes": 100,
+                })
+                raise AssertionError("progress hook should cancel the transfer")
+
+        class SignalCounter:
+            def __init__(self, key):
+                self.key = key
+
+            def emit(self, *args):
+                calls[self.key] += 1
+
+        class WorkerStub:
+            pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            final_path = os.path.join(folder, "partial-transfer.m4a")
+            partial_path = final_path + ".part"
+            self_owner = WorkerStub()
+            self_owner.url = "https://www.youtube.com/watch?v=partial-transfer"
+            self_owner.folder = folder
+            self_owner.media_type = "audio"
+            self_owner.proxy_url = ""
+            self_owner.cancel_event = threading.Event()
+            self_owner.pause_event = threading.Event()
+            self_owner.pause_event.set()
+            self_owner.state = SignalCounter("completed")
+            self_owner.canceled = SignalCounter("canceled")
+            self_owner.completed = SignalCounter("completed")
+            self_owner.failed = SignalCounter("failed")
+            self_owner.progress = SignalCounter("completed")
+            self_owner._progress_hook = lambda data: None
+            namespace = {
+                "os": os,
+                "time": __import__("time"),
+                "_resolve_youtube_output_path": lambda info, downloader: final_path,
+                "_youtube_ffmpeg_executable": lambda: "",
+                "normalize_proxy_url": lambda value: value,
+                "__builtins__": __builtins__,
+            }
+            exec(
+                compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+                namespace,
+            )
+            previous = sys.modules.get("yt_dlp")
+            sys.modules["yt_dlp"] = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+            try:
+                namespace["run"](self_owner)
+            finally:
+                if previous is None:
+                    sys.modules.pop("yt_dlp", None)
+                else:
+                    sys.modules["yt_dlp"] = previous
+
+            self.assertEqual(calls["transfer"], 1)
+            self.assertEqual(calls["canceled"], 1)
+            self.assertEqual(calls["completed"], 0)
+            self.assertEqual(calls["failed"], 0)
+            self.assertTrue(os.path.isfile(partial_path))
+            self.assertEqual(Path(partial_path).read_bytes(), b"partial download")
+            self.assertFalse(os.path.exists(final_path))
+
+
 if __name__ == "__main__":
     unittest.main()
