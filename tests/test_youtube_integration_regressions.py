@@ -61,6 +61,39 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
         self.assertIn('APP_VERSION = "6.48"', SOURCE)
 
+    def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
+        tree = ast.parse(SOURCE)
+        nodes = [
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("_version_key", "_highest_stable_release")
+        ]
+        namespace = {"re": __import__("re")}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        select = namespace["_highest_stable_release"]
+        releases = [
+            {"tag_name": "v6.47", "draft": False, "prerelease": False},
+            {"tag_name": "v6.48", "draft": False, "prerelease": False},
+            {"tag_name": "v6.99-rc1", "draft": False, "prerelease": True},
+            {"tag_name": "v7.00", "draft": True, "prerelease": False},
+            {"tag_name": "release-not-numbered", "draft": False, "prerelease": False},
+        ]
+        self.assertEqual(select(releases)["tag_name"], "v6.48")
+        self.assertEqual(select(list(reversed(releases)))["tag_name"], "v6.48")
+        self.assertIsNone(select([]))
+
+    def test_update_version_comparison_handles_patch_and_missing_components(self):
+        tree = ast.parse(SOURCE)
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef) and item.name == "_version_key"
+        )
+        namespace = {"re": __import__("re")}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        version_key = namespace["_version_key"]
+        self.assertGreater(version_key("v6.48.10"), version_key("6.48.9"))
+        self.assertEqual(version_key("6.48"), version_key("6.48.0"))
+
     def test_disabled_context_menu_actions_are_visibly_distinguished(self):
         self.assertIn('QMenu::item:disabled { color: #888888; }', SOURCE)
         self.assertIn('action.setEnabled(available)', SOURCE)
