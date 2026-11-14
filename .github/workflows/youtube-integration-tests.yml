@@ -5,14 +5,14 @@ on:
     branches:
       - feature/youtube-updater-6-43
     paths:
-      - "FDMX_v6_43.py"
+      - "FDMX_v6_44.py"
       - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-integration-tests.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "FDMX_v6_43.py"
+      - "FDMX_v6_44.py"
       - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-integration-tests.yml"
 
@@ -34,7 +34,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile v6.43 source
-        run: python -m py_compile FDMX_v6_43.py
+        run: python -m py_compile FDMX_v6_44.py
 
       - name: Run offline YouTube integration tests
         run: python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
