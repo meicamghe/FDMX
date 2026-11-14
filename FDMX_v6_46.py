@@ -4883,12 +4883,18 @@ class FDMX(QWidget):
             choice = self.ask_existing_file_action(existing_path)
             if choice == "open":
                 self.open_existing_file(existing_path)
+                detail = self.detail_windows.get(task_id)
+                if detail is not None:
+                    detail.close()
                 self.tasks.pop(task_id, None)
                 self.save_tasks()
                 self.refresh_table()
                 self.status.setText("Opened the existing file; no download was started.")
                 return
             if choice == "cancel":
+                detail = self.detail_windows.get(task_id)
+                if detail is not None:
+                    detail.close()
                 self.tasks.pop(task_id, None)
                 self.save_tasks()
                 self.refresh_table()
