@@ -61,6 +61,14 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
         self.assertIn('APP_VERSION = "6.48"', SOURCE)
 
+    def test_disabled_context_menu_actions_are_visibly_distinguished(self):
+        self.assertIn('QMenu::item:disabled { color: #888888; }', SOURCE)
+        self.assertIn('action.setText(f"{action.text()}  (unavailable)")', SOURCE)
+        self.assertIn('set_action_available(start_action, status == "Queued")', SOURCE)
+        self.assertIn('set_action_available(resume_action, status == "Paused")', SOURCE)
+        self.assertIn('set_action_available(cancel_action, active)', SOURCE)
+        self.assertIn('set_action_available(retry_action, status in ("Failed", "Canceled"))', SOURCE)
+
     def test_proxy_normalizer_accepts_supported_schemes(self):
         normalize = load_proxy_normalizer()
         for scheme in ("http", "https", "socks4", "socks4a", "socks5", "socks5h"):
