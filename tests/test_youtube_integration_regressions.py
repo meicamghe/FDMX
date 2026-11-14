@@ -75,6 +75,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             {"tag_name": "v6.47", "draft": False, "prerelease": False},
             {"tag_name": "v6.48", "draft": False, "prerelease": False},
             {"tag_name": "v6.99-rc1", "draft": False, "prerelease": True},
+            {"tag_name": "v6.99-rc2", "draft": False, "prerelease": False},
+            {"tag_name": "v6.48.1.2", "draft": False, "prerelease": False},
             {"tag_name": "v7.00", "draft": True, "prerelease": False},
             {"tag_name": "release-not-numbered", "draft": False, "prerelease": False},
         ]
