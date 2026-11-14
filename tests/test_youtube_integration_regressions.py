@@ -148,6 +148,23 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.completed.emit(path)", worker_source)
 
 
+    def test_existing_file_choice_offers_replace_new_copy_and_open(self):
+        self.assertIn('box.addButton("Replace existing file"', SOURCE)
+        self.assertIn('box.addButton("Save as new file"', SOURCE)
+        self.assertIn('box.addButton("Open existing file"', SOURCE)
+        self.assertIn('task["destination_path"] = existing_path if choice == "overwrite"', SOURCE)
+        self.assertIn('self.destination_path or unique_path(self.folder, filename)', SOURCE)
+
+    def test_youtube_checks_existing_file_before_download_and_waits_for_choice(self):
+        worker_start = SOURCE.index("class YouTubeDownloadWorker")
+        worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
+        worker = SOURCE[worker_start:worker_end]
+        self.assertIn('self.file_conflict.emit(existing_path)', worker)
+        self.assertIn('self._conflict_event.wait()', worker)
+        self.assertIn('options["overwrites"] = True', worker)
+        self.assertIn('options["outtmpl"] = candidate_template', worker)
+        self.assertIn('self.existing_file.emit(existing_path)', worker)
+
     def test_video_download_requires_and_configures_ffmpeg(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
