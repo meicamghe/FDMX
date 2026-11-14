@@ -1041,5 +1041,133 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self.assertFalse(os.path.exists(final_path))
 
 
+    def test_youtube_pause_holds_transfer_until_resumed(self):
+        import sys
+        import threading
+        import time
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        methods = {
+            node.name: node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("run", "_progress_hook")
+        }
+        calls = {"progress": 0, "completed": 0, "canceled": 0, "failed": 0}
+        hook_entered = threading.Event()
+
+        class FakeDownloader:
+            def __init__(self, options):
+                self.params = options
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"id": "paused-transfer"}
+
+            def prepare_filename(self, info):
+                return final_path
+
+            def process_ie_result(self, info, download=False):
+                hook_entered.set()
+                self.params["progress_hooks"][0]({
+                    "status": "downloading",
+                    "downloaded_bytes": 25,
+                    "total_bytes": 100,
+                    "speed": 10,
+                    "eta": 8,
+                })
+                Path(final_path).write_bytes(b"completed after resume")
+                return info
+
+        class SignalCounter:
+            def __init__(self, key):
+                self.key = key
+
+            def emit(self, *args):
+                calls[self.key] += 1
+
+        class NoopSignal:
+            def emit(self, *args):
+                pass
+
+        class WorkerStub:
+            pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            final_path = os.path.join(folder, "paused-transfer.m4a")
+            self_owner = WorkerStub()
+            self_owner.url = "https://www.youtube.com/watch?v=paused-transfer"
+            self_owner.folder = folder
+            self_owner.media_type = "audio"
+            self_owner.proxy_url = ""
+            self_owner.cancel_event = threading.Event()
+            self_owner.pause_event = threading.Event()
+            # Start paused; the real yt-dlp progress hook must block here.
+            self_owner._last_downloaded = 0
+            self_owner._last_time = time.monotonic()
+            self_owner._speed = 0.0
+            self_owner.state = NoopSignal()
+            self_owner.progress = SignalCounter("progress")
+            self_owner.completed = SignalCounter("completed")
+            self_owner.canceled = SignalCounter("canceled")
+            self_owner.failed = SignalCounter("failed")
+            namespace = {
+                "os": os,
+                "time": time,
+                "_resolve_youtube_output_path": lambda info, downloader: final_path,
+                "_youtube_ffmpeg_executable": lambda: "",
+                "normalize_proxy_url": lambda value: value,
+                "__builtins__": __builtins__,
+            }
+            exec(
+                compile(
+                    ast.Module(body=[methods["run"], methods["_progress_hook"]], type_ignores=[]),
+                    str(SOURCE_PATH),
+                    "exec",
+                ),
+                namespace,
+            )
+            self_owner._progress_hook = types.MethodType(
+                namespace["_progress_hook"], self_owner
+            )
+            previous = sys.modules.get("yt_dlp")
+            sys.modules["yt_dlp"] = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+            worker_thread = threading.Thread(target=namespace["run"], args=(self_owner,))
+            try:
+                worker_thread.start()
+                self.assertTrue(hook_entered.wait(2), "download never reached its progress hook")
+                time.sleep(0.3)
+                self.assertTrue(worker_thread.is_alive(), "paused transfer should remain blocked")
+                self.assertEqual(calls["progress"], 0)
+                self.assertFalse(os.path.exists(final_path))
+
+                self_owner.pause_event.set()
+                worker_thread.join(3)
+                self.assertFalse(worker_thread.is_alive(), "transfer did not resume")
+            finally:
+                self_owner.pause_event.set()
+                if worker_thread.is_alive():
+                    worker_thread.join(3)
+                if previous is None:
+                    sys.modules.pop("yt_dlp", None)
+                else:
+                    sys.modules["yt_dlp"] = previous
+
+            self.assertEqual(calls["progress"], 1)
+            self.assertEqual(calls["completed"], 1)
+            self.assertEqual(calls["canceled"], 0)
+            self.assertEqual(calls["failed"], 0)
+            self.assertTrue(os.path.isfile(final_path))
+
+
 if __name__ == "__main__":
     unittest.main()
