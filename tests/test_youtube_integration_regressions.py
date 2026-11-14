@@ -805,5 +805,135 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertEqual(calls["canceled"], 1)
 
 
+    def test_youtube_existing_file_choices_execute_expected_actions(self):
+        import sys
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        run_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+
+        for action in ("overwrite", "new", "open"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
+                existing_path = os.path.join(folder, "existing.m4a")
+                Path(existing_path).write_bytes(b"existing")
+                calls = {"conflict": 0, "existing": 0, "transfer": 0, "completed": [], "canceled": 0}
+                downloader_instances = []
+
+                class FakeDownloader:
+                    def __init__(self, options):
+                        self.params = options
+                        downloader_instances.append(self)
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *args):
+                        return False
+
+                    def extract_info(self, url, download=False):
+                        return {"id": "existing-video"}
+
+                    def prepare_filename(self, info):
+                        return existing_path
+
+                    def process_ie_result(self, info, download=False):
+                        calls["transfer"] += 1
+                        return info
+
+                class SignalStub:
+                    def __init__(self, key):
+                        self.key = key
+
+                    def emit(self, *args):
+                        if self.key == "completed":
+                            calls[self.key].append(args[0])
+                        else:
+                            calls[self.key] += 1
+
+                class ConflictSignal:
+                    def emit(self, *args):
+                        calls["conflict"] += 1
+                        self_owner.resolve_file_conflict(action)
+
+                class WorkerStub:
+                    def resolve_file_conflict(self, selected):
+                        self._conflict_action = selected
+                        self._conflict_event.set()
+
+                self_owner = WorkerStub()
+                self_owner.task_id = "choice-test"
+                self_owner.url = "https://www.youtube.com/watch?v=existing"
+                self_owner.folder = folder
+                self_owner.media_type = "audio"
+                self_owner.proxy_url = ""
+                self_owner.cancel_event = threading.Event()
+                self_owner.pause_event = threading.Event()
+                self_owner.pause_event.set()
+                self_owner._conflict_event = threading.Event()
+                self_owner._conflict_action = "cancel"
+                self_owner.state = SignalStub("state")
+                self_owner.canceled = SignalStub("canceled")
+                self_owner.failed = SignalStub("failed")
+                self_owner.completed = SignalStub("completed")
+                self_owner.progress = SignalStub("progress")
+                self_owner.file_conflict = ConflictSignal()
+                self_owner.existing_file = SignalStub("existing")
+                self_owner._progress_hook = lambda data: None
+
+                output_path = (
+                    os.path.join(folder, "existing (1).m4a")
+                    if action == "new" else existing_path
+                )
+                namespace = {
+                    "os": os,
+                    "time": __import__("time"),
+                    "_resolve_youtube_output_path": lambda info, downloader: output_path,
+                    "_youtube_ffmpeg_executable": lambda: "",
+                    "normalize_proxy_url": lambda value: value,
+                    "__builtins__": __builtins__,
+                }
+                exec(
+                    compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+                    namespace,
+                )
+                previous = sys.modules.get("yt_dlp")
+                sys.modules["yt_dlp"] = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+                try:
+                    namespace["run"](self_owner)
+                finally:
+                    if previous is None:
+                        sys.modules.pop("yt_dlp", None)
+                    else:
+                        sys.modules["yt_dlp"] = previous
+
+                self.assertEqual(calls["conflict"], 1)
+                self.assertEqual(calls["canceled"], 0)
+                self.assertEqual(calls["failed"], 0)
+                self.assertEqual(len(downloader_instances), 1)
+                params = downloader_instances[0].params
+
+                if action == "open":
+                    self.assertEqual(calls["transfer"], 0)
+                    self.assertEqual(calls["existing"], 1)
+                    self.assertEqual(calls["completed"], [existing_path])
+                else:
+                    self.assertEqual(calls["transfer"], 1)
+                    self.assertEqual(calls["existing"], 0)
+                    self.assertEqual(calls["completed"], [output_path])
+                    if action == "overwrite":
+                        self.assertIs(params["overwrites"], True)
+                        self.assertIs(params["continuedl"], False)
+                    else:
+                        self.assertIn("existing (1).%(ext)s", params["outtmpl"])
+
+
 if __name__ == "__main__":
     unittest.main()
