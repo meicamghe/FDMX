@@ -60,6 +60,9 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("open_url_with_proxy(req, timeout=30", worker)
         self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", worker)
 
+    def test_socks_dns_mode_distinguishes_local_and_remote_resolution(self):
+        self.assertIn('rdns=(scheme in ("socks4a", "socks5h"))', SOURCE)
+
     def test_socks_proxy_is_scoped_to_the_current_worker_thread(self):
         self.assertIn("_PROXY_THREAD_STATE = threading.local()", SOURCE)
         self.assertIn("with thread_proxy(proxy_url):", SOURCE)
