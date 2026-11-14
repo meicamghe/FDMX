@@ -3201,8 +3201,8 @@ class YouTubeDownloadWorker(QThread):
                         self.canceled.emit()
                         return
                     if action == "overwrite":
-                        options["overwrites"] = True
-                        options["continuedl"] = False
+                        downloader.params["overwrites"] = True
+                        downloader.params["continuedl"] = False
                     elif action == "new":
                         base = os.path.splitext(predicted_path)[0] if predicted_path else os.path.join(self.folder, "YouTube download")
                         index = 1
@@ -3211,7 +3211,7 @@ class YouTubeDownloadWorker(QThread):
                             output_ext = "mp4" if self.media_type == "video" else (os.path.splitext(predicted_path)[1].lstrip(".") or "m4a")
                             candidate_final = candidate_template.replace("%(ext)s", output_ext)
                             if not os.path.exists(candidate_final):
-                                options["outtmpl"] = candidate_template
+                                downloader.params["outtmpl"] = candidate_template
                                 break
                             index += 1
                 info = downloader.process_ie_result(info, download=True)
