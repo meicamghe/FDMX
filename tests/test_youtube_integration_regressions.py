@@ -562,5 +562,18 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn('with_name("FDMX_v6_36.py")', launcher)
 
 
+    def test_youtube_cancel_after_metadata_does_not_start_transfer(self):
+        start = SOURCE.index("class YouTubeDownloadWorker")
+        end = SOURCE.index("class GitHubUpdateDownloadWorker", start)
+        worker = SOURCE[start:end]
+        metadata = worker.index("info = downloader.extract_info(self.url, download=False)")
+        transfer = worker.index("info = downloader.process_ie_result(info, download=True)")
+        between = worker[metadata:transfer]
+        self.assertIn("if self.cancel_event.is_set():", between)
+        self.assertIn("self.canceled.emit()", between)
+        self.assertIn("return", between)
+        self.assertLess(metadata, transfer)
+
+
 if __name__ == "__main__":
     unittest.main()
