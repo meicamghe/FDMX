@@ -161,8 +161,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         worker = SOURCE[worker_start:worker_end]
         self.assertIn('self.file_conflict.emit(existing_path)', worker)
         self.assertIn('self._conflict_event.wait()', worker)
-        self.assertIn('options["overwrites"] = True', worker)
-        self.assertIn('options["outtmpl"] = candidate_template', worker)
+        self.assertIn('downloader.params["overwrites"] = True', worker)
+        self.assertIn('downloader.params["outtmpl"] = candidate_template', worker)
         self.assertIn('self.existing_file.emit(existing_path)', worker)
 
     def test_video_download_requires_and_configures_ffmpeg(self):
