@@ -846,6 +846,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
                     def process_ie_result(self, info, download=False):
                         calls["transfer"] += 1
+                        Path(output_path).write_bytes(b"downloaded")
                         return info
 
                 class SignalStub:
