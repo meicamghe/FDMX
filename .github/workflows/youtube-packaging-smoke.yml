@@ -6,6 +6,7 @@ on:
       - feature/youtube-updater-6-43
     paths:
       - "FDMX_v6_43.py"
+      - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-packaging-smoke.yml"
   pull_request:
     branches:
