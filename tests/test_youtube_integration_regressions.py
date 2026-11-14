@@ -168,7 +168,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_only_active_tasks_block_duplicate_downloads(self):
         self.assertIn("def _is_active_duplicate_task(task):", SOURCE)
         self.assertIn("and _is_active_duplicate_task(existing)", SOURCE)
-        self.assertIn('"Queued", "Checking metadata", "Downloading", "Paused", "Retrying"', SOURCE)
+        self.assertIn('"Queued", "Ready", "Checking metadata", "Checking server", "Downloading"', SOURCE)
+        self.assertIn('"Paused", "Retrying", "Canceling", "Seeding"', SOURCE)
         self.assertNotIn('existing.get("status") not in ("Failed", "Canceled", "Completed")', SOURCE)
 
     def test_video_download_requires_and_configures_ffmpeg(self):
