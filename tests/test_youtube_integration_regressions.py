@@ -11,7 +11,7 @@ import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "FDMX_v6_45.py"
+SOURCE_PATH = ROOT / "FDMX_v6_46.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
@@ -51,6 +51,19 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             normalize("ftp://127.0.0.1:21")
         with self.assertRaises(ValueError):
             normalize("socks5://127.0.0.1")
+
+    def test_regular_download_worker_accepts_proxy_configuration(self):
+        start = SOURCE.index("class DownloadWorker")
+        end = SOURCE.index("class TorrentWorker", start)
+        worker = SOURCE[start:end]
+        self.assertIn("proxy_url=\"\"", SOURCE[SOURCE.index("class DownloadWorker"):SOURCE.index("class YouTubeDownloadWorker")])
+        self.assertIn("open_url_with_proxy(req, timeout=30", worker)
+        self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", worker)
+
+    def test_socks_proxy_is_scoped_to_the_current_worker_thread(self):
+        self.assertIn("_PROXY_THREAD_STATE = threading.local()", SOURCE)
+        self.assertIn("with thread_proxy(proxy_url):", SOURCE)
+        self.assertIn("socket.create_connection = _proxy_aware_create_connection", SOURCE)
 
     def test_youtube_worker_passes_proxy_to_ytdlp(self):
         start = SOURCE.index("class YouTubeDownloadWorker")
