@@ -165,8 +165,11 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('downloader.params["outtmpl"] = candidate_template', worker)
         self.assertIn('self.existing_file.emit(existing_path)', worker)
 
-    def test_completed_downloads_can_be_readded_for_conflict_prompt(self):
-        self.assertIn('("Failed", "Canceled", "Completed")', SOURCE)
+    def test_only_active_tasks_block_duplicate_downloads(self):
+        self.assertIn("def _is_active_duplicate_task(task):", SOURCE)
+        self.assertIn("and _is_active_duplicate_task(existing)", SOURCE)
+        self.assertIn('"Queued", "Checking metadata", "Downloading", "Paused", "Retrying"', SOURCE)
+        self.assertNotIn('existing.get("status") not in ("Failed", "Canceled", "Completed")', SOURCE)
 
     def test_video_download_requires_and_configures_ffmpeg(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
