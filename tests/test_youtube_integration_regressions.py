@@ -31,7 +31,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         compile(SOURCE, str(SOURCE_PATH), "exec")
 
     def test_video_prefers_best_video_and_audio_with_mp4_merge(self):
-        self.assertIn('"format": "bestvideo*+bestaudio/best"', SOURCE)
+        self.assertIn('"format": "bestvideo+bestaudio/best"', SOURCE)
         self.assertIn('"merge_output_format": "mp4"', SOURCE)
 
     def test_audio_selects_best_available_audio_without_forcing_conversion(self):
