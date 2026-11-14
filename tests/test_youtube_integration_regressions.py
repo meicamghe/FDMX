@@ -590,5 +590,11 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("def on_youtube_file_conflict(self, task_id, path):", SOURCE)
 
 
+    def test_youtube_ui_handlers_are_explicit_qt_slots(self):
+        self.assertIn("from PySide6.QtCore import QThread, Signal, Slot, Qt", SOURCE)
+        self.assertIn("@Slot(str, str)\n    def on_youtube_file_conflict", SOURCE)
+        self.assertIn("@Slot(str, str)\n    def on_youtube_existing_file", SOURCE)
+
+
 if __name__ == "__main__":
     unittest.main()
