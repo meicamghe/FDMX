@@ -4947,6 +4947,8 @@ class FDMX(QWidget):
         self.save_tasks()
         self.refresh_table()
         self.status.setText("Opened the existing YouTube file; no download was started.")
+        self.cleanup_worker(task_id)
+        self.schedule_downloads()
 
     def start_queue(self):
         self.schedule_downloads()
