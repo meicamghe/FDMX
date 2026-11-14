@@ -398,11 +398,11 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
         worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
         worker = SOURCE[worker_start:worker_end]
-        self.assertIn('self.file_conflict.emit(existing_path)', worker)
+        self.assertIn('self.file_conflict.emit(self.task_id, existing_path)', worker)
         self.assertIn('self._conflict_event.wait()', worker)
         self.assertIn('downloader.params["overwrites"] = True', worker)
         self.assertIn('downloader.params["outtmpl"] = candidate_template', worker)
-        self.assertIn('self.existing_file.emit(existing_path)', worker)
+        self.assertIn('self.existing_file.emit(self.task_id, existing_path)', worker)
 
     def test_duplicate_detection_uses_source_url_not_shared_filename(self):
         tree = ast.parse(SOURCE)
