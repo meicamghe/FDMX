@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - release/6.50-finalization
     tags:
       - "v*"
     paths:
-      - "FDMX_v6_36.py"
+      - "FDMX_v6_50.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "installer/linux/**"
       - ".github/workflows/build-fdmx-linux.yml"
@@ -15,7 +17,7 @@ on:
     branches:
       - main
     paths:
-      - "FDMX_v6_36.py"
+      - "FDMX_v6_50.py"
       - "ubuntu.py"
       - "installer/linux/**"
       - ".github/workflows/build-fdmx-linux.yml"
@@ -47,16 +49,16 @@ jobs:
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow
+          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
 
       - name: Compile and test source
         run: |
-          python -m py_compile FDMX_v6_36.py ubuntu.py
-          python tests/test_gns_downloader_regressions.py
+          python -m py_compile FDMX_v6_50.py ubuntu.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 
       - name: Build frozen Linux application
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/linux FDMX_v6_36.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks --distpath dist --workpath build/linux FDMX_v6_50.py
           test -x "dist/GNS Downloader/GNS Downloader"
 
       - name: Assemble Debian package
@@ -94,7 +96,7 @@ jobs:
           EOF
           cat > "$ROOT/DEBIAN/control" <<'EOF'
           Package: gns-downloader
-          Version: 6.42
+          Version: 6.50
           Section: net
           Priority: optional
           Architecture: amd64
@@ -103,21 +105,21 @@ jobs:
           Description: GNS Downloader
            Multi-connection graphical download manager.
           EOF
-          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.42-amd64.deb"
-          dpkg-deb --info "dist/GNS-Downloader-6.42-amd64.deb"
-          dpkg-deb --contents "dist/GNS-Downloader-6.42-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
+          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.50-amd64.deb"
+          dpkg-deb --info "dist/GNS-Downloader-6.50-amd64.deb"
+          dpkg-deb --contents "dist/GNS-Downloader-6.50-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
 
       - name: Install package and smoke-test launcher
         run: |
-          sudo apt-get install -y ./dist/GNS-Downloader-6.42-amd64.deb
+          sudo apt-get install -y ./dist/GNS-Downloader-6.50-amd64.deb
           test -x /usr/bin/gns-downloader
           QT_QPA_PLATFORM=offscreen timeout 8s gns-downloader || test "$?" -eq 124
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Linux-DEB-v6.42
-          path: dist/GNS-Downloader-6.42-amd64.deb
+          name: GNS-Downloader-Linux-DEB-v6.50
+          path: dist/GNS-Downloader-6.50-amd64.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -126,5 +128,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          files: dist/GNS-Downloader-6.42-amd64.deb
+          files: dist/GNS-Downloader-6.50-amd64.deb
           fail_on_unmatched_files: true

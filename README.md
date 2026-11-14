@@ -7,12 +7,23 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 ## Current version
 
 - Application version: **6.42**
-- Main source: `FDMX_v6_36.py`
+- Main source: `FDMX_v6_50.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
 - Linux source launch: `python ubuntu.py` (same current application source)
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
+
+## Development branch: v6.50 (not yet released)
+
+The feature branch `release/6.50-finalization` contains the current v6.50 development source, `FDMX_v6_50.py`. The latest **public GitHub Release remains v6.42**; branch commits are not visible to the in-app updater until a stable release is published.
+
+- YouTube video and audio downloads use the optional `yt-dlp` runtime. Best-quality video merging requires FFmpeg; audio-only downloads do not.
+- Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build. Proxy entries require a hostname and port; endpoint paths, query strings and fragments are rejected instead of silently ignored.
+- The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
+- Portable/source builds open the release page; automatic Setup installation is intended for the installed Windows build.
+
+The v6.50 branch has offline YouTube regression tests and Windows/Linux packaging smoke checks. These checks do not replace real YouTube/proxy network tests or manual GUI testing.
 
 ## What's new in 6.42
 
@@ -133,7 +144,7 @@ Then activate the environment and install the application dependency:
 ```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
 ```
 
 4. Start the application:
@@ -142,7 +153,7 @@ python -m pip install PySide6-Essentials
 python ubuntu.py
 ```
 
-You can also launch the maintained source directly with `python FDMX_v6_36.py`. Run these commands from the project directory and activate `.venv` again after opening a new terminal:
+You can also launch the maintained source directly with `python FDMX_v6_50.py`. Run these commands from the project directory and activate `.venv` again after opening a new terminal:
 
 ```bash
 cd FDMX
@@ -166,8 +177,8 @@ Install **Python 3.12** and the application dependency:
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
-python FDMX_v6_36.py
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
+python FDMX_v6_50.py
 ```
 
 ## Build Windows packages
@@ -183,8 +194,8 @@ Task state and download history are stored under the user's home directory in `.
 ## Tests
 
 ```bash
-python -m py_compile FDMX_v6_36.py ubuntu.py
-python tests/test_gns_downloader_regressions.py
+python -m py_compile FDMX_v6_50.py ubuntu.py
+python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 ```
 
 Older numbered scripts remain in the repository for development history; they are not the current application entry point.

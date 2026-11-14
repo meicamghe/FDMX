@@ -2,13 +2,24 @@
 
 GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python و PySide6 است.
 
+## شاخه توسعه نسخه 6.50 (هنوز منتشر نشده)
+
+شاخه `release/6.50-finalization` شامل سورس در حال توسعه نسخه **6.50** با فایل اصلی `FDMX_v6_50.py` است. آخرین انتشار عمومی GitHub همچنان **نسخه 6.42** است؛ commitهای شاخه توسعه تا زمان انتشار یک نسخه پایدار، توسط آپدیتر داخل برنامه قابل مشاهده نیستند.
+
+- دانلود ویدئو و صدا از YouTube با کتابخانه `yt-dlp` انجام می‌شود. برای ادغام بهترین کیفیت تصویر و صدا به FFmpeg نیاز است؛ دانلود فقط صوت به FFmpeg نیاز ندارد.
+- انواع پروکسی HTTP، HTTPS، SOCKS4، SOCKS4a، SOCKS5 و SOCKS5h پشتیبانی می‌شوند. در بسته‌های آماده، پشتیبانی SOCKS با PySocks همراه برنامه بسته‌بندی می‌شود. آدرس پروکسی باید میزبان و پورت معتبر داشته باشد؛ مسیر، Query و Fragment در آدرس پذیرفته نمی‌شوند تا اشتباهاً نادیده گرفته نشوند.
+- آپدیتر فقط انتشارهای پایدار با تگ نسخه عددی معتبر را بررسی می‌کند، بالاترین نسخه را انتخاب می‌کند و اندازه فایل و در صورت وجود SHA-256 اعلام‌شده در GitHub را اعتبارسنجی می‌کند. لغو دانلود فایل نصب‌کننده نیز پشتیبانی می‌شود.
+- نسخه‌های Portable و اجرای مستقیم از سورس، صفحه انتشار GitHub را باز می‌کنند؛ نصب خودکار Setup برای نسخه نصب‌شده ویندوز در نظر گرفته شده است.
+
+تست‌های آفلاین رگرسیون و بررسی بسته‌بندی ویندوز و لینوکس برای این شاخه تعریف شده‌اند. این تست‌ها جایگزین آزمایش واقعی دانلود از YouTube، اتصال پروکسی و تست دستی رابط گرافیکی نیستند.
+
 ## نسخه و محیط اجرا
 
 - **نسخه برنامه:** 6.42
-- **فایل اصلی و مرجع پروژه:** `FDMX_v6_36.py`
+- **فایل اصلی و مرجع پروژه:** `FDMX_v6_50.py`
 - **نسخه Python:** **3.12**
 - **ویندوز:** بسته‌های اجرایی Windows 10/11 نسخه ۶۴ بیتی
-- **لینوکس:** اجرای سورس فعلی با دستور `python ubuntu.py` یا `python FDMX_v6_36.py`
+- **لینوکس:** اجرای سورس فعلی با دستور `python ubuntu.py` یا `python FDMX_v6_50.py`
 - **ظاهر برنامه:** در ویندوز تم Windows 11 Fluent و در لینوکس تم Ubuntu Yaru به‌صورت خودکار انتخاب می‌شود.
 - تب Theme Studio و Plugin Manager در رابط برنامه وجود ندارند.
 
@@ -138,7 +149,7 @@ uv venv --python 3.12 --seed .venv
 ```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
 ```
 
 محیط مجازی باعث می‌شود وابستگی‌های برنامه از Python و بسته‌های سیستمی جدا بمانند.
@@ -152,7 +163,7 @@ python ubuntu.py
 همچنین می‌توانید فایل اصلی را مستقیماً اجرا کنید:
 
 ```bash
-python FDMX_v6_36.py
+python FDMX_v6_50.py
 ```
 
 برای اجرای دوباره در ترمینال جدید، وارد پوشه پروژه شوید و محیط مجازی را فعال کنید:
@@ -186,8 +197,8 @@ Python **3.12** را نصب کنید و در PowerShell، در پوشه پروژ
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
-python FDMX_v6_36.py
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
+python FDMX_v6_50.py
 ```
 
 ## ساخت بسته‌های ویندوز
@@ -203,10 +214,10 @@ python FDMX_v6_36.py
 ## تست‌ها
 
 ```bash
-python -m py_compile FDMX_v6_36.py ubuntu.py
-python tests/test_gns_downloader_regressions.py
+python -m py_compile FDMX_v6_50.py ubuntu.py
+python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 ```
 
-فایل‌های شماره‌دار قدیمی برای تاریخچه توسعه در مخزن باقی مانده‌اند؛ فایل مرجع برنامه فعلی `FDMX_v6_36.py` است.
+فایل‌های شماره‌دار قدیمی برای تاریخچه توسعه در مخزن باقی مانده‌اند؛ فایل مرجع برنامه فعلی `FDMX_v6_50.py` است.
 
 پیش از توزیع مجدد سورس یا فایل‌های اجرایی، [اطلاعیه مجوز پروژه](../LICENSE-NOTICE.md) را مطالعه کنید.
