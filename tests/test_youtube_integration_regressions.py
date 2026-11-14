@@ -358,7 +358,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.cancel_event.is_set()", worker_source)
 
 
-    def test_update_download_cancel_closes_active_response(self):
+    def test_update_download_cancel_interrupts_active_socket(self):
+        import socket
         import threading
 
         tree = ast.parse(SOURCE)
@@ -366,18 +367,30 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             node for node in tree.body
             if isinstance(node, ast.ClassDef) and node.name == "GitHubUpdateDownloadWorker"
         )
-        cancel_node = next(
-            node for node in worker_class.body
-            if isinstance(node, ast.FunctionDef) and node.name == "cancel"
-        )
+        methods = {
+            node.name: node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("cancel", "_interrupt_response")
+        }
         namespace = {}
         exec(
-            compile(ast.Module(body=[cancel_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+            compile(ast.Module(body=[methods["_interrupt_response"], methods["cancel"]], type_ignores=[]), str(SOURCE_PATH), "exec"),
             namespace,
         )
 
+        class SocketStub:
+            def __init__(self):
+                self.shutdown_mode = None
+
+            def shutdown(self, how):
+                self.shutdown_mode = how
+
         class ResponseStub:
             def __init__(self):
+                self.socket = SocketStub()
+                self.fp = type("Stream", (), {
+                    "raw": type("Raw", (), {"_sock": self.socket})()
+                })()
                 self.closed = False
 
             def close(self):
@@ -388,17 +401,22 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                 self.cancel_event = threading.Event()
                 self._response_lock = threading.Lock()
                 self._active_response = ResponseStub()
+                self._interrupt_response = namespace["_interrupt_response"].__get__(self, WorkerStub)
 
         worker = WorkerStub()
+        response = worker._active_response
         namespace["cancel"].__get__(worker, WorkerStub)()
         self.assertTrue(worker.cancel_event.is_set())
-        self.assertTrue(worker._active_response.closed)
+        self.assertEqual(response.socket.shutdown_mode, socket.SHUT_RDWR)
+        self.assertTrue(response.closed)
 
     def test_update_download_treats_network_close_after_cancel_as_canceled(self):
         start = SOURCE.index("class GitHubUpdateDownloadWorker")
         end = SOURCE.index("def is_youtube_url", start)
         worker = SOURCE[start:end]
         self.assertIn("self._active_response = response", worker)
+        self.assertIn("self._interrupt_response(response)", worker)
+        self.assertIn("sock.shutdown(socket.SHUT_RDWR)", worker)
         self.assertIn("response.close()", worker)
         self.assertIn("if self.cancel_event.is_set():", worker)
         self.assertIn("self.canceled.emit()", worker)
