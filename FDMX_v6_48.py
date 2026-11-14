@@ -3116,12 +3116,18 @@ def normalize_proxy_url(value):
     value = (value or "").strip()
     if not value:
         return ""
-    parsed = urllib.parse.urlsplit(value if "://" in value else "http://" + value)
+    try:
+        parsed = urllib.parse.urlsplit(value if "://" in value else "http://" + value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Proxy address must contain a valid port and hostname.") from exc
     scheme = parsed.scheme.lower()
     if scheme not in ("http", "https", "socks4", "socks4a", "socks5", "socks5h"):
         raise ValueError("Unsupported proxy type. Use http://, https://, socks4://, socks4a://, socks5:// or socks5h://.")
-    if not parsed.hostname or not parsed.port:
-        raise ValueError("Proxy address must include a hostname and port.")
+    if not parsed.hostname or not port or not 1 <= port <= 65535:
+        raise ValueError("Proxy address must include a valid hostname and port (1–65535).")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise ValueError("Proxy address must not include a path, query, or fragment.")
     return urllib.parse.urlunsplit((scheme, parsed.netloc, "", "", ""))
 
 
