@@ -760,6 +760,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             existing_path = os.path.join(folder, "existing.m4a")
             Path(existing_path).write_bytes(b"existing")
             self_owner = WorkerStub()
+            self_owner.task_id = "test-task"
             self_owner.url = "https://www.youtube.com/watch?v=existing"
             self_owner.folder = folder
             self_owner.media_type = "audio"
