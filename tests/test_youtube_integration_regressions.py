@@ -482,6 +482,15 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.cancel_event.is_set()", worker_source)
 
 
+    def test_update_download_rejects_unsupported_or_malformed_release_digest(self):
+        start = SOURCE.index("class GitHubUpdateDownloadWorker")
+        end = SOURCE.index("def is_youtube_url", start)
+        worker = SOURCE[start:end]
+        self.assertIn('algorithm.lower() != "sha256"', worker)
+        self.assertIn('not re.fullmatch(r"[0-9a-fA-F]{64}", expected)', worker)
+        self.assertIn("if self.expected_digest:", worker)
+        self.assertIn("unsupported or malformed installer digest", worker)
+
     def test_update_download_cancel_interrupts_active_socket(self):
         import socket
         import threading
