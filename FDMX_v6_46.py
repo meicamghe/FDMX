@@ -86,7 +86,7 @@ def _proxy_aware_create_connection(address, timeout=socket._GLOBAL_DEFAULT_TIMEO
     sock = socks.socksocket()
     sock.set_proxy(
         proxy_type, parsed.hostname, parsed.port,
-        rdns=(scheme in ("socks4a", "socks5", "socks5h")),
+        rdns=(scheme in ("socks4a", "socks5h")),
         username=urllib.parse.unquote(parsed.username) if parsed.username else None,
         password=urllib.parse.unquote(parsed.password) if parsed.password else None,
     )
