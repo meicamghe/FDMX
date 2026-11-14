@@ -50,6 +50,14 @@ CHUNK_SIZE = 64 * 1024
 READ_POLL_INTERVAL = 0.2  # seconds; pause responsiveness while waiting for network data
 
 
+def _safe_int(value, default=0):
+    """Convert persisted numeric values safely, including JSON null/corrupt strings."""
+    try:
+        return int(value) if value is not None and value != "" else default
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 def create_verified_ssl_context():
     """Create a verified TLS context using certifi when it is available."""
     if certifi is not None:
@@ -5309,11 +5317,11 @@ class FDMX(QWidget):
                 "media_type": entry.get("media_type", "video"),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
-                "retry_attempts": int(entry.get("retry_attempts", 0)),
+                "retry_attempts": _safe_int(entry.get("retry_attempts"), 0),
                 "post_action_enabled": bool(entry.get("post_action_enabled", False)),
                 "post_action": entry.get("post_action", "none"),
                 "post_action_done": bool(entry.get("post_action_done", False)),
-                "parts_count": int(entry.get("parts_count", 0) or 0),
+                "parts_count": max(0, _safe_int(entry.get("parts_count"), 0)),
             }
 
     def prompt_recovery(self):
