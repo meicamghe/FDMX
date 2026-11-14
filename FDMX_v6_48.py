@@ -2970,6 +2970,22 @@ def _version_key(value):
     return tuple((numbers + [0, 0, 0])[:3])
 
 
+def _highest_stable_release(releases):
+    """Select the highest numbered published stable release, independent of API order."""
+    candidates = [
+        item for item in releases
+        if isinstance(item, dict)
+        and not item.get("draft", False)
+        and not item.get("prerelease", False)
+        and re.search(r"\d", str(item.get("tag_name", "")))
+    ]
+    return max(
+        candidates,
+        key=lambda item: _version_key(str(item.get("tag_name", "")).lstrip("vV").strip()),
+        default=None,
+    )
+
+
 class GitHubUpdateWorker(QThread):
     """Find the highest stable semantic version; never trust GitHub's /latest pointer."""
     update_available = Signal(str, str, str, str, int, str)
@@ -3012,10 +3028,9 @@ class GitHubUpdateWorker(QThread):
     def run(self):
         try:
             releases = self._fetch_stable_releases()
-            release = max(
-                releases,
-                key=lambda item: _version_key(str(item.get("tag_name", "")).lstrip("vV").strip()),
-            )
+            release = _highest_stable_release(releases)
+            if release is None:
+                raise RuntimeError("GitHub has no published stable releases.")
             version = str(release.get("tag_name", "")).lstrip("vV").strip()
             if not version:
                 raise RuntimeError("GitHub returned a release without a version tag.")
