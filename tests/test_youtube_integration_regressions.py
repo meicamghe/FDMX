@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +30,7 @@ def load_output_resolver():
 def load_proxy_normalizer():
     tree = ast.parse(SOURCE)
     node = next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "normalize_proxy_url")
-    namespace = {"urllib": __import__("urllib")}
+    namespace = {"urllib": urllib}
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
     return namespace[node.name]
 
