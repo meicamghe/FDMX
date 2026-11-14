@@ -1,0 +1,67 @@
+name: YouTube packaging smoke test
+
+on:
+  push:
+    branches:
+      - feature/youtube-updater-6-43
+    paths:
+      - "FDMX_v6_43.py"
+      - ".github/workflows/youtube-packaging-smoke.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "FDMX_v6_43.py"
+      - ".github/workflows/youtube-packaging-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package YouTube dependencies on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install build and YouTube dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp imageio-ffmpeg
+
+      - name: Verify YouTube runtime dependencies
+        run: |
+          python -c "import yt_dlp, imageio_ffmpeg; print('yt-dlp:', yt_dlp.version.__version__); print('FFmpeg:', imageio_ffmpeg.get_ffmpeg_exe())"
+
+      - name: Compile source and run offline regressions
+        run: |
+          python -m py_compile FDMX_v6_43.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+
+      - name: Build self-contained application directory
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/youtube-package --collect-all yt_dlp --collect-all imageio_ffmpeg FDMX_v6_43.py
+
+      - name: Verify frozen application and bundled dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            APP="dist/GNS Downloader/GNS Downloader.exe"
+          else
+            APP="dist/GNS Downloader/GNS Downloader"
+          fi
+          test -f "$APP"
+          find "dist/GNS Downloader" -iname '*yt_dlp*' -o -iname '*imageio_ffmpeg*' | grep -q .
+          echo "Frozen app and YouTube/FFmpeg dependency payloads are present."
