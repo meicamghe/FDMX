@@ -610,5 +610,90 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("@Slot(str, str)\n    def on_youtube_existing_file", SOURCE)
 
 
+    def test_youtube_run_cancellation_during_metadata_never_starts_transfer(self):
+        import sys
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        run_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+        calls = {"extract": 0, "transfer": 0, "canceled": 0}
+
+        class FakeDownloader:
+            def __init__(self, options):
+                self.params = options
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                calls["extract"] += 1
+                self_owner.cancel_event.set()
+                return {"id": "test-video"}
+
+            def process_ie_result(self, info, download=False):
+                calls["transfer"] += 1
+                return info
+
+            def prepare_filename(self, info):
+                return os.path.join(self_owner.folder, "test-video.m4a")
+
+        fake_module = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+
+        class SignalStub:
+            def emit(self, *args):
+                calls["canceled"] += 1
+
+        class WorkerStub:
+            pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            self_owner = WorkerStub()
+            self_owner.url = "https://www.youtube.com/watch?v=test"
+            self_owner.folder = folder
+            self_owner.media_type = "audio"
+            self_owner.proxy_url = ""
+            self_owner.cancel_event = threading.Event()
+            self_owner.state = SignalStub()
+            self_owner.canceled = SignalStub()
+            self_owner.failed = SignalStub()
+            self_owner.progress = SignalStub()
+            namespace = {
+                "os": os,
+                "time": __import__("time"),
+                "_resolve_youtube_output_path": lambda info, downloader: "",
+                "_youtube_ffmpeg_executable": lambda: "",
+                "normalize_proxy_url": lambda value: value,
+                "__builtins__": __builtins__,
+            }
+            exec(
+                compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+                namespace,
+            )
+            previous = sys.modules.get("yt_dlp")
+            sys.modules["yt_dlp"] = fake_module
+            try:
+                namespace["run"](self_owner)
+            finally:
+                if previous is None:
+                    sys.modules.pop("yt_dlp", None)
+                else:
+                    sys.modules["yt_dlp"] = previous
+
+        self.assertEqual(calls["extract"], 1)
+        self.assertEqual(calls["transfer"], 0)
+        self.assertEqual(calls["canceled"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
