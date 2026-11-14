@@ -10,6 +10,7 @@ on:
     paths:
       - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "installer/linux/**"
       - ".github/workflows/build-fdmx-linux.yml"
@@ -18,6 +19,7 @@ on:
       - main
     paths:
       - "FDMX_v6_50.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "installer/linux/**"
       - ".github/workflows/build-fdmx-linux.yml"
@@ -49,7 +51,7 @@ jobs:
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow
+          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
 
       - name: Compile and test source
         run: |
@@ -58,7 +60,7 @@ jobs:
 
       - name: Build frozen Linux application
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/linux FDMX_v6_50.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks --distpath dist --workpath build/linux FDMX_v6_50.py
           test -x "dist/GNS Downloader/GNS Downloader"
 
       - name: Assemble Debian package

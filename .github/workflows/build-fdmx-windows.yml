@@ -13,6 +13,7 @@ on:
     paths:
       - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
@@ -25,6 +26,7 @@ on:
       - main
     paths:
       - "FDMX_v6_50.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
