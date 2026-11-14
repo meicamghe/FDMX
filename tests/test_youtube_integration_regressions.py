@@ -654,6 +654,10 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             def emit(self, *args):
                 calls["canceled"] += 1
 
+        class NoopSignal:
+            def emit(self, *args):
+                pass
+
         class WorkerStub:
             pass
 
@@ -664,10 +668,10 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.media_type = "audio"
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
-            self_owner.state = SignalStub()
+            self_owner.state = NoopSignal()
             self_owner.canceled = SignalStub()
-            self_owner.failed = SignalStub()
-            self_owner.progress = SignalStub()
+            self_owner.failed = NoopSignal()
+            self_owner.progress = NoopSignal()
             self_owner._progress_hook = lambda data: None
             namespace = {
                 "os": os,
