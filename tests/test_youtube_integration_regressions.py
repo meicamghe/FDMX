@@ -700,5 +700,109 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertEqual(calls["canceled"], 1)
 
 
+    def test_youtube_run_cancel_during_existing_file_prompt_releases_worker(self):
+        import sys
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        run_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+        calls = {"transfer": 0, "canceled": 0, "conflict": 0}
+
+        class FakeDownloader:
+            def __init__(self, options):
+                self.params = options
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"id": "existing-video"}
+
+            def process_ie_result(self, info, download=False):
+                calls["transfer"] += 1
+                return info
+
+            def prepare_filename(self, info):
+                return existing_path
+
+        class NoopSignal:
+            def emit(self, *args):
+                pass
+
+        class CancelSignal:
+            def emit(self, *args):
+                calls["canceled"] += 1
+
+        class ConflictSignal:
+            def emit(self, *args):
+                calls["conflict"] += 1
+                self_owner.cancel()
+
+        class WorkerStub:
+            def cancel(self):
+                self.cancel_event.set()
+                self.pause_event.set()
+                self._conflict_action = "cancel"
+                self._conflict_event.set()
+
+        with tempfile.TemporaryDirectory() as folder:
+            existing_path = os.path.join(folder, "existing.m4a")
+            Path(existing_path).write_bytes(b"existing")
+            self_owner = WorkerStub()
+            self_owner.url = "https://www.youtube.com/watch?v=existing"
+            self_owner.folder = folder
+            self_owner.media_type = "audio"
+            self_owner.proxy_url = ""
+            self_owner.cancel_event = threading.Event()
+            self_owner.pause_event = threading.Event()
+            self_owner.pause_event.set()
+            self_owner._conflict_event = threading.Event()
+            self_owner._conflict_action = "cancel"
+            self_owner.state = NoopSignal()
+            self_owner.canceled = CancelSignal()
+            self_owner.failed = NoopSignal()
+            self_owner.progress = NoopSignal()
+            self_owner.file_conflict = ConflictSignal()
+            self_owner.existing_file = NoopSignal()
+            self_owner._progress_hook = lambda data: None
+            namespace = {
+                "os": os,
+                "time": __import__("time"),
+                "_resolve_youtube_output_path": lambda info, downloader: "",
+                "_youtube_ffmpeg_executable": lambda: "",
+                "normalize_proxy_url": lambda value: value,
+                "__builtins__": __builtins__,
+            }
+            exec(
+                compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+                namespace,
+            )
+            fake_module = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+            previous = sys.modules.get("yt_dlp")
+            sys.modules["yt_dlp"] = fake_module
+            try:
+                namespace["run"](self_owner)
+            finally:
+                if previous is None:
+                    sys.modules.pop("yt_dlp", None)
+                else:
+                    sys.modules["yt_dlp"] = previous
+
+        self.assertEqual(calls["conflict"], 1)
+        self.assertEqual(calls["transfer"], 0)
+        self.assertEqual(calls["canceled"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
