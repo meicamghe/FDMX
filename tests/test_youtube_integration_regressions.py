@@ -356,5 +356,52 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.cancel_event.is_set()", worker_source)
 
 
+    def test_update_download_cancel_closes_active_response(self):
+        import threading
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "GitHubUpdateDownloadWorker"
+        )
+        cancel_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "cancel"
+        )
+        namespace = {}
+        exec(
+            compile(ast.Module(body=[cancel_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+            namespace,
+        )
+
+        class ResponseStub:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        class WorkerStub:
+            def __init__(self):
+                self.cancel_event = threading.Event()
+                self._response_lock = threading.Lock()
+                self._active_response = ResponseStub()
+
+        worker = WorkerStub()
+        namespace["cancel"].__get__(worker, WorkerStub)()
+        self.assertTrue(worker.cancel_event.is_set())
+        self.assertTrue(worker._active_response.closed)
+
+    def test_update_download_treats_network_close_after_cancel_as_canceled(self):
+        start = SOURCE.index("class GitHubUpdateDownloadWorker")
+        end = SOURCE.index("def is_youtube_url", start)
+        worker = SOURCE[start:end]
+        self.assertIn("self._active_response = response", worker)
+        self.assertIn("response.close()", worker)
+        self.assertIn("if self.cancel_event.is_set():", worker)
+        self.assertIn("self.canceled.emit()", worker)
+        self.assertIn("self._active_response = None", worker)
+
+
 if __name__ == "__main__":
     unittest.main()
