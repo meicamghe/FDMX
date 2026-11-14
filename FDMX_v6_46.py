@@ -3196,6 +3196,7 @@ class YouTubeDownloadWorker(QThread):
                     action = self._conflict_action
                     if action == "open":
                         self.existing_file.emit(existing_path)
+                        self.completed.emit(existing_path)
                         return
                     if action == "cancel":
                         self.canceled.emit()
@@ -4938,17 +4939,10 @@ class FDMX(QWidget):
         worker.resolve_file_conflict(self.ask_existing_file_action(path))
 
     def on_youtube_existing_file(self, task_id, path):
-        task = self.tasks.get(task_id)
-        if not task:
+        if task_id not in self.tasks:
             return
         self.open_existing_file(path)
-        task.update({"status": "Completed", "path": path, "downloaded": os.path.getsize(path), "total": os.path.getsize(path), "speed": 0.0, "eta": 0.0})
-        self.save_history_entry(task)
-        self.save_tasks()
-        self.refresh_table()
         self.status.setText("Opened the existing YouTube file; no download was started.")
-        self.cleanup_worker(task_id)
-        self.schedule_downloads()
 
     def start_queue(self):
         self.schedule_downloads()
