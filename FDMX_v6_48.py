@@ -3304,17 +3304,29 @@ class GitHubUpdateDownloadWorker(QThread):
         self._response_lock = threading.Lock()
         self._active_response = None
 
+    def _interrupt_response(self, response):
+        # Shut down the underlying socket first: closing a buffered response
+        # alone can wait on the same lock held by a blocked read().
+        stream = getattr(response, "fp", None)
+        raw = getattr(stream, "raw", None)
+        sock = getattr(raw, "_sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        try:
+            response.close()
+        except Exception:
+            pass
+
     def cancel(self):
         self.cancel_event.set()
-        # Closing the active response interrupts a stalled network read instead
-        # of making the user wait for the 60-second socket timeout.
+        # Interrupt a stalled read instead of waiting for the socket timeout.
         with self._response_lock:
             response = self._active_response
         if response is not None:
-            try:
-                response.close()
-            except Exception:
-                pass
+            self._interrupt_response(response)
 
     def run(self):
         installer_path = ""
@@ -3334,7 +3346,7 @@ class GitHubUpdateDownloadWorker(QThread):
             with open_url(request, timeout=60) as response:
                 with self._response_lock:
                     if self.cancel_event.is_set():
-                        response.close()
+                        self._interrupt_response(response)
                         raise InterruptedError("Update download canceled by user.")
                     self._active_response = response
                 try:
