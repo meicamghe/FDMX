@@ -96,7 +96,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_update_installer_is_removed_if_setup_launch_fails(self):
         start = SOURCE.index("    def on_update_downloaded(self, installer_path):")
-        end = SOURCE.index("\\n\\n    def set_filter", start)
+        end = SOURCE.index("    def set_filter", start)
         handler = SOURCE[start:end]
         launch = handler.index("subprocess.Popen([installer_path], close_fds=True)")
         failure = handler[launch:]
