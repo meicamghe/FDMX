@@ -3379,9 +3379,15 @@ class GitHubUpdateDownloadWorker(QThread):
                 raise InterruptedError("Update download canceled by user.")
             if self.expected_size and downloaded != self.expected_size:
                 raise RuntimeError("The downloaded installer size does not match the GitHub release asset.")
-            if self.expected_digest.startswith("sha256:"):
-                expected = self.expected_digest.split(":", 1)[1].lower()
-                if digest.hexdigest().lower() != expected:
+            if self.expected_digest:
+                algorithm, separator, expected = self.expected_digest.partition(":")
+                if (
+                    not separator
+                    or algorithm.lower() != "sha256"
+                    or not re.fullmatch(r"[0-9a-fA-F]{64}", expected)
+                ):
+                    raise RuntimeError("GitHub provided an unsupported or malformed installer digest.")
+                if digest.hexdigest().lower() != expected.lower():
                     raise RuntimeError("The installer SHA-256 digest does not match the GitHub release.")
             self.downloaded.emit(installer_path)
             installer_path = ""
