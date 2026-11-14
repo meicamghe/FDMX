@@ -2956,6 +2956,18 @@ class GitHubUpdateWorker(QThread):
             self.failed.emit(str(exc))
 
 
+def _youtube_ffmpeg_executable():
+    """Locate bundled imageio-ffmpeg first, then a system FFmpeg executable."""
+    try:
+        import imageio_ffmpeg
+        executable = imageio_ffmpeg.get_ffmpeg_exe()
+        if executable and os.path.isfile(executable):
+            return executable
+    except Exception:
+        pass
+    return shutil.which("ffmpeg")
+
+
 def _resolve_youtube_output_path(info, downloader):
     """Return yt-dlp's final output path, including post-processed/merged files."""
     candidates = []
@@ -3064,6 +3076,14 @@ class YouTubeDownloadWorker(QThread):
                 "fragment_retries": 5,
                 "progress_hooks": [self._progress_hook],
             }
+            if self.media_type == "video":
+                ffmpeg_executable = _youtube_ffmpeg_executable()
+                if not ffmpeg_executable:
+                    raise RuntimeError(
+                        "Best-quality YouTube video downloads need FFmpeg. "
+                        "Install FFmpeg or install the imageio-ffmpeg Python package."
+                    )
+                options["ffmpeg_location"] = ffmpeg_executable
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
                 info = downloader.extract_info(self.url, download=True)
