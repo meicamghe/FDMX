@@ -682,15 +682,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                 "__builtins__": __builtins__,
             }
             exec(
-                compile(
-                    ast.Module(body=[run_node, progress_hook_node], type_ignores=[]),
-                    str(SOURCE_PATH),
-                    "exec",
-                ),
+                compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
                 namespace,
-            )
-            self_owner._progress_hook = types.MethodType(
-                namespace["_progress_hook"], self_owner
             )
             previous = sys.modules.get("yt_dlp")
             sys.modules["yt_dlp"] = fake_module
