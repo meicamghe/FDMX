@@ -3208,7 +3208,8 @@ class YouTubeDownloadWorker(QThread):
                         index = 1
                         while True:
                             candidate_template = f"{base} ({index}).%(ext)s"
-                            candidate_final = candidate_template.replace("%(ext)s", "mp4" if self.media_type == "video" else "m4a")
+                            output_ext = "mp4" if self.media_type == "video" else (os.path.splitext(predicted_path)[1].lstrip(".") or "m4a")
+                            candidate_final = candidate_template.replace("%(ext)s", output_ext)
                             if not os.path.exists(candidate_final):
                                 options["outtmpl"] = candidate_template
                                 break
