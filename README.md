@@ -1,4 +1,4 @@
-# GNS Downloader 6.42
+# GNS Downloader 6.50
 
 GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
@@ -6,7 +6,7 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 ## Current version
 
-- Application version: **6.42**
+- Application version: **6.50**
 - Main source: `FDMX_v6_50.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
@@ -14,16 +14,16 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## Development branch: v6.50 (not yet released)
+## What's new in 6.50
 
-The feature branch `release/6.50-finalization` contains the current v6.50 development source, `FDMX_v6_50.py`. The latest **public GitHub Release remains v6.42**; branch commits are not visible to the in-app updater until a stable release is published.
+GNS Downloader **v6.50** is the latest official public release. The maintained application source is `FDMX_v6_50.py`.
 
 - YouTube video and audio downloads use the optional `yt-dlp` runtime. Best-quality video merging requires FFmpeg; audio-only downloads do not.
 - Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build. Proxy entries require a hostname and port; endpoint paths, query strings and fragments are rejected instead of silently ignored.
 - The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
 - Portable/source builds open the release page; automatic Setup installation is intended for the installed Windows build.
 
-The v6.50 branch has offline YouTube regression tests and Windows/Linux packaging smoke checks. These checks do not replace real YouTube/proxy network tests or manual GUI testing.
+The v6.50 Windows installer, portable ZIP and Ubuntu/Debian package were built and smoke-tested. Offline regression tests do not replace live YouTube/proxy network tests or manual GUI testing.
 
 ## What's new in 6.42
 
@@ -51,26 +51,26 @@ The download engine preserves each task's original byte-range map across pause/r
 
 ## Windows downloads
 
-The official v6.42 release is published. Download the files:
+The official v6.50 release is published. Download the files:
 
-- **[Portable ZIP — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
-- **[Ubuntu/Debian DEB — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb)** — AMD64 package.
+- **[Portable ZIP — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Ubuntu/Debian DEB — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb)** — AMD64 package.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Build GNS Downloader Windows packages](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml). The published release is [GNS Downloader v6.42](https://github.com/meicamghe/FDMX/releases/tag/v6.42); its Windows and Linux packages are available below. Branch builds create CI artifacts only.
+Release workflow: [Publish GNS Downloader v6.50](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). The published release is [GNS Downloader v6.50](https://github.com/meicamghe/FDMX/releases/tag/v6.50), with Windows installer, portable ZIP and Linux DEB assets.
 
 
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** for version 6.42 has been built, smoke-tested, and attached to the public GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** for version 6.50 has been built, smoke-tested, and attached to the public GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
-The v6.42 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
+The v6.50 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
 
 Check the system architecture (it should print `amd64`):
 
@@ -81,8 +81,8 @@ dpkg --print-architecture
 Download and install the package (APT will resolve its declared system dependencies):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.42/GNS-Downloader-6.42-amd64.deb" -o /tmp/GNS-Downloader-6.42-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.42-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb" -o /tmp/GNS-Downloader-6.50-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.50-amd64.deb
 ```
 
 Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
