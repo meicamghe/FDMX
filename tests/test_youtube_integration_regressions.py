@@ -682,8 +682,15 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                 "__builtins__": __builtins__,
             }
             exec(
-                compile(ast.Module(body=[run_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+                compile(
+                    ast.Module(body=[run_node, progress_hook_node], type_ignores=[]),
+                    str(SOURCE_PATH),
+                    "exec",
+                ),
                 namespace,
+            )
+            self_owner._progress_hook = types.MethodType(
+                namespace["_progress_hook"], self_owner
             )
             previous = sys.modules.get("yt_dlp")
             sys.modules["yt_dlp"] = fake_module
@@ -939,6 +946,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_youtube_cancel_during_transfer_preserves_partial_file_for_resume(self):
         import sys
         import threading
+        import time
         import types
 
         tree = ast.parse(SOURCE)
@@ -949,6 +957,10 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         run_node = next(
             node for node in worker_class.body
             if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+        progress_hook_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_progress_hook"
         )
         calls = {"transfer": 0, "canceled": 0, "completed": 0, "failed": 0}
 
@@ -1004,15 +1016,17 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
             self_owner.pause_event.set()
+            self_owner._last_downloaded = 0
+            self_owner._last_time = time.monotonic()
+            self_owner._speed = 0.0
             self_owner.state = NoopSignal()
             self_owner.canceled = SignalCounter("canceled")
             self_owner.completed = SignalCounter("completed")
             self_owner.failed = SignalCounter("failed")
             self_owner.progress = NoopSignal()
-            self_owner._progress_hook = lambda data: None
             namespace = {
                 "os": os,
-                "time": __import__("time"),
+                "time": time,
                 "_resolve_youtube_output_path": lambda info, downloader: final_path,
                 "_youtube_ffmpeg_executable": lambda: "",
                 "normalize_proxy_url": lambda value: value,
@@ -1167,6 +1181,136 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self.assertEqual(calls["canceled"], 0)
             self.assertEqual(calls["failed"], 0)
             self.assertTrue(os.path.isfile(final_path))
+
+
+    def test_youtube_cancel_while_paused_releases_progress_hook(self):
+        import sys
+        import threading
+        import time
+        import types
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        methods = {
+            node.name: node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("run", "_progress_hook")
+        }
+        calls = {"completed": 0, "canceled": 0, "failed": 0}
+        hook_entered = threading.Event()
+
+        class FakeDownloader:
+            def __init__(self, options):
+                self.params = options
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"id": "cancel-paused-transfer"}
+
+            def process_ie_result(self, info, download=False):
+                hook_entered.set()
+                self.params["progress_hooks"][0]({
+                    "status": "downloading",
+                    "downloaded_bytes": 10,
+                    "total_bytes": 100,
+                })
+                raise AssertionError("cancel should interrupt the paused hook")
+
+        class SignalCounter:
+            def __init__(self, key):
+                self.key = key
+
+            def emit(self, *args):
+                calls[self.key] += 1
+
+        class NoopSignal:
+            def emit(self, *args):
+                pass
+
+        class WorkerStub:
+            pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            self_owner = WorkerStub()
+            self_owner.url = "https://www.youtube.com/watch?v=cancel-paused-transfer"
+            self_owner.folder = folder
+            self_owner.media_type = "audio"
+            self_owner.proxy_url = ""
+            self_owner.cancel_event = threading.Event()
+            self_owner.pause_event = threading.Event()
+            self_owner._last_downloaded = 0
+            self_owner._last_time = time.monotonic()
+            self_owner._speed = 0.0
+            self_owner.state = NoopSignal()
+            self_owner.progress = NoopSignal()
+            self_owner.completed = SignalCounter("completed")
+            self_owner.canceled = SignalCounter("canceled")
+            self_owner.failed = SignalCounter("failed")
+            namespace = {
+                "os": os,
+                "time": time,
+                "_resolve_youtube_output_path": lambda info, downloader: "",
+                "_youtube_ffmpeg_executable": lambda: "",
+                "normalize_proxy_url": lambda value: value,
+                "__builtins__": __builtins__,
+            }
+            exec(
+                compile(
+                    ast.Module(
+                        body=[methods["run"], methods["_progress_hook"]],
+                        type_ignores=[],
+                    ),
+                    str(SOURCE_PATH),
+                    "exec",
+                ),
+                namespace,
+            )
+            self_owner._progress_hook = types.MethodType(
+                namespace["_progress_hook"], self_owner
+            )
+            previous = sys.modules.get("yt_dlp")
+            sys.modules["yt_dlp"] = types.SimpleNamespace(YoutubeDL=FakeDownloader)
+            worker_thread = threading.Thread(
+                target=namespace["run"], args=(self_owner,)
+            )
+            try:
+                worker_thread.start()
+                self.assertTrue(
+                    hook_entered.wait(2),
+                    "download never reached its paused progress hook",
+                )
+                time.sleep(0.05)
+                self.assertTrue(
+                    worker_thread.is_alive(),
+                    "paused transfer should wait until resume or cancellation",
+                )
+                self_owner.cancel_event.set()
+                worker_thread.join(2)
+                self.assertFalse(
+                    worker_thread.is_alive(),
+                    "cancellation did not release the paused progress hook",
+                )
+            finally:
+                self_owner.pause_event.set()
+                self_owner.cancel_event.set()
+                if worker_thread.is_alive():
+                    worker_thread.join(2)
+                if previous is None:
+                    sys.modules.pop("yt_dlp", None)
+                else:
+                    sys.modules["yt_dlp"] = previous
+
+        self.assertEqual(calls["completed"], 0)
+        self.assertEqual(calls["canceled"], 1)
+        self.assertEqual(calls["failed"], 0)
 
 
 if __name__ == "__main__":
