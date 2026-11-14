@@ -3051,7 +3051,7 @@ class YouTubeDownloadWorker(QThread):
             os.makedirs(self.folder, exist_ok=True)
             output_template = os.path.join(self.folder, "%(title).180B [%(id)s].%(ext)s")
             options = {
-                "format": "bestvideo*+bestaudio/best" if self.media_type == "video" else "bestaudio/best",
+                "format": "bestvideo+bestaudio/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio",
                 "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
