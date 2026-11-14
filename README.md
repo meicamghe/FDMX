@@ -7,7 +7,7 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 ## Current version
 
 - Application version: **6.42**
-- Main source: `FDMX_v6_36.py`
+- Main source: `FDMX_v6_50.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
 - Linux source launch: `python ubuntu.py` (same current application source)
@@ -153,7 +153,7 @@ python -m pip install PySide6-Essentials
 python ubuntu.py
 ```
 
-You can also launch the maintained source directly with `python FDMX_v6_36.py`. Run these commands from the project directory and activate `.venv` again after opening a new terminal:
+You can also launch the maintained source directly with `python FDMX_v6_50.py`. Run these commands from the project directory and activate `.venv` again after opening a new terminal:
 
 ```bash
 cd FDMX
@@ -178,7 +178,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
-python FDMX_v6_36.py
+python FDMX_v6_50.py
 ```
 
 ## Build Windows packages
@@ -194,7 +194,7 @@ Task state and download history are stored under the user's home directory in `.
 ## Tests
 
 ```bash
-python -m py_compile FDMX_v6_36.py ubuntu.py
+python -m py_compile FDMX_v6_50.py ubuntu.py
 python tests/test_gns_downloader_regressions.py
 ```
 

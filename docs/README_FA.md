@@ -16,10 +16,10 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 ## نسخه و محیط اجرا
 
 - **نسخه برنامه:** 6.42
-- **فایل اصلی و مرجع پروژه:** `FDMX_v6_36.py`
+- **فایل اصلی و مرجع پروژه:** `FDMX_v6_50.py`
 - **نسخه Python:** **3.12**
 - **ویندوز:** بسته‌های اجرایی Windows 10/11 نسخه ۶۴ بیتی
-- **لینوکس:** اجرای سورس فعلی با دستور `python ubuntu.py` یا `python FDMX_v6_36.py`
+- **لینوکس:** اجرای سورس فعلی با دستور `python ubuntu.py` یا `python FDMX_v6_50.py`
 - **ظاهر برنامه:** در ویندوز تم Windows 11 Fluent و در لینوکس تم Ubuntu Yaru به‌صورت خودکار انتخاب می‌شود.
 - تب Theme Studio و Plugin Manager در رابط برنامه وجود ندارند.
 
@@ -163,7 +163,7 @@ python ubuntu.py
 همچنین می‌توانید فایل اصلی را مستقیماً اجرا کنید:
 
 ```bash
-python FDMX_v6_36.py
+python FDMX_v6_50.py
 ```
 
 برای اجرای دوباره در ترمینال جدید، وارد پوشه پروژه شوید و محیط مجازی را فعال کنید:
@@ -198,7 +198,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install PySide6-Essentials
-python FDMX_v6_36.py
+python FDMX_v6_50.py
 ```
 
 ## ساخت بسته‌های ویندوز
@@ -214,10 +214,10 @@ python FDMX_v6_36.py
 ## تست‌ها
 
 ```bash
-python -m py_compile FDMX_v6_36.py ubuntu.py
+python -m py_compile FDMX_v6_50.py ubuntu.py
 python tests/test_gns_downloader_regressions.py
 ```
 
-فایل‌های شماره‌دار قدیمی برای تاریخچه توسعه در مخزن باقی مانده‌اند؛ فایل مرجع برنامه فعلی `FDMX_v6_36.py` است.
+فایل‌های شماره‌دار قدیمی برای تاریخچه توسعه در مخزن باقی مانده‌اند؛ فایل مرجع برنامه فعلی `FDMX_v6_50.py` است.
 
 پیش از توزیع مجدد سورس یا فایل‌های اجرایی، [اطلاعیه مجوز پروژه](../LICENSE-NOTICE.md) را مطالعه کنید.
