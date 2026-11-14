@@ -358,7 +358,7 @@ class DownloadWorker(QThread):
     canceled = Signal()
     state = Signal(str)
 
-    def __init__(self, task_id, url, folder, speed_limit_kbps=0, parts_count=CONNECTIONS, proxy_url=""):
+    def __init__(self, task_id, url, folder, speed_limit_kbps=0, parts_count=CONNECTIONS, proxy_url="", destination_path=""):
         super().__init__()
         self.task_id = task_id
         self.url = url
@@ -379,7 +379,7 @@ class DownloadWorker(QThread):
         self.last_bytes = 0
         self.current_speed = 0.0
         self.limiter = RateLimiter(speed_limit_kbps * 1024)
-        self.destination_path = None
+        self.destination_path = destination_path or None
         self.temp_path = None
         self.part_count = CONNECTIONS
         self.configured_part_count = max(1, min(MAX_PARTS, int(parts_count or CONNECTIONS)))
@@ -860,7 +860,7 @@ class DownloadWorker(QThread):
             self.wait_if_paused()
 
             os.makedirs(self.folder, exist_ok=True)
-            destination = unique_path(self.folder, filename)
+            destination = self.destination_path or unique_path(self.folder, filename)
             self.destination_path = destination
 
             last_error = None
@@ -4784,6 +4784,32 @@ class FDMX(QWidget):
         if task and task.get("metadata_worker") is worker:
             task["metadata_worker"] = None
 
+    def ask_existing_file_action(self, path):
+        """Ask what to do when a download target already exists."""
+        box = QMessageBox(self)
+        box.setWindowTitle("File already exists")
+        box.setIcon(QMessageBox.Question)
+        box.setText(f'The file already exists:\n{os.path.basename(path)}')
+        box.setInformativeText("Replace it, save another copy, or open the existing file?")
+        overwrite = box.addButton("Replace existing file", QMessageBox.DestructiveRole)
+        new_copy = box.addButton("Save as new file", QMessageBox.AcceptRole)
+        open_file = box.addButton("Open existing file", QMessageBox.ActionRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(new_copy)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is overwrite:
+            return "overwrite"
+        if clicked is new_copy:
+            return "new"
+        if clicked is open_file:
+            return "open"
+        return "cancel"
+
+    def open_existing_file(self, path):
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path))):
+            QMessageBox.warning(self, "Open failed", "The existing file could not be opened.")
+
     def on_file_info_ready(self, task_id, info):
         task = self.tasks.get(task_id)
         if not task:
@@ -4805,6 +4831,25 @@ class FDMX(QWidget):
         task["accept_ranges"] = bool(info.get("accept_ranges"))
         task["status"] = "Ready"
         task["category"] = category_for_filename(task["name"])
+        existing_path = os.path.join(task["folder"], task["name"])
+        if os.path.isfile(existing_path):
+            choice = self.ask_existing_file_action(existing_path)
+            if choice == "open":
+                self.open_existing_file(existing_path)
+                self.tasks.pop(task_id, None)
+                self.save_tasks()
+                self.refresh_table()
+                self.status.setText("Opened the existing file; no download was started.")
+                return
+            if choice == "cancel":
+                self.tasks.pop(task_id, None)
+                self.save_tasks()
+                self.refresh_table()
+                self.status.setText("Download canceled.")
+                return
+            task["destination_path"] = existing_path if choice == "overwrite" else unique_path(task["folder"], task["name"])
+        else:
+            task["destination_path"] = existing_path
         self.save_tasks()
         self.refresh_table()
         self.show_download_details(task_id)
@@ -4871,7 +4916,7 @@ class FDMX(QWidget):
                 )
             else:
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
-                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url)
+                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url, task.get("destination_path", ""))
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
