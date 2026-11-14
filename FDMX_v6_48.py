@@ -3216,7 +3216,10 @@ class YouTubeDownloadWorker(QThread):
                 "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
+                # Preserve resumable .part files on interruption; never write an
+                # incomplete transfer directly to its final filename.
                 "continuedl": True,
+                "nopart": False,
                 "overwrites": False,
                 "quiet": True,
                 "no_warnings": True,
