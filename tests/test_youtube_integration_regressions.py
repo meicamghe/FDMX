@@ -482,6 +482,20 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.cancel_event.is_set()", worker_source)
 
 
+    def test_youtube_download_keeps_resumable_partial_files_and_bounded_timeout(self):
+        worker_start = SOURCE.index("class YouTubeDownloadWorker")
+        worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
+        worker_source = SOURCE[worker_start:worker_end]
+        self.assertIn('"continuedl": True', worker_source)
+        self.assertIn('"nopart": False', worker_source)
+        self.assertIn('"overwrites": False', worker_source)
+        self.assertIn('"socket_timeout": 30', worker_source)
+        self.assertIn('"progress_hooks": [self._progress_hook]', worker_source)
+        # The worker must not delete yt-dlp's .part files on cancellation:
+        # they are the resume point for a subsequent attempt.
+        self.assertNotIn("os.remove(", worker_source)
+        self.assertNotIn("shutil.rmtree(", worker_source)
+
     def test_update_download_rejects_unsupported_or_malformed_release_digest(self):
         start = SOURCE.index("class GitHubUpdateDownloadWorker")
         end = SOURCE.index("def is_youtube_url", start)
