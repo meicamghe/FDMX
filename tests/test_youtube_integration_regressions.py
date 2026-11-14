@@ -94,6 +94,16 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertGreater(version_key("v6.48.10"), version_key("6.48.9"))
         self.assertEqual(version_key("6.48"), version_key("6.48.0"))
 
+    def test_update_installer_is_removed_if_setup_launch_fails(self):
+        start = SOURCE.index("    def on_update_downloaded(self, installer_path):")
+        end = SOURCE.index("\\n\\n    def set_filter", start)
+        handler = SOURCE[start:end]
+        launch = handler.index("subprocess.Popen([installer_path], close_fds=True)")
+        failure = handler[launch:]
+        self.assertIn("except OSError as exc:", failure)
+        self.assertIn("os.remove(installer_path)", failure)
+        self.assertIn('self.status.setText("Update installer could not be started.")', failure)
+
     def test_disabled_context_menu_actions_are_visibly_distinguished(self):
         self.assertIn('QMenu::item:disabled { color: #888888; }', SOURCE)
         self.assertIn('action.setEnabled(available)', SOURCE)
