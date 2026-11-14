@@ -165,6 +165,9 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('downloader.params["outtmpl"] = candidate_template', worker)
         self.assertIn('self.existing_file.emit(existing_path)', worker)
 
+    def test_completed_downloads_can_be_readded_for_conflict_prompt(self):
+        self.assertIn('("Failed", "Canceled", "Completed")', SOURCE)
+
     def test_video_download_requires_and_configures_ffmpeg(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
