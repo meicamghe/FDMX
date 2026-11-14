@@ -19,7 +19,7 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 The feature branch `feature/6-48-update-checker-button` contains the current v6.48 development source, `FDMX_v6_48.py`. The latest **public GitHub Release remains v6.42**; branch commits are not visible to the in-app updater until a stable release is published.
 
 - YouTube video and audio downloads use the optional `yt-dlp` runtime. Best-quality video merging requires FFmpeg; audio-only downloads do not.
-- Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build.
+- Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build. Proxy entries require a hostname and port; endpoint paths, query strings and fragments are rejected instead of silently ignored.
 - The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
 - Portable/source builds open the release page; automatic Setup installation is intended for the installed Windows build.
 
