@@ -59,8 +59,9 @@ def _safe_int(value, default=0):
 
 
 _ACTIVE_DUPLICATE_STATUSES = {
-    "Queued", "Checking metadata", "Downloading", "Paused", "Retrying",
-    "Connecting", "Starting", "Preparing", "Waiting",
+    "Queued", "Ready", "Checking metadata", "Checking server", "Downloading",
+    "Paused", "Retrying", "Canceling", "Seeding", "Connecting", "Starting",
+    "Preparing", "Waiting",
 }
 
 
