@@ -139,6 +139,120 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_socks_dns_mode_distinguishes_local_and_remote_resolution(self):
         self.assertIn('rdns=(scheme in ("socks4a", "socks5h"))', SOURCE)
 
+    def test_socks_connection_applies_remote_dns_credentials_and_timeout(self):
+        import socket
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_proxy_aware_create_connection"
+        )
+        calls = {}
+
+        class FakeSocksSocket:
+            def set_proxy(self, *args, **kwargs):
+                calls["proxy"] = (args, kwargs)
+
+            def settimeout(self, value):
+                calls["timeout"] = value
+
+            def bind(self, value):
+                calls["source_address"] = value
+
+            def connect(self, value):
+                calls["address"] = value
+
+        fake_socks = types.SimpleNamespace(
+            SOCKS4=4, SOCKS5=5, socksocket=FakeSocksSocket
+        )
+        state = threading.local()
+        state.url = "socks5h://user%40name:p%3Ass@proxy.example:1080"
+        namespace = {
+            "getattr": getattr,
+            "threading": threading,
+            "_PROXY_THREAD_STATE": state,
+            "_ORIGINAL_CREATE_CONNECTION": lambda *a, **k: None,
+            "socket": socket,
+            "urllib": urllib,
+            "__builtins__": __builtins__,
+        }
+        original_import = __import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "socks":
+                return fake_socks
+            return original_import(name, *args, **kwargs)
+
+        namespace["__builtins__"] = dict(vars(__builtins__)) if not isinstance(__builtins__, dict) else dict(__builtins__)
+        namespace["__builtins__"]["__import__"] = fake_import
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        connect = namespace["_proxy_aware_create_connection"]
+        connect(("origin.example", 443), timeout=17, source_address=("127.0.0.1", 0))
+        args, kwargs = calls["proxy"]
+        self.assertEqual(args[:3], (5, "proxy.example", 1080))
+        self.assertTrue(kwargs["rdns"])
+        self.assertEqual(kwargs["username"], "user@name")
+        self.assertEqual(kwargs["password"], "p:ss")
+        self.assertEqual(calls["timeout"], 17)
+        self.assertEqual(calls["source_address"], ("127.0.0.1", 0))
+        self.assertEqual(calls["address"], ("origin.example", 443))
+
+    def test_socks_connection_uses_local_dns_for_socks4(self):
+        import socket
+        import threading
+        import types
+
+        tree = ast.parse(SOURCE)
+        node = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_proxy_aware_create_connection"
+        )
+        calls = {}
+
+        class FakeSocksSocket:
+            def set_proxy(self, *args, **kwargs):
+                calls["proxy"] = (args, kwargs)
+
+            def settimeout(self, value):
+                pass
+
+            def bind(self, value):
+                pass
+
+            def connect(self, value):
+                pass
+
+        fake_socks = types.SimpleNamespace(
+            SOCKS4=4, SOCKS5=5, socksocket=FakeSocksSocket
+        )
+        state = threading.local()
+        state.url = "socks4://proxy.example:1080"
+        original_import = __import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "socks":
+                return fake_socks
+            return original_import(name, *args, **kwargs)
+
+        builtins_map = dict(vars(__builtins__)) if not isinstance(__builtins__, dict) else dict(__builtins__)
+        builtins_map["__import__"] = fake_import
+        namespace = {
+            "_PROXY_THREAD_STATE": state,
+            "_ORIGINAL_CREATE_CONNECTION": lambda *a, **k: None,
+            "socket": socket,
+            "urllib": urllib,
+            "__builtins__": builtins_map,
+        }
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        namespace["_proxy_aware_create_connection"](("origin.example", 443))
+        args, kwargs = calls["proxy"]
+        self.assertEqual(args[0], 4)
+        self.assertFalse(kwargs["rdns"])
+
     def test_socks_proxy_is_scoped_to_the_current_worker_thread(self):
         self.assertIn("_PROXY_THREAD_STATE = threading.local()", SOURCE)
         self.assertIn("with thread_proxy(proxy_url):", SOURCE)
