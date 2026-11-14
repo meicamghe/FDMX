@@ -55,9 +55,9 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_application_source_compiles(self):
         compile(SOURCE, str(SOURCE_PATH), "exec")
 
-    def test_update_checker_has_a_visible_test_button(self):
-        self.assertIn('self.update_check_btn = QPushButton("Test update checker")', SOURCE)
-        self.assertIn('self.update_check_btn.clicked.connect(self.check_for_updates)', SOURCE)
+    def test_update_checker_uses_the_existing_help_menu_action(self):
+        self.assertNotIn("Test update checker", SOURCE)
+        self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
         self.assertIn('APP_VERSION = "6.48"', SOURCE)
 
