@@ -11,7 +11,7 @@ import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "FDMX_v6_47.py"
+SOURCE_PATH = ROOT / "FDMX_v6_48.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
@@ -54,6 +54,12 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_application_source_compiles(self):
         compile(SOURCE, str(SOURCE_PATH), "exec")
+
+    def test_update_checker_has_a_visible_test_button(self):
+        self.assertIn('self.update_check_btn = QPushButton("Test update checker")', SOURCE)
+        self.assertIn('self.update_check_btn.clicked.connect(self.check_for_updates)', SOURCE)
+        self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
+        self.assertIn('APP_VERSION = "6.48"', SOURCE)
 
     def test_proxy_normalizer_accepts_supported_schemes(self):
         normalize = load_proxy_normalizer()
