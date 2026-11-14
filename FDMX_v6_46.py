@@ -4862,7 +4862,8 @@ class FDMX(QWidget):
                     task.get("media_type", "video"), proxy_url
                 )
             else:
-                proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""\n                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url)
+                proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url)
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
