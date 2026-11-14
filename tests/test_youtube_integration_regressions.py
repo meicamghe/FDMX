@@ -372,7 +372,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
             and node.name in ("cancel", "_interrupt_response")
         }
-        namespace = {}
+        namespace = {"socket": socket}
         exec(
             compile(ast.Module(body=[methods["_interrupt_response"], methods["cancel"]], type_ignores=[]), str(SOURCE_PATH), "exec"),
             namespace,
