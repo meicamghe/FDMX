@@ -4566,7 +4566,12 @@ class FDMX(QWidget):
         try:
             subprocess.Popen([installer_path], close_fds=True)
         except OSError as exc:
+            try:
+                os.remove(installer_path)
+            except OSError:
+                pass
             QMessageBox.warning(self, "Could not launch Setup", str(exc))
+            self.status.setText("Update installer could not be started.")
 
 
     def set_filter(self, name):
