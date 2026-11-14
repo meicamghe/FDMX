@@ -575,5 +575,20 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertLess(metadata, transfer)
 
 
+    def test_youtube_file_conflict_ui_handlers_are_qt_bound_connections(self):
+        worker_start = SOURCE.index("class YouTubeDownloadWorker")
+        worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
+        worker = SOURCE[worker_start:worker_end]
+        self.assertIn("file_conflict = Signal(str, str)", worker)
+        self.assertIn("existing_file = Signal(str, str)", worker)
+        self.assertIn("self.file_conflict.emit(self.task_id, existing_path)", worker)
+        self.assertIn("self.existing_file.emit(self.task_id, existing_path)", worker)
+        self.assertIn("worker.file_conflict.connect(self.on_youtube_file_conflict)", SOURCE)
+        self.assertIn("worker.existing_file.connect(self.on_youtube_existing_file)", SOURCE)
+        self.assertNotIn("worker.file_conflict.connect(lambda", SOURCE)
+        self.assertNotIn("worker.existing_file.connect(lambda", SOURCE)
+        self.assertIn("def on_youtube_file_conflict(self, task_id, path):", SOURCE)
+
+
 if __name__ == "__main__":
     unittest.main()
