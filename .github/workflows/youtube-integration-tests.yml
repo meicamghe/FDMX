@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compile v6.43 source
+      - name: Compile v6.44 source
         run: python -m py_compile FDMX_v6_44.py
 
       - name: Run offline YouTube integration tests
