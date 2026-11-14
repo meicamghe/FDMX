@@ -479,6 +479,9 @@ class DownloadWorker(QThread):
     def cancel(self):
         self.cancel_event.set()
         self.pause_event.set()
+        # Release a worker blocked while the UI asks how to handle an existing file.
+        self._conflict_action = "cancel"
+        self._conflict_event.set()
         self._interrupt_active_sockets()
 
     def wait_if_paused(self):
@@ -3230,6 +3233,9 @@ class YouTubeDownloadWorker(QThread):
                 if existing_path:
                     self.file_conflict.emit(existing_path)
                     self._conflict_event.wait()
+                    if self.cancel_event.is_set():
+                        self.canceled.emit()
+                        return
                     action = self._conflict_action
                     if action == "open":
                         self.existing_file.emit(existing_path)
