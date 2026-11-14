@@ -2899,7 +2899,7 @@ class GitHubUpdateWorker(QThread):
                 if isinstance(item, dict)
                 and not item.get("draft", False)
                 and not item.get("prerelease", False)
-                and re.search(r"\\d", str(item.get("tag_name", "")))
+                and re.search(r"\d", str(item.get("tag_name", "")))
             )
             if len(batch) < 100:
                 break
@@ -5177,6 +5177,7 @@ class FDMX(QWidget):
                 "worker": None, "history": False,
                 "content_type": entry.get("content_type", "Unknown"),
                 "kind": entry.get("kind", "http"),
+                "media_type": entry.get("media_type", "video"),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
                 "retry_attempts": int(entry.get("retry_attempts", 0)),
@@ -5215,7 +5216,7 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "scheduled_at", "content_type", "retry_attempts",
+                "category", "kind", "media_type", "scheduled_at", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
                 "parts_count"
             )})
