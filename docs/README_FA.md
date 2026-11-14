@@ -11,7 +11,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 - آپدیتر فقط انتشارهای پایدار با تگ نسخه عددی معتبر را بررسی می‌کند، بالاترین نسخه را انتخاب می‌کند و اندازه فایل و در صورت وجود SHA-256 اعلام‌شده در GitHub را اعتبارسنجی می‌کند. لغو دانلود فایل نصب‌کننده نیز پشتیبانی می‌شود.
 - نسخه‌های Portable و اجرای مستقیم از سورس، صفحه انتشار GitHub را باز می‌کنند؛ نصب خودکار Setup برای نسخه نصب‌شده ویندوز در نظر گرفته شده است.
 
-تست‌های آفلاین رگرسیون و بررسی بسته‌بندی ویندوز و لینوکس برای این شاخه تعریف شده‌اند. این تست‌ها جایگزین آزمایش واقعی دانلود از YouTube، اتصال پروکسی و تست دستی رابط گرافیکی نیستند.
+تست‌های آفلاین رگرسیون و بررسی بسته‌بندی ویندوز و لینوکس برای نسخه 6.50 با موفقیت اجرا شده‌اند. این تست‌ها جایگزین آزمایش واقعی دانلود از YouTube، اتصال پروکسی و تست دستی رابط گرافیکی نیستند.
 
 ## نسخه و محیط اجرا
 
@@ -52,9 +52,9 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 انتشار رسمی نسخه 6.50 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
 
-- **[نسخه Portable ZIP — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
-- **[بسته لینوکس Ubuntu/Debian — نسخه 6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb)** — مخصوص AMD64.
+- **[نسخه Portable ZIP — نسخه 6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Setup — نسخه 6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[بسته لینوکس Ubuntu/Debian — نسخه 6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb)** — مخصوص AMD64.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.

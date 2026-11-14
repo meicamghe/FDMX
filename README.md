@@ -53,9 +53,9 @@ The download engine preserves each task's original byte-range map across pause/r
 
 The official v6.50 release is published. Download the files:
 
-- **[Portable ZIP — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
-- **[Ubuntu/Debian DEB — v6.42](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb)** — AMD64 package.
+- **[Portable ZIP — v6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
+- **[Setup installer — v6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
+- **[Ubuntu/Debian DEB — v6.50](https://github.com/meicamghe/FDMX/releases/download/v6.50/GNS-Downloader-6.50-amd64.deb)** — AMD64 package.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
