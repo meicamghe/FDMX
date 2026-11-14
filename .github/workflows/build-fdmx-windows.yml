@@ -4,13 +4,15 @@ on:
   push:
     branches:
       - main
+      - release/6.50-finalization
       - feature/fdmx-6.22-advanced-fingerprinting
       - feature/fdmx-6.40-github-updater-ubuntu-theme
       - fix/http-download-compatibility
     tags:
       - "v*"
     paths:
-      - "FDMX_v6_36.py"
+      - "FDMX_v6_50.py"
+      - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
@@ -22,7 +24,7 @@ on:
     branches:
       - main
     paths:
-      - "FDMX_v6_36.py"
+      - "FDMX_v6_50.py"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
@@ -51,7 +53,7 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
 
       - name: Generate red G application icon
         run: |
@@ -59,11 +61,11 @@ jobs:
 
       - name: Compile application
         run: |
-          python -m py_compile FDMX_v6_36.py ubuntu.py
+          python -m py_compile FDMX_v6_50.py ubuntu.py
 
       - name: Run application regression tests
         run: |
-          python tests/test_gns_downloader_regressions.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 
       - name: Verify generated icon
         shell: pwsh
@@ -73,7 +75,7 @@ jobs:
       - name: Build GNS Downloader as an onedir application
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/app --contents-directory _internal FDMX_v6_36.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/app --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks FDMX_v6_50.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
       - name: Verify package inputs and report sizes
@@ -100,7 +102,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.42.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.50.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -122,33 +124,33 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.42-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.50-Windows-x64.zip" -Force
 
       - name: Prepare stable GitHub Release asset names
         shell: pwsh
         run: |
-          Copy-Item "dist/installer/GNS-Downloader-Setup-6.42.exe" "dist/installer/GNS-Downloader-Setup.exe"
-          Copy-Item "dist/GNS-Downloader-Portable-v6.42-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.50.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.50-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
 
       - name: Report final package sizes
         shell: pwsh
         run: |
-          Get-Item "dist/installer/GNS-Downloader-Setup-6.42.exe", "dist/GNS-Downloader-Portable-v6.42-Windows-x64.zip" |
+          Get-Item "dist/installer/GNS-Downloader-Setup-6.50.exe", "dist/GNS-Downloader-Portable-v6.50-Windows-x64.zip" |
             Select-Object Name, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Portable-v6.42
-          path: dist/GNS-Downloader-Portable-v6.42-Windows-x64.zip
+          name: GNS-Downloader-Portable-v6.50
+          path: dist/GNS-Downloader-Portable-v6.50-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload installer Setup
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Setup-v6.42
-          path: dist/installer/GNS-Downloader-Setup-6.42.exe
+          name: GNS-Downloader-Setup-v6.50
+          path: dist/installer/GNS-Downloader-Setup-6.50.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -188,12 +190,12 @@ jobs:
       - name: Install PySide6
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials
+          python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
 
       - name: Compile source and run regression tests
         run: |
-          python -m py_compile FDMX_v6_36.py ubuntu.py
-          python tests/test_gns_downloader_regressions.py
+          python -m py_compile FDMX_v6_50.py ubuntu.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 
       - name: Launch app and verify Ubuntu Yaru theme
         run: |
@@ -213,7 +215,7 @@ jobs:
           QApplication.exec = staticmethod(timed_exec)
           sys.exit = lambda *args, **kwargs: None
           try:
-              namespace = runpy.run_path("FDMX_v6_36.py", run_name="__main__")
+              namespace = runpy.run_path("FDMX_v6_50.py", run_name="__main__")
               app = QApplication.instance()
               window = namespace["window"]
               assert window.theme_combo.currentData() == "ubuntu_yaru"
