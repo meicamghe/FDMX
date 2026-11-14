@@ -1,0 +1,231 @@
+name: Publish GNS Downloader v6.50
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "FDMX_v6_50.py"
+      - "ubuntu.py"
+      - "installer/FDMX.iss"
+      - "installer/create_icon.py"
+      - "tests/test_youtube_integration_regressions.py"
+      - "docs/releases/6.50.md"
+      - ".github/workflows/publish-release-v6-50.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build and smoke-test Windows release assets
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install build and runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
+
+      - name: Generate application icon
+        run: python installer/create_icon.py
+
+      - name: Compile and run regression tests
+        run: |
+          python -m py_compile FDMX_v6_50.py ubuntu.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+
+      - name: Build frozen Windows application
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/release-windows --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks FDMX_v6_50.py
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path "dist/GNS Downloader/GNS Downloader.exe")) { throw "Windows application executable was not created." }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
+          & $compiler "installer/FDMX.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      - name: Install and launch-test Windows installer
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.50.exe").Path
+          $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
+          $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
+          $app = Join-Path $installDir "GNS Downloader.exe"
+          if (-not (Test-Path $app)) { throw "Installed application not found: $app" }
+          $process = Start-Process -FilePath $app -PassThru
+          $ready = $false
+          for ($i = 0; $i -lt 35; $i++) {
+            Start-Sleep -Seconds 1
+            $process.Refresh()
+            if ($process.HasExited) { throw "Installed application exited during startup (exit code $($process.ExitCode))" }
+            if ($process.MainWindowHandle -ne 0) { $ready = $true; break }
+          }
+          if (-not $ready) { throw "GNS Downloader did not create its main window within 35 seconds" }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Prepare Windows release assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "release-assets/GNS-Downloader-Portable-Windows-x64.zip" -Force
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.50.exe" "release-assets/GNS-Downloader-Setup.exe"
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: gns-downloader-v6.50-windows
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-linux:
+    name: Build and smoke-test Ubuntu/Debian release asset
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+
+      - name: Install Python build and runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6-Essentials certifi cryptography pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
+
+      - name: Compile and run regression tests
+        run: |
+          python -m py_compile FDMX_v6_50.py ubuntu.py
+          python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+
+      - name: Build frozen Linux application
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks --distpath dist --workpath build/release-linux FDMX_v6_50.py
+          test -x "dist/GNS Downloader/GNS Downloader"
+
+      - name: Assemble Ubuntu/Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="build/deb-root"
+          APPDIR="$ROOT/opt/gns-downloader"
+          install -d "$APPDIR" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/icons/hicolor/256x256/apps" "$ROOT/DEBIAN"
+          cp -a "dist/GNS Downloader/." "$APPDIR/"
+          cat > "$ROOT/usr/bin/gns-downloader" <<'EOF'
+          #!/bin/sh
+          exec /opt/gns-downloader/"GNS Downloader" "$@"
+          EOF
+          chmod 0755 "$ROOT/usr/bin/gns-downloader"
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          image = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(image)
+          draw.rounded_rectangle((8, 8, 248, 248), radius=44, fill=(255, 255, 255, 255))
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 184)
+          draw.text((128, 128), "G", font=font, fill=(226, 35, 26, 255), anchor="mm")
+          image.save("build/deb-root/usr/share/icons/hicolor/256x256/apps/gns-downloader.png")
+          PY
+          cat > "$ROOT/usr/share/applications/gns-downloader.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=GNS Downloader
+          Comment=Multi-connection download manager
+          Exec=gns-downloader
+          Icon=gns-downloader
+          Terminal=false
+          Categories=Network;FileTransfer;
+          StartupNotify=true
+          EOF
+          cat > "$ROOT/DEBIAN/control" <<'EOF'
+          Package: gns-downloader
+          Version: 6.50
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: GNS Downloader Project
+          Depends: libc6, libegl1, libgl1, libxkbcommon0, libdbus-1-3, libxcb-cursor0, libxcb-xinerama0, libxcb-icccm4, libxcb-keysyms1, libxcb-render-util0
+          Description: GNS Downloader
+           Multi-connection graphical download manager.
+          EOF
+          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.50-amd64.deb"
+          dpkg-deb --info "dist/GNS-Downloader-6.50-amd64.deb"
+
+      - name: Install package and smoke-test launcher
+        run: |
+          sudo apt-get install -y ./dist/GNS-Downloader-6.50-amd64.deb
+          test -x /usr/bin/gns-downloader
+          QT_QPA_PLATFORM=offscreen timeout 8s gns-downloader || test "$?" -eq 124
+
+      - name: Upload Linux release asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: gns-downloader-v6.50-linux
+          path: dist/GNS-Downloader-6.50-amd64.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish GNS Downloader v6.50
+    needs:
+      - build-windows
+      - build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source and release notes
+        uses: actions/checkout@v7
+
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: gns-downloader-v6.50-windows
+          path: release-assets
+
+      - name: Download Linux release asset
+        uses: actions/download-artifact@v7
+        with:
+          name: gns-downloader-v6.50-linux
+          path: release-assets
+
+      - name: Publish official GitHub Release and v6.50 tag
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v6.50
+          target_commitish: main
+          name: GNS Downloader v6.50
+          body_path: docs/releases/6.50.md
+          files: |
+            release-assets/GNS-Downloader-Setup.exe
+            release-assets/GNS-Downloader-Portable-Windows-x64.zip
+            release-assets/GNS-Downloader-6.50-amd64.deb
+          fail_on_unmatched_files: true
+          make_latest: true
