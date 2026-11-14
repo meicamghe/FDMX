@@ -10,7 +10,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "FDMX_v6_44.py"
+SOURCE_PATH = ROOT / "FDMX_v6_45.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
@@ -26,9 +26,37 @@ def load_output_resolver():
     return namespace[node.name]
 
 
+def load_proxy_normalizer():
+    tree = ast.parse(SOURCE)
+    node = next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "normalize_proxy_url")
+    namespace = {"urllib": __import__("urllib")}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+    return namespace[node.name]
+
+
 class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_application_source_compiles(self):
         compile(SOURCE, str(SOURCE_PATH), "exec")
+
+    def test_proxy_normalizer_accepts_supported_schemes(self):
+        normalize = load_proxy_normalizer()
+        for scheme in ("http", "https", "socks4", "socks4a", "socks5", "socks5h"):
+            with self.subTest(scheme=scheme):
+                self.assertEqual(normalize(f"{scheme}://127.0.0.1:1080"), f"{scheme}://127.0.0.1:1080")
+
+    def test_proxy_normalizer_rejects_invalid_proxy(self):
+        normalize = load_proxy_normalizer()
+        with self.assertRaises(ValueError):
+            normalize("ftp://127.0.0.1:21")
+        with self.assertRaises(ValueError):
+            normalize("socks5://127.0.0.1")
+
+    def test_youtube_worker_passes_proxy_to_ytdlp(self):
+        start = SOURCE.index("class YouTubeDownloadWorker")
+        end = SOURCE.index("class GitHubUpdateDownloadWorker", start)
+        worker = SOURCE[start:end]
+        self.assertIn('options["proxy"] = self.proxy_url', worker)
+        self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", worker)
 
     def test_video_prefers_best_video_and_audio_with_mp4_merge(self):
         self.assertIn('"format": "bestvideo+bestaudio/best"', SOURCE)
