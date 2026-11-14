@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _MODULE_STARTED_AT = time.perf_counter()
 
-from PySide6.QtCore import QThread, Signal, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
+from PySide6.QtCore import QThread, Signal, Slot, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -5064,6 +5064,7 @@ class FDMX(QWidget):
         self.refresh_table()
         self.status.setText("Torrent added to queue. Set its start time in the Schedule tab if needed.")
         self.start_queue()
+    @Slot(str, str)
     def on_youtube_file_conflict(self, task_id, path):
         worker = self.workers.get(task_id)
         if worker is None or task_id not in self.tasks:
@@ -5072,6 +5073,7 @@ class FDMX(QWidget):
             return
         worker.resolve_file_conflict(self.ask_existing_file_action(path))
 
+    @Slot(str, str)
     def on_youtube_existing_file(self, task_id, path):
         if task_id not in self.tasks:
             return
