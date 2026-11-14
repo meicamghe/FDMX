@@ -180,6 +180,38 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("_conflict_action", cancel_method)
         self.assertNotIn("_conflict_event", cancel_method)
 
+    def test_youtube_cancel_method_releases_conflict_wait_at_runtime(self):
+        import threading
+
+        tree = ast.parse(SOURCE)
+        worker_class = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "YouTubeDownloadWorker"
+        )
+        cancel_node = next(
+            node for node in worker_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "cancel"
+        )
+        namespace = {}
+        exec(
+            compile(ast.Module(body=[cancel_node], type_ignores=[]), str(SOURCE_PATH), "exec"),
+            namespace,
+        )
+
+        class WorkerStub:
+            def __init__(self):
+                self.cancel_event = threading.Event()
+                self.pause_event = threading.Event()
+                self._conflict_event = threading.Event()
+                self._conflict_action = "overwrite"
+
+        worker = WorkerStub()
+        namespace["cancel"].__get__(worker, WorkerStub)()
+        self.assertTrue(worker.cancel_event.is_set())
+        self.assertTrue(worker.pause_event.is_set())
+        self.assertTrue(worker._conflict_event.is_set())
+        self.assertEqual(worker._conflict_action, "cancel")
+
     def test_youtube_cancel_releases_worker_waiting_for_file_conflict(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
         worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
