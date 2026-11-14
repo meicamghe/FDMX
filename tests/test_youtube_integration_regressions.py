@@ -668,6 +668,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.canceled = SignalStub()
             self_owner.failed = SignalStub()
             self_owner.progress = SignalStub()
+            self_owner._progress_hook = lambda data: None
             namespace = {
                 "os": os,
                 "time": __import__("time"),
