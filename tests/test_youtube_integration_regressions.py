@@ -170,6 +170,16 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('task["destination_path"] = existing_path if choice == "overwrite"', SOURCE)
         self.assertIn('self.destination_path or unique_path(self.folder, filename)', SOURCE)
 
+    def test_regular_http_worker_cancel_does_not_use_youtube_conflict_state(self):
+        start = SOURCE.index("class DownloadWorker")
+        end = SOURCE.index("class TorrentWorker", start)
+        worker = SOURCE[start:end]
+        cancel_start = worker.index("    def cancel(self):")
+        cancel_end = worker.index("    def ", cancel_start + 5)
+        cancel_method = worker[cancel_start:cancel_end]
+        self.assertNotIn("_conflict_action", cancel_method)
+        self.assertNotIn("_conflict_event", cancel_method)
+
     def test_youtube_cancel_releases_worker_waiting_for_file_conflict(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
         worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
