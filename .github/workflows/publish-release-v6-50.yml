@@ -12,6 +12,17 @@ on:
       - "tests/test_youtube_integration_regressions.py"
       - "docs/releases/6.50.md"
       - ".github/workflows/publish-release-v6-50.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "FDMX_v6_50.py"
+      - "ubuntu.py"
+      - "installer/FDMX.iss"
+      - "installer/create_icon.py"
+      - "tests/test_youtube_integration_regressions.py"
+      - "docs/releases/6.50.md"
+      - ".github/workflows/publish-release-v6-50.yml"
   workflow_dispatch:
 
 permissions:
@@ -195,6 +206,7 @@ jobs:
           retention-days: 7
 
   publish-release:
+    if: github.event_name != 'pull_request'
     name: Publish GNS Downloader v6.50
     needs:
       - build-windows
