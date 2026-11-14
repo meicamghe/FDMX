@@ -127,6 +127,16 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             normalize("ftp://127.0.0.1:21")
         with self.assertRaises(ValueError):
             normalize("socks5://127.0.0.1")
+        with self.assertRaises(ValueError):
+            normalize("http://proxy.example:not-a-port")
+        with self.assertRaises(ValueError):
+            normalize("socks5://proxy.example:1080/path")
+        with self.assertRaises(ValueError):
+            normalize("socks5://proxy.example:1080?mode=remote")
+        self.assertEqual(
+            normalize("http://user:pass@[::1]:8080/"),
+            "http://user:pass@[::1]:8080",
+        )
 
     def test_regular_download_worker_accepts_proxy_configuration(self):
         start = SOURCE.index("class DownloadWorker")
