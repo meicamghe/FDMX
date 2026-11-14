@@ -824,7 +824,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
                 existing_path = os.path.join(folder, "existing.m4a")
                 Path(existing_path).write_bytes(b"existing")
-                calls = {"conflict": 0, "existing": 0, "transfer": 0, "completed": [], "canceled": 0}
+                calls = {"conflict": 0, "existing": 0, "transfer": 0, "completed": [], "canceled": 0, "failed": 0, "state": 0, "progress": 0}
                 downloader_instances = []
 
                 class FakeDownloader:
