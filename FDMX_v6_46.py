@@ -3080,6 +3080,8 @@ class YouTubeDownloadWorker(QThread):
     failed = Signal(str)
     canceled = Signal()
     state = Signal(str)
+    file_conflict = Signal(str)
+    existing_file = Signal(str)
 
     def __init__(self, task_id, url, folder, media_type="video", proxy_url=""):
         super().__init__()
@@ -3094,6 +3096,12 @@ class YouTubeDownloadWorker(QThread):
         self._last_downloaded = 0
         self._last_time = time.monotonic()
         self._speed = 0.0
+        self._conflict_event = threading.Event()
+        self._conflict_action = "cancel"
+
+    def resolve_file_conflict(self, action):
+        self._conflict_action = action if action in ("overwrite", "new", "open") else "cancel"
+        self._conflict_event.set()
 
     def pause(self):
         self.pause_event.clear()
@@ -3168,7 +3176,44 @@ class YouTubeDownloadWorker(QThread):
                 options["ffmpeg_location"] = ffmpeg_executable
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
-                info = downloader.extract_info(self.url, download=True)
+                info = downloader.extract_info(self.url, download=False)
+                predicted_path = ""
+                try:
+                    predicted_path = os.fspath(downloader.prepare_filename(info))
+                except Exception:
+                    pass
+                existing_path = ""
+                candidates = [predicted_path]
+                if self.media_type == "video" and predicted_path:
+                    candidates.append(os.path.splitext(predicted_path)[0] + ".mp4")
+                for candidate in candidates:
+                    if candidate and os.path.isfile(candidate):
+                        existing_path = candidate
+                        break
+                if existing_path:
+                    self.file_conflict.emit(existing_path)
+                    self._conflict_event.wait()
+                    action = self._conflict_action
+                    if action == "open":
+                        self.existing_file.emit(existing_path)
+                        return
+                    if action == "cancel":
+                        self.canceled.emit()
+                        return
+                    if action == "overwrite":
+                        options["overwrites"] = True
+                        options["continuedl"] = False
+                    elif action == "new":
+                        base = os.path.splitext(predicted_path)[0] if predicted_path else os.path.join(self.folder, "YouTube download")
+                        index = 1
+                        while True:
+                            candidate_template = f"{base} ({index}).%(ext)s"
+                            candidate_final = candidate_template.replace("%(ext)s", "mp4" if self.media_type == "video" else "m4a")
+                            if not os.path.exists(candidate_final):
+                                options["outtmpl"] = candidate_template
+                                break
+                            index += 1
+                info = downloader.process_ie_result(info, download=True)
                 path = _resolve_youtube_output_path(info, downloader)
             if self.cancel_event.is_set():
                 self.canceled.emit()
@@ -4885,6 +4930,23 @@ class FDMX(QWidget):
         self.refresh_table()
         self.status.setText("Torrent added to queue. Set its start time in the Schedule tab if needed.")
         self.start_queue()
+    def on_youtube_file_conflict(self, task_id, path, worker):
+        if task_id not in self.tasks:
+            worker.resolve_file_conflict("cancel")
+            return
+        worker.resolve_file_conflict(self.ask_existing_file_action(path))
+
+    def on_youtube_existing_file(self, task_id, path):
+        task = self.tasks.get(task_id)
+        if not task:
+            return
+        self.open_existing_file(path)
+        task.update({"status": "Completed", "path": path, "downloaded": os.path.getsize(path), "total": os.path.getsize(path), "speed": 0.0, "eta": 0.0})
+        self.save_history_entry(task)
+        self.save_tasks()
+        self.refresh_table()
+        self.status.setText("Opened the existing YouTube file; no download was started.")
+
     def start_queue(self):
         self.schedule_downloads()
 
@@ -4914,6 +4976,8 @@ class FDMX(QWidget):
                     task_id, task["url"], task["folder"],
                     task.get("media_type", "video"), proxy_url
                 )
+                worker.file_conflict.connect(lambda path, tid=task_id, current=worker: self.on_youtube_file_conflict(tid, path, current))
+                worker.existing_file.connect(lambda path, tid=task_id: self.on_youtube_existing_file(tid, path))
             else:
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
                 worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url, task.get("destination_path", ""))
