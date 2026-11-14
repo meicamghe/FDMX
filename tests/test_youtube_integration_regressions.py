@@ -169,8 +169,13 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         tree = ast.parse(SOURCE)
         nodes = [
             node for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+            ) or (
+                isinstance(node, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "_ACTIVE_DUPLICATE_STATUSES" for target in node.targets)
+            )
         ]
         namespace = {"urllib": urllib}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
@@ -191,8 +196,13 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         tree = ast.parse(SOURCE)
         nodes = [
             node for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+            ) or (
+                isinstance(node, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "_ACTIVE_DUPLICATE_STATUSES" for target in node.targets)
+            )
         ]
         namespace = {"urllib": urllib}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
