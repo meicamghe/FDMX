@@ -35,7 +35,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('"merge_output_format": "mp4"', SOURCE)
 
     def test_audio_selects_best_available_audio_without_forcing_conversion(self):
-        self.assertIn('"format": "bestvideo*+bestaudio/best" if self.media_type == "video" else "bestaudio/best"', SOURCE)
+        self.assertIn('"format": "bestvideo+bestaudio/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio"', SOURCE)
 
     def test_final_postprocessed_filepath_is_preferred(self):
         resolve = load_output_resolver()
