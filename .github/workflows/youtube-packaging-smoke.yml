@@ -3,16 +3,16 @@ name: YouTube packaging smoke test
 on:
   push:
     branches:
-      - fix/6-47-duplicate-target-detection
+      - feature/6-48-update-checker-button
     paths:
-      - "FDMX_v6_47.py"
+      - "FDMX_v6_48.py"
       - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-packaging-smoke.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "FDMX_v6_47.py"
+      - "FDMX_v6_48.py"
       - ".github/workflows/youtube-packaging-smoke.yml"
 
 permissions:
@@ -47,12 +47,12 @@ jobs:
 
       - name: Compile source and run offline regressions
         run: |
-          python -m py_compile FDMX_v6_47.py
+          python -m py_compile FDMX_v6_48.py
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 
       - name: Build self-contained application directory
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/youtube-package --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks FDMX_v6_47.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --distpath dist --workpath build/youtube-package --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks FDMX_v6_48.py
 
       - name: Verify frozen application and bundled dependencies
         shell: bash
