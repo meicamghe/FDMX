@@ -3301,9 +3301,20 @@ class GitHubUpdateDownloadWorker(QThread):
         self.expected_size = max(0, int(expected_size or 0))
         self.expected_digest = str(expected_digest or "")
         self.cancel_event = threading.Event()
+        self._response_lock = threading.Lock()
+        self._active_response = None
 
     def cancel(self):
         self.cancel_event.set()
+        # Closing the active response interrupts a stalled network read instead
+        # of making the user wait for the 60-second socket timeout.
+        with self._response_lock:
+            response = self._active_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
     def run(self):
         installer_path = ""
@@ -3320,21 +3331,32 @@ class GitHubUpdateDownloadWorker(QThread):
             digest = hashlib.sha256()
             downloaded = 0
             started = time.monotonic()
-            with open_url(request, timeout=60) as response, open(installer_path, "wb") as output:
-                raw_total = response.headers.get("Content-Length", "")
-                total = int(raw_total) if raw_total.isdigit() else self.expected_size
-                self.progress.emit(0, total, 0.0)
-                while True:
+            with open_url(request, timeout=60) as response:
+                with self._response_lock:
                     if self.cancel_event.is_set():
+                        response.close()
                         raise InterruptedError("Update download canceled by user.")
-                    chunk = response.read(256 * 1024)
-                    if not chunk:
-                        break
-                    output.write(chunk)
-                    digest.update(chunk)
-                    downloaded += len(chunk)
-                    elapsed = max(0.001, time.monotonic() - started)
-                    self.progress.emit(downloaded, total, downloaded / elapsed)
+                    self._active_response = response
+                try:
+                    with open(installer_path, "wb") as output:
+                        raw_total = response.headers.get("Content-Length", "")
+                        total = int(raw_total) if raw_total.isdigit() else self.expected_size
+                        self.progress.emit(0, total, 0.0)
+                        while True:
+                            if self.cancel_event.is_set():
+                                raise InterruptedError("Update download canceled by user.")
+                            chunk = response.read(256 * 1024)
+                            if not chunk:
+                                break
+                            output.write(chunk)
+                            digest.update(chunk)
+                            downloaded += len(chunk)
+                            elapsed = max(0.001, time.monotonic() - started)
+                            self.progress.emit(downloaded, total, downloaded / elapsed)
+                finally:
+                    with self._response_lock:
+                        if self._active_response is response:
+                            self._active_response = None
             if self.cancel_event.is_set():
                 raise InterruptedError("Update download canceled by user.")
             if self.expected_size and downloaded != self.expected_size:
@@ -3348,8 +3370,13 @@ class GitHubUpdateDownloadWorker(QThread):
         except InterruptedError:
             self.canceled.emit()
         except Exception as exc:
-            self.failed.emit(str(exc))
+            if self.cancel_event.is_set():
+                self.canceled.emit()
+            else:
+                self.failed.emit(str(exc))
         finally:
+            with self._response_lock:
+                self._active_response = None
             if installer_path and os.path.exists(installer_path):
                 try:
                     os.remove(installer_path)
