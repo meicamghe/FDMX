@@ -36,6 +36,22 @@ def load_proxy_normalizer():
 
 
 class YouTubeIntegrationRegressionTests(unittest.TestCase):
+    def test_safe_int_handles_null_and_corrupt_saved_values(self):
+        tree = ast.parse(SOURCE)
+        node = next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "_safe_int")
+        namespace = {}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        safe_int = namespace["_safe_int"]
+        self.assertEqual(safe_int(None), 0)
+        self.assertEqual(safe_int(""), 0)
+        self.assertEqual(safe_int("3"), 3)
+        self.assertEqual(safe_int("broken", 7), 7)
+        self.assertEqual(safe_int(None, 5), 5)
+
+    def test_task_restore_uses_safe_integer_conversion(self):
+        self.assertIn('"retry_attempts": _safe_int(entry.get("retry_attempts"), 0)', SOURCE)
+        self.assertIn('"parts_count": max(0, _safe_int(entry.get("parts_count"), 0))', SOURCE)
+
     def test_application_source_compiles(self):
         compile(SOURCE, str(SOURCE_PATH), "exec")
 
