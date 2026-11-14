@@ -405,5 +405,11 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self._active_response = None", worker)
 
 
+    def test_linux_compatibility_launcher_uses_current_source(self):
+        launcher = (ROOT / "ubuntu.py").read_text(encoding="utf-8")
+        self.assertIn('with_name("FDMX_v6_48.py")', launcher)
+        self.assertNotIn('with_name("FDMX_v6_36.py")', launcher)
+
+
 if __name__ == "__main__":
     unittest.main()
