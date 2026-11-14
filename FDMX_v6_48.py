@@ -4593,34 +4593,41 @@ class FDMX(QWidget):
         status = task.get("status", "")
         active = status in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
         menu = QMenu(self)
+        # Make unavailable commands unmistakable across native platform themes.
+        menu.setStyleSheet("QMenu::item:disabled { color: #888888; }")
+
+        def set_action_available(action, available):
+            action.setEnabled(available)
+            if not available:
+                action.setText(f"{action.text()}  (unavailable)")
 
         # Always show the four requested download actions.
-        # Disable actions that do not apply to the selected task's current state.
+        # Disabled actions are both greyed out and explicitly labelled.
         start_action = menu.addAction("Start download")
-        start_action.setEnabled(status == "Queued")
+        set_action_available(start_action, status == "Queued")
         start_action.triggered.connect(self.start_queue)
 
         resume_action = menu.addAction("Resume download")
-        resume_action.setEnabled(status == "Paused")
+        set_action_available(resume_action, status == "Paused")
         resume_action.triggered.connect(self.resume_selected)
 
         cancel_action = menu.addAction("Cancel download")
-        cancel_action.setEnabled(active)
+        set_action_available(cancel_action, active)
         cancel_action.triggered.connect(self.cancel_selected)
 
         retry_action = menu.addAction("Retry download")
-        retry_action.setEnabled(status in ("Failed", "Canceled"))
+        set_action_available(retry_action, status in ("Failed", "Canceled"))
         retry_action.triggered.connect(self.retry_selected)
 
         menu.addSeparator()
 
         if status == "Completed":
             open_file_action = menu.addAction("Open file")
-            open_file_action.setEnabled(bool(task.get("path") and os.path.isfile(task["path"])))
+            set_action_available(open_file_action, bool(task.get("path") and os.path.isfile(task["path"])))
             open_file_action.triggered.connect(self.open_file)
 
             hash_action = menu.addAction("Calculate SHA-256")
-            hash_action.setEnabled(bool(task.get("path") and os.path.isfile(task["path"])))
+            set_action_available(hash_action, bool(task.get("path") and os.path.isfile(task["path"])))
             hash_action.triggered.connect(self.calculate_hash)
 
         if menu.actions():
@@ -4632,7 +4639,8 @@ class FDMX(QWidget):
 
         delete_file_action = menu.addAction("Delete file from disk…")
         file_path = task.get("path", "")
-        delete_file_action.setEnabled(
+        set_action_available(
+            delete_file_action,
             status == "Completed" and bool(file_path) and os.path.isfile(file_path)
         )
         delete_file_action.setToolTip("Permanently delete the downloaded file from your drive")
@@ -4649,7 +4657,7 @@ class FDMX(QWidget):
 
         location = task.get("path") or task.get("folder", "")
         copy_location_action = menu.addAction("Copy save location")
-        copy_location_action.setEnabled(bool(location))
+        set_action_available(copy_location_action, bool(location))
         copy_location_action.triggered.connect(
             lambda checked=False, value=location: QApplication.clipboard().setText(value)
         )
