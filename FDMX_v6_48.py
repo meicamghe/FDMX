@@ -4593,16 +4593,14 @@ class FDMX(QWidget):
         status = task.get("status", "")
         active = status in ("Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding")
         menu = QMenu(self)
-        # Make unavailable commands unmistakable across native platform themes.
+        # Keep disabled commands visibly grey across native platform themes.
         menu.setStyleSheet("QMenu::item:disabled { color: #888888; }")
 
         def set_action_available(action, available):
             action.setEnabled(available)
-            if not available:
-                action.setText(f"{action.text()}  (unavailable)")
 
         # Always show the four requested download actions.
-        # Disabled actions are both greyed out and explicitly labelled.
+        # Disabled actions are distinguished by colour only.
         start_action = menu.addAction("Start download")
         set_action_available(start_action, status == "Queued")
         start_action.triggered.connect(self.start_queue)
