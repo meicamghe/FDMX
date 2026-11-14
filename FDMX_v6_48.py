@@ -3138,8 +3138,8 @@ class YouTubeDownloadWorker(QThread):
     failed = Signal(str)
     canceled = Signal()
     state = Signal(str)
-    file_conflict = Signal(str)
-    existing_file = Signal(str)
+    file_conflict = Signal(str, str)
+    existing_file = Signal(str, str)
 
     def __init__(self, task_id, url, folder, media_type="video", proxy_url=""):
         super().__init__()
@@ -3257,14 +3257,14 @@ class YouTubeDownloadWorker(QThread):
                         existing_path = candidate
                         break
                 if existing_path:
-                    self.file_conflict.emit(existing_path)
+                    self.file_conflict.emit(self.task_id, existing_path)
                     self._conflict_event.wait()
                     if self.cancel_event.is_set():
                         self.canceled.emit()
                         return
                     action = self._conflict_action
                     if action == "open":
-                        self.existing_file.emit(existing_path)
+                        self.existing_file.emit(self.task_id, existing_path)
                         self.completed.emit(existing_path)
                         return
                     if action == "cancel":
@@ -5064,9 +5064,11 @@ class FDMX(QWidget):
         self.refresh_table()
         self.status.setText("Torrent added to queue. Set its start time in the Schedule tab if needed.")
         self.start_queue()
-    def on_youtube_file_conflict(self, task_id, path, worker):
-        if task_id not in self.tasks:
-            worker.resolve_file_conflict("cancel")
+    def on_youtube_file_conflict(self, task_id, path):
+        worker = self.workers.get(task_id)
+        if worker is None or task_id not in self.tasks:
+            if worker is not None:
+                worker.resolve_file_conflict("cancel")
             return
         worker.resolve_file_conflict(self.ask_existing_file_action(path))
 
@@ -5105,8 +5107,10 @@ class FDMX(QWidget):
                     task_id, task["url"], task["folder"],
                     task.get("media_type", "video"), proxy_url
                 )
-                worker.file_conflict.connect(lambda path, tid=task_id, current=worker: self.on_youtube_file_conflict(tid, path, current))
-                worker.existing_file.connect(lambda path, tid=task_id: self.on_youtube_existing_file(tid, path))
+                # Connect to QObject-bound handlers so Qt can marshal UI work
+                # from the worker thread onto the main GUI thread.
+                worker.file_conflict.connect(self.on_youtube_file_conflict)
+                worker.existing_file.connect(self.on_youtube_existing_file)
             else:
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
                 worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url, task.get("destination_path", ""))
