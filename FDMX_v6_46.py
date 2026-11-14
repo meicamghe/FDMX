@@ -58,6 +58,17 @@ def _safe_int(value, default=0):
         return default
 
 
+_ACTIVE_DUPLICATE_STATUSES = {
+    "Queued", "Checking metadata", "Downloading", "Paused", "Retrying",
+    "Connecting", "Starting", "Preparing", "Waiting",
+}
+
+
+def _is_active_duplicate_task(task):
+    """Only block a duplicate while the previous task can still write to its target."""
+    return str(task.get("status", "")).strip() in _ACTIVE_DUPLICATE_STATUSES
+
+
 def create_verified_ssl_context():
     """Create a verified TLS context using certifi when it is available."""
     if certifi is not None:
@@ -4771,7 +4782,7 @@ class FDMX(QWidget):
                 if (existing.get("url") == url
                         and existing.get("kind") == "youtube"
                         and existing.get("media_type", "video") == media_type
-                        and existing.get("status") not in ("Failed", "Canceled", "Completed")):
+                        and _is_active_duplicate_task(existing)):
                     QMessageBox.information(self, "Duplicate download", "This YouTube item is already in the download list.")
                     return
             task_id = uuid.uuid4().hex
@@ -4797,7 +4808,7 @@ class FDMX(QWidget):
         for existing in self.tasks.values():
             same_url = existing.get("url") == normalized_url
             same_target = (existing.get("folder") == folder and existing.get("name", "").casefold() == name.casefold())
-            if (same_url or same_target) and existing.get("status") not in ("Failed", "Canceled", "Completed"):
+            if (same_url or same_target) and _is_active_duplicate_task(existing):
                 QMessageBox.information(self, "Duplicate download", "This URL or target filename is already in the download list: " + existing.get("name", "Download"))
                 return
         self.tasks[task_id] = {
