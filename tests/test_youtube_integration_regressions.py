@@ -86,6 +86,19 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("os.path.isfile(path)", worker_source)
         self.assertIn("self.completed.emit(path)", worker_source)
 
+
+    def test_video_download_requires_and_configures_ffmpeg(self):
+        self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
+        self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
+        self.assertIn("Best-quality YouTube video downloads need FFmpeg.", SOURCE)
+
+    def test_audio_download_does_not_require_ffmpeg(self):
+        worker_start = SOURCE.index("class YouTubeDownloadWorker")
+        worker_end = SOURCE.index("class GitHubUpdateDownloadWorker", worker_start)
+        worker_source = SOURCE[worker_start:worker_end]
+        self.assertIn('if self.media_type == "video":', worker_source)
+        self.assertIn('"bestaudio[ext=m4a]/bestaudio"', worker_source)
+
     def test_youtube_tasks_keep_media_type_when_persisted_and_restored(self):
         self.assertIn('"media_type": entry.get("media_type", "video")', SOURCE)
         self.assertIn('"category", "kind", "media_type", "scheduled_at"', SOURCE)
