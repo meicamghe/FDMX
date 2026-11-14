@@ -4770,7 +4770,7 @@ class FDMX(QWidget):
                 if (existing.get("url") == url
                         and existing.get("kind") == "youtube"
                         and existing.get("media_type", "video") == media_type
-                        and existing.get("status") not in ("Failed", "Canceled")):
+                        and existing.get("status") not in ("Failed", "Canceled", "Completed")):
                     QMessageBox.information(self, "Duplicate download", "This YouTube item is already in the download list.")
                     return
             task_id = uuid.uuid4().hex
@@ -4796,7 +4796,7 @@ class FDMX(QWidget):
         for existing in self.tasks.values():
             same_url = existing.get("url") == normalized_url
             same_target = (existing.get("folder") == folder and existing.get("name", "").casefold() == name.casefold())
-            if (same_url or same_target) and existing.get("status") not in ("Failed", "Canceled"):
+            if (same_url or same_target) and existing.get("status") not in ("Failed", "Canceled", "Completed"):
                 QMessageBox.information(self, "Duplicate download", "This URL or target filename is already in the download list: " + existing.get("name", "Download"))
                 return
         self.tasks[task_id] = {
