@@ -3238,6 +3238,11 @@ class YouTubeDownloadWorker(QThread):
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
                 info = downloader.extract_info(self.url, download=False)
+                # Metadata extraction can block on network I/O. If the user
+                # canceled while it was running, never start the actual transfer.
+                if self.cancel_event.is_set():
+                    self.canceled.emit()
+                    return
                 predicted_path = ""
                 try:
                     predicted_path = os.fspath(downloader.prepare_filename(info))
@@ -3279,6 +3284,12 @@ class YouTubeDownloadWorker(QThread):
                                 downloader.params["outtmpl"] = candidate_template
                                 break
                             index += 1
+                # Recheck immediately before handing control to yt-dlp's
+                # download pipeline; cancellation may arrive during the
+                # conflict prompt or output-path selection.
+                if self.cancel_event.is_set():
+                    self.canceled.emit()
+                    return
                 info = downloader.process_ie_result(info, download=True)
                 path = _resolve_youtube_output_path(info, downloader)
             if self.cancel_event.is_set():
