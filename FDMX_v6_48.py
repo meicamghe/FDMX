@@ -479,9 +479,6 @@ class DownloadWorker(QThread):
     def cancel(self):
         self.cancel_event.set()
         self.pause_event.set()
-        # Release a worker blocked while the UI asks how to handle an existing file.
-        self._conflict_action = "cancel"
-        self._conflict_event.set()
         self._interrupt_active_sockets()
 
     def wait_if_paused(self):
@@ -3154,6 +3151,9 @@ class YouTubeDownloadWorker(QThread):
     def cancel(self):
         self.cancel_event.set()
         self.pause_event.set()
+        # Release a worker blocked while the UI asks how to handle an existing file.
+        self._conflict_action = "cancel"
+        self._conflict_event.set()
 
     def _progress_hook(self, data):
         if self.cancel_event.is_set():
