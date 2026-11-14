@@ -144,7 +144,7 @@ Then activate the environment and install the application dependency:
 ```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
 ```
 
 4. Start the application:
@@ -177,7 +177,7 @@ Install **Python 3.12** and the application dependency:
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials
+python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
 python FDMX_v6_50.py
 ```
 
@@ -195,7 +195,7 @@ Task state and download history are stored under the user's home directory in `.
 
 ```bash
 python -m py_compile FDMX_v6_50.py ubuntu.py
-python tests/test_gns_downloader_regressions.py
+python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 ```
 
 Older numbered scripts remain in the repository for development history; they are not the current application entry point.
