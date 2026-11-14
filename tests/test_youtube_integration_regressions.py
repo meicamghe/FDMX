@@ -11,7 +11,7 @@ import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "FDMX_v6_46.py"
+SOURCE_PATH = ROOT / "FDMX_v6_47.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
@@ -165,12 +165,48 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('downloader.params["outtmpl"] = candidate_template', worker)
         self.assertIn('self.existing_file.emit(existing_path)', worker)
 
+    def test_duplicate_detection_uses_source_url_not_shared_filename(self):
+        tree = ast.parse(SOURCE)
+        nodes = [
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+        ]
+        namespace = {"urllib": urllib}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        is_duplicate = namespace["_is_duplicate_download"]
+        active = {"url": "https://mirror-a.example/FDMX_v6_46.py", "name": "FDMX_v6_46.py", "status": "Downloading"}
+        same_name_other_source = {"url": "https://mirror-b.example/FDMX_v6_46.py", "name": "FDMX_v6_46.py", "status": "Downloading"}
+        same_source = {"url": "https://mirror-a.example/FDMX_v6_46.py", "name": "renamed.py", "status": "Queued"}
+        completed = {"url": "https://mirror-a.example/FDMX_v6_46.py", "name": "FDMX_v6_46.py", "status": "Completed"}
+        self.assertFalse(is_duplicate(same_name_other_source, active["url"]))
+        self.assertTrue(is_duplicate(same_source, active["url"]))
+        self.assertFalse(is_duplicate(completed, active["url"]))
+        self.assertTrue(is_duplicate(
+            {"url": "HTTPS://MIRROR-A.EXAMPLE/FDMX_v6_46.py#download", "status": "Downloading"},
+            active["url"],
+        ))
+
+    def test_youtube_duplicate_detection_preserves_media_type(self):
+        tree = ast.parse(SOURCE)
+        nodes = [
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in ("_normalized_download_url", "_is_active_duplicate_task", "_is_duplicate_download")
+        ]
+        namespace = {"urllib": urllib}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
+        is_duplicate = namespace["_is_duplicate_download"]
+        existing = {"url": "https://www.youtube.com/watch?v=abc", "kind": "youtube", "media_type": "video", "status": "Queued"}
+        self.assertTrue(is_duplicate(existing, existing["url"], "youtube", "video"))
+        self.assertFalse(is_duplicate(existing, existing["url"], "youtube", "audio"))
+
     def test_only_active_tasks_block_duplicate_downloads(self):
         self.assertIn("def _is_active_duplicate_task(task):", SOURCE)
-        self.assertIn("and _is_active_duplicate_task(existing)", SOURCE)
+        self.assertIn("def _is_duplicate_download(existing, url, kind=", SOURCE)
         self.assertIn('"Queued", "Ready", "Checking metadata", "Checking server", "Downloading"', SOURCE)
         self.assertIn('"Paused", "Retrying", "Canceling", "Seeding"', SOURCE)
-        self.assertNotIn('existing.get("status") not in ("Failed", "Canceled", "Completed")', SOURCE)
+        self.assertNotIn("same_target =", SOURCE)
 
     def test_video_download_requires_and_configures_ffmpeg(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
