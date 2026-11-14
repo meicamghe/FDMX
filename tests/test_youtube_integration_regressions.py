@@ -11,7 +11,7 @@ import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "FDMX_v6_48.py"
+SOURCE_PATH = ROOT / "FDMX_v6_50.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
@@ -59,7 +59,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("Test update checker", SOURCE)
         self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
-        self.assertIn('APP_VERSION = "6.48"', SOURCE)
+        self.assertIn('APP_VERSION = "6.50"', SOURCE)
 
     def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
         tree = ast.parse(SOURCE)
@@ -73,15 +73,15 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         select = namespace["_highest_stable_release"]
         releases = [
             {"tag_name": "v6.47", "draft": False, "prerelease": False},
-            {"tag_name": "v6.48", "draft": False, "prerelease": False},
+            {"tag_name": "v6.50", "draft": False, "prerelease": False},
             {"tag_name": "v6.99-rc1", "draft": False, "prerelease": True},
             {"tag_name": "v6.99-rc2", "draft": False, "prerelease": False},
-            {"tag_name": "v6.48.1.2", "draft": False, "prerelease": False},
+            {"tag_name": "v6.50.1.2", "draft": False, "prerelease": False},
             {"tag_name": "v7.00", "draft": True, "prerelease": False},
             {"tag_name": "release-not-numbered", "draft": False, "prerelease": False},
         ]
-        self.assertEqual(select(releases)["tag_name"], "v6.48")
-        self.assertEqual(select(list(reversed(releases)))["tag_name"], "v6.48")
+        self.assertEqual(select(releases)["tag_name"], "v6.50")
+        self.assertEqual(select(list(reversed(releases)))["tag_name"], "v6.50")
         self.assertIsNone(select([]))
 
     def test_update_version_comparison_handles_patch_and_missing_components(self):
@@ -93,8 +93,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         namespace = {"re": __import__("re")}
         exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE_PATH), "exec"), namespace)
         version_key = namespace["_version_key"]
-        self.assertGreater(version_key("v6.48.10"), version_key("6.48.9"))
-        self.assertEqual(version_key("6.48"), version_key("6.48.0"))
+        self.assertGreater(version_key("v6.50.10"), version_key("6.50.9"))
+        self.assertEqual(version_key("6.50"), version_key("6.50.0"))
 
     def test_update_installer_is_removed_if_setup_launch_fails(self):
         start = SOURCE.index("    def on_update_downloaded(self, installer_path):")
@@ -572,7 +572,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_linux_compatibility_launcher_uses_current_source(self):
         launcher = (ROOT / "ubuntu.py").read_text(encoding="utf-8")
-        self.assertIn('with_name("FDMX_v6_48.py")', launcher)
+        self.assertIn('with_name("FDMX_v6_50.py")', launcher)
         self.assertNotIn('with_name("FDMX_v6_36.py")', launcher)
 
 

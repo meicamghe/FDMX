@@ -14,16 +14,16 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## Development branch: v6.48 (not yet released)
+## Development branch: v6.50 (not yet released)
 
-The feature branch `feature/6-48-update-checker-button` contains the current v6.48 development source, `FDMX_v6_48.py`. The latest **public GitHub Release remains v6.42**; branch commits are not visible to the in-app updater until a stable release is published.
+The feature branch `release/6.50-finalization` contains the current v6.50 development source, `FDMX_v6_50.py`. The latest **public GitHub Release remains v6.42**; branch commits are not visible to the in-app updater until a stable release is published.
 
 - YouTube video and audio downloads use the optional `yt-dlp` runtime. Best-quality video merging requires FFmpeg; audio-only downloads do not.
 - Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build. Proxy entries require a hostname and port; endpoint paths, query strings and fragments are rejected instead of silently ignored.
 - The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
 - Portable/source builds open the release page; automatic Setup installation is intended for the installed Windows build.
 
-The v6.48 branch has offline YouTube regression tests and Windows/Linux packaging smoke checks. These checks do not replace real YouTube/proxy network tests or manual GUI testing.
+The v6.50 branch has offline YouTube regression tests and Windows/Linux packaging smoke checks. These checks do not replace real YouTube/proxy network tests or manual GUI testing.
 
 ## What's new in 6.42
 

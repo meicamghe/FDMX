@@ -3,16 +3,16 @@ name: YouTube integration offline tests
 on:
   push:
     branches:
-      - feature/6-48-update-checker-button
+      - release/6.50-finalization
     paths:
-      - "FDMX_v6_48.py"
+      - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-integration-tests.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "FDMX_v6_48.py"
+      - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
       - ".github/workflows/youtube-integration-tests.yml"
 
@@ -33,8 +33,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compile v6.48 source
-        run: python -m py_compile FDMX_v6_48.py
+      - name: Compile v6.50 source
+        run: python -m py_compile FDMX_v6_50.py
 
       - name: Run offline YouTube integration tests
         run: python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
