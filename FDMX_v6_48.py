@@ -2977,7 +2977,7 @@ def _highest_stable_release(releases):
         if isinstance(item, dict)
         and not item.get("draft", False)
         and not item.get("prerelease", False)
-        and re.search(r"\d", str(item.get("tag_name", "")))
+        and re.fullmatch(r"[vV]?\d+(?:\.\d+){1,2}", str(item.get("tag_name", "")).strip())
     ]
     return max(
         candidates,
