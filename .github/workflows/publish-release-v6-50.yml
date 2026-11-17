@@ -47,6 +47,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks
 
+      - name: Install UPX binary compressor
+        run: |
+          choco install upx --yes --no-progress
+          upx --version
+
       - name: Generate application icon
         run: python installer/create_icon.py
 
@@ -59,6 +64,7 @@ jobs:
       - name: Build frozen Windows application
         shell: pwsh
         run: |
+          upx --version
           pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/release-windows --contents-directory _internal --collect-all yt_dlp --hidden-import socks FDMX_v6_50.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path "dist/GNS Downloader/GNS Downloader.exe")) { throw "Windows application executable was not created." }
@@ -146,7 +152,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+          sudo apt-get install -y dpkg-dev upx-ucl fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
 
       - name: Install Python build and runtime dependencies
         run: |
@@ -161,7 +167,12 @@ jobs:
 
       - name: Build frozen Linux application
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --contents-directory _internal --collect-all yt_dlp --hidden-import socks --distpath dist --workpath build/release-linux FDMX_v6_50.py
+          UPX_BIN="$(command -v upx || command -v upx-ucl)"
+          test -n "$UPX_BIN"
+          mkdir -p build/upx
+          ln -sf "$UPX_BIN" build/upx/upx
+          "$UPX_BIN" --version
+          pyinstaller --noconfirm --clean --strip --upx-dir build/upx --onedir --windowed --name "GNS Downloader" --contents-directory _internal --collect-all yt_dlp --hidden-import socks --distpath dist --workpath build/release-linux FDMX_v6_50.py
           test -x "dist/GNS Downloader/GNS Downloader"
 
       - name: Assemble Ubuntu/Debian package
@@ -208,7 +219,9 @@ jobs:
           Description: GNS Downloader
            Multi-connection graphical download manager.
           EOF
-          dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.50-amd64.deb"
+          echo "Largest bundled runtime files:"
+          du -ah "$APPDIR" | sort -h | tail -20
+          dpkg-deb --build --root-owner-group -Zxz -z9 "$ROOT" "dist/GNS-Downloader-6.50-amd64.deb"
           dpkg-deb --info "dist/GNS-Downloader-6.50-amd64.deb"
           PACKAGE_SIZE=$(stat -c%s "dist/GNS-Downloader-6.50-amd64.deb")
           PACKAGE_MIB=$((PACKAGE_SIZE / 1048576))
