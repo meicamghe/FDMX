@@ -153,7 +153,7 @@ uv venv --python 3.12 --seed .venv
 ```bash
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
+python -m pip install PySide6-Essentials yt-dlp PySocks
 ```
 
 محیط مجازی باعث می‌شود وابستگی‌های برنامه از Python و بسته‌های سیستمی جدا بمانند.
@@ -201,7 +201,7 @@ Python **3.12** را نصب کنید و در PowerShell، در پوشه پروژ
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
+python -m pip install PySide6-Essentials yt-dlp PySocks
 python FDMX_v6_50.py
 ```
 
