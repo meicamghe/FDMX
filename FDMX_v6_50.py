@@ -240,10 +240,30 @@ def open_url_with_proxy(request, timeout=60, proxy_url=""):
         return urllib.request.urlopen(request, timeout=timeout)
 
 
+class _CredentialSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward origin credentials when a redirect changes origin."""
+
+    _SENSITIVE_HEADERS = ("Authorization", "Proxy-Authorization", "Cookie")
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        old = urllib.parse.urlsplit(req.full_url)
+        new = urllib.parse.urlsplit(newurl)
+        old_origin = (old.scheme.lower(), (old.hostname or "").lower(), old.port or 443)
+        new_origin = (new.scheme.lower(), (new.hostname or "").lower(), new.port or 443)
+        if old_origin != new_origin:
+            for header in self._SENSITIVE_HEADERS:
+                redirected.remove_header(header)
+        return redirected
+
+
 def build_url_opener(*handlers):
-    """Build an urllib opener that always keeps certificate verification enabled."""
+    """Build a verified opener that strips credentials on cross-origin redirects."""
     return urllib.request.build_opener(
         *handlers,
+        _CredentialSafeRedirectHandler(),
         urllib.request.HTTPSHandler(context=SSL_CONTEXT),
     )
 

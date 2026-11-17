@@ -13,7 +13,7 @@ def load_helpers(*names):
     tree = ast.parse(SOURCE)
     selected = [
         node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in names
     ]
     namespace = {"urllib": urllib, "datetime": datetime}
     exec(compile(ast.Module(body=selected, type_ignores=[]), "<gns-helpers>", "exec"), namespace)
@@ -69,6 +69,33 @@ class GitHubArtifactAndOrderingTests(unittest.TestCase):
         helpers = load_helpers("_history_entry_timestamp")
         timestamp = helpers["_history_entry_timestamp"]({"time": "2026-11-17 11:30:00"})
         self.assertGreater(timestamp, 0)
+
+    def test_cross_origin_redirect_does_not_forward_github_token(self):
+        handler = load_helpers("_CredentialSafeRedirectHandler")["_CredentialSafeRedirectHandler"]()
+        request = urllib.request.Request(
+            "https://api.github.com/repos/acme/project/actions/artifacts/123/zip",
+            headers={"Authorization": "Bearer secret-token", "Accept": "application/vnd.github+json"},
+        )
+        redirected = handler.redirect_request(
+            request, None, 302, "Found", {},
+            "https://objects.githubusercontent.com/github-production-release-asset/123",
+        )
+        self.assertIsNotNone(redirected)
+        self.assertNotIn("Authorization", redirected.headers)
+        self.assertNotIn("Authorization", redirected.unredirected_hdrs)
+        self.assertEqual(redirected.get_header("Accept"), "application/vnd.github+json")
+
+    def test_same_origin_redirect_keeps_github_token(self):
+        handler = load_helpers("_CredentialSafeRedirectHandler")["_CredentialSafeRedirectHandler"]()
+        request = urllib.request.Request(
+            "https://api.github.com/repos/acme/project/actions/artifacts/123/zip",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+        redirected = handler.redirect_request(
+            request, None, 302, "Found", {},
+            "https://api.github.com/repos/acme/project/actions/artifacts/123/zip?download=1",
+        )
+        self.assertEqual(redirected.get_header("Authorization"), "Bearer secret-token")
 
     def test_artifact_auth_is_applied_only_to_github_api_requests(self):
         self.assertIn('headers["Authorization"] = f"Bearer {self.github_token}"', SOURCE)
