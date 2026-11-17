@@ -43,3 +43,6 @@ jobs:
 
       - name: Run GitHub artifact authentication and ordering tests
         run: python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
+
+      - name: Run automatic-start and package-size regression tests
+        run: python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
