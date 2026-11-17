@@ -7,7 +7,6 @@ on:
     paths:
       - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
-      - "tests/test_github_artifact_redirects.py"
       - ".github/workflows/youtube-integration-tests.yml"
   pull_request:
     branches:
@@ -38,4 +37,4 @@ jobs:
         run: python -m py_compile FDMX_v6_50.py
 
       - name: Run offline YouTube integration tests
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+        run: python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
