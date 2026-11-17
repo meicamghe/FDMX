@@ -64,7 +64,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("Test update checker", SOURCE)
         self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
-        self.assertIn('APP_VERSION = "6.50"', SOURCE)
+        self.assertIn('APP_VERSION = "6.51"', SOURCE)
 
     def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
         tree = ast.parse(SOURCE)
@@ -462,10 +462,12 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('"Paused", "Retrying", "Canceling", "Seeding"', SOURCE)
         self.assertNotIn("same_target =", SOURCE)
 
-    def test_video_download_requires_and_configures_ffmpeg(self):
+    def test_video_download_uses_optional_ffmpeg_and_falls_back_without_it(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
-        self.assertIn("Best-quality YouTube video downloads need FFmpeg.", SOURCE)
+        self.assertIn('options["format"] = "best"', SOURCE)
+        self.assertIn('options.pop("merge_output_format", None)', SOURCE)
+        self.assertIn('return shutil.which("ffmpeg")', SOURCE)
 
     def test_audio_download_does_not_require_ffmpeg(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")

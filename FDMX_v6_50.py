@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.50"
+APP_VERSION = "6.51"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -77,6 +77,81 @@ def _normalized_download_url(url):
         parsed.scheme.lower(), parsed.netloc.lower(), parsed.path,
         parsed.query, "",
     ))
+
+
+def github_actions_artifact_api_url(url):
+    """Convert GitHub's browser artifact page URL to the authenticated ZIP API."""
+    parsed = urllib.parse.urlsplit(str(url or "").strip())
+    host = (parsed.hostname or "").lower()
+    parts = [part for part in parsed.path.split("/") if part]
+    if host == "github.com" and len(parts) >= 7:
+        owner, repo, action, runs, run_id, artifacts, artifact_id = parts[:7]
+        if action == "actions" and runs == "runs" and artifacts == "artifacts" and run_id.isdigit() and artifact_id.isdigit():
+            return f"https://api.github.com/repos/{owner}/{repo}/actions/artifacts/{artifact_id}/zip"
+    if host == "github.com" and len(parts) >= 5:
+        owner, repo, action, artifacts, artifact_id = parts[:5]
+        if action == "actions" and artifacts == "artifacts" and artifact_id.isdigit():
+            return f"https://api.github.com/repos/{owner}/{repo}/actions/artifacts/{artifact_id}/zip"
+    if host == "api.github.com" and len(parts) >= 7:
+        if parts[0] == "repos" and parts[3] == "actions" and parts[4] == "artifacts" and parts[5].isdigit() and parts[6] == "zip":
+            return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, parsed.query, ""))
+    return ""
+
+
+def find_github_cli_token():
+    """Read an existing GitHub CLI token without persisting credentials in app data."""
+    for key in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, timeout=5, check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ""
+
+
+def _task_completion_timestamp(task):
+    """Return a sortable completion time, including legacy history records."""
+    value = task.get("completed_at")
+    if value not in (None, "", 0, "0"):
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    legacy = task.get("completed_time", "")
+    try:
+        return datetime.datetime.strptime(legacy, "%Y-%m-%d %H:%M:%S").timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+
+
+def _history_entry_timestamp(entry):
+    value = entry.get("completed_at")
+    if value not in (None, "", 0, "0"):
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    try:
+        return datetime.datetime.strptime(entry.get("time", ""), "%Y-%m-%d %H:%M:%S").timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+
+
+def _sort_completed_tasks(items):
+    """Sort completed downloads newest-first while preserving other task order."""
+    items.sort(key=lambda item: (
+        item[1].get("status") != "Completed",
+        -_task_completion_timestamp(item[1]) if item[1].get("status") == "Completed" else 0.0,
+    ))
+    return items
 
 
 def _is_duplicate_download(existing, url, kind="http", media_type="video"):
@@ -165,10 +240,30 @@ def open_url_with_proxy(request, timeout=60, proxy_url=""):
         return urllib.request.urlopen(request, timeout=timeout)
 
 
+class _CredentialSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward origin credentials when a redirect changes origin."""
+
+    _SENSITIVE_HEADERS = ("Authorization", "Proxy-Authorization", "Cookie")
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        old = urllib.parse.urlsplit(req.full_url)
+        new = urllib.parse.urlsplit(newurl)
+        old_origin = (old.scheme.lower(), (old.hostname or "").lower(), old.port or 443)
+        new_origin = (new.scheme.lower(), (new.hostname or "").lower(), new.port or 443)
+        if old_origin != new_origin:
+            for header in self._SENSITIVE_HEADERS:
+                redirected.remove_header(header)
+        return redirected
+
+
 def build_url_opener(*handlers):
-    """Build an urllib opener that always keeps certificate verification enabled."""
+    """Build a verified opener that strips credentials on cross-origin redirects."""
     return urllib.request.build_opener(
         *handlers,
+        _CredentialSafeRedirectHandler(),
         urllib.request.HTTPSHandler(context=SSL_CONTEXT),
     )
 
@@ -395,10 +490,11 @@ class DownloadWorker(QThread):
     canceled = Signal()
     state = Signal(str)
 
-    def __init__(self, task_id, url, folder, speed_limit_kbps=0, parts_count=CONNECTIONS, proxy_url="", destination_path=""):
+    def __init__(self, task_id, url, folder, speed_limit_kbps=0, parts_count=CONNECTIONS, proxy_url="", destination_path="", github_token=""):
         super().__init__()
         self.task_id = task_id
-        self.url = url
+        self.url = github_actions_artifact_api_url(url) or url
+        self.github_token = str(github_token or "").strip()
         self.folder = folder
         self.proxy_url = normalize_proxy_url(proxy_url)
         self.speed_limit_kbps = speed_limit_kbps
@@ -526,6 +622,10 @@ class DownloadWorker(QThread):
             # Byte offsets must refer to the representation written to disk.
             "Accept-Encoding": "identity",
         }
+        if (urllib.parse.urlsplit(self.url).hostname or "").lower() == "api.github.com" and self.github_token:
+            headers["Authorization"] = f"Bearer {self.github_token}"
+            headers["X-GitHub-Api-Version"] = "2022-11-28"
+            headers["Accept"] = "application/vnd.github+json"
         if start is not None:
             headers["Range"] = f"bytes={start}-{end}"
         return headers
@@ -1037,9 +1137,10 @@ class TorrentWorker(QThread):
 class FileInfoWorker(QThread):
     info_ready = Signal(dict)
 
-    def __init__(self, url):
+    def __init__(self, url, github_token=""):
         super().__init__()
-        self.url = url
+        self.url = github_actions_artifact_api_url(url) or url
+        self.github_token = str(github_token or "").strip()
         self.cancel_event = threading.Event()
         self._response_lock = threading.Lock()
         self._active_response = None
@@ -1072,6 +1173,10 @@ class FileInfoWorker(QThread):
             "Accept": "*/*",
             "Accept-Encoding": "identity",
         }
+        if (urllib.parse.urlsplit(self.url).hostname or "").lower() == "api.github.com" and self.github_token:
+            headers["Authorization"] = f"Bearer {self.github_token}"
+            headers["X-GitHub-Api-Version"] = "2022-11-28"
+            headers["Accept"] = "application/vnd.github+json"
         response = None
         last_error = None
         try:
@@ -1131,6 +1236,23 @@ class FileInfoWorker(QThread):
                 fallback_name = os.path.basename(final_path.rstrip("/"))
                 if fallback_name and "." in fallback_name:
                     info["name"] = fallback_name
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403, 404) and "api.github.com" in self.url:
+                # GitHub can intentionally return 404 for private resources.
+                info["auth_required"] = not bool(self.github_token)
+                if self.github_token:
+                    info["error"] = (
+                        f"GitHub returned HTTP {exc.code} for this Actions artifact. "
+                        "The artifact may have expired, the ID may be invalid, or this token "
+                        "may lack Actions: read permission."
+                    )
+                else:
+                    info["error"] = (
+                        f"GitHub returned HTTP {exc.code} for this Actions artifact. "
+                        "It may be private or expired; retry with a GitHub token if appropriate."
+                    )
+            else:
+                info["error"] = f"HTTP {exc.code}: {exc.reason}"
         except Exception as exc:
             info["error"] = str(exc)
         finally:
@@ -3120,14 +3242,7 @@ class GitHubUpdateWorker(QThread):
 
 
 def _youtube_ffmpeg_executable():
-    """Locate bundled imageio-ffmpeg first, then a system FFmpeg executable."""
-    try:
-        import imageio_ffmpeg
-        executable = imageio_ffmpeg.get_ffmpeg_exe()
-        if executable and os.path.isfile(executable):
-            return executable
-    except Exception:
-        pass
+    """Locate an optional system FFmpeg without bundling a large binary."""
     return shutil.which("ffmpeg")
 
 
@@ -3278,12 +3393,14 @@ class YouTubeDownloadWorker(QThread):
                 options["proxy"] = self.proxy_url
             if self.media_type == "video":
                 ffmpeg_executable = _youtube_ffmpeg_executable()
-                if not ffmpeg_executable:
-                    raise RuntimeError(
-                        "Best-quality YouTube video downloads need FFmpeg. "
-                        "Install FFmpeg or install the imageio-ffmpeg Python package."
-                    )
-                options["ffmpeg_location"] = ffmpeg_executable
+                if ffmpeg_executable:
+                    options["ffmpeg_location"] = ffmpeg_executable
+                else:
+                    # Keep YouTube video downloads working on a small install.
+                    # Without FFmpeg, request the best single-file stream instead
+                    # of downloading separate audio/video streams that need merging.
+                    options["format"] = "best"
+                    options.pop("merge_output_format", None)
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
                 info = downloader.extract_info(self.url, download=False)
@@ -3733,6 +3850,14 @@ class FDMX(QWidget):
         proxy_help.setWordWrap(True)
         proxy_help.setStyleSheet("color:#64748b;font-size:11px;")
         settings_grid.addWidget(proxy_help, 6, 0, 1, 2)
+        github_help = QLabel(
+            "GitHub Actions artifacts require repository access. GNS Downloader uses an existing "
+            "GH_TOKEN/GITHUB_TOKEN or GitHub CLI login; otherwise it asks for a temporary token "
+            "with Actions: read permission. Tokens entered in the prompt are not saved."
+        )
+        github_help.setWordWrap(True)
+        github_help.setStyleSheet("color:#64748b;font-size:11px;")
+        settings_grid.addWidget(github_help, 7, 0, 1, 2)
         settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
@@ -4714,7 +4839,8 @@ class FDMX(QWidget):
             if query and query not in task.get("name", "").lower() and query not in task.get("url", "").lower():
                 continue
             result.append((task_id, task))
-        return result
+        # Completed downloads appear first, newest completion at the top.
+        return _sort_completed_tasks(result)
 
     def show_context_menu(self, position):
         row = self.table.rowAt(position.y())
@@ -4967,6 +5093,8 @@ class FDMX(QWidget):
             self.status.setText("YouTube download added to the queue.")
             self.start_queue()
             return
+        # Try anonymously first; ask for a token only after GitHub denies access.
+        github_token = ""
         task_id = uuid.uuid4().hex
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or "Download"
@@ -4982,6 +5110,7 @@ class FDMX(QWidget):
             "worker": None, "history": False, "metadata_worker": None,
             "scheduled_at": "", "total_known": False,
             "category": category_for_filename(name),
+            "github_token": github_token,
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -4993,7 +5122,7 @@ class FDMX(QWidget):
         task = self.tasks.get(task_id)
         if not task:
             return
-        worker = FileInfoWorker(task["url"])
+        worker = FileInfoWorker(task["url"], task.get("github_token", ""))
         task["metadata_worker"] = worker
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
         worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
@@ -5038,6 +5167,23 @@ class FDMX(QWidget):
             return
         if task.get("status") in ("Canceled", "Canceling"):
             return
+        if info.get("error") and info.get("auth_required") and github_actions_artifact_api_url(task.get("url", "")):
+            token = task.get("github_token", "") or find_github_cli_token()
+            if not token:
+                token, accepted = QInputDialog.getText(
+                    self, "GitHub Actions authentication",
+                    "GitHub rejected the request. If this artifact belongs to a private repository, "
+                    "enter a token with Actions: read permission.\n"
+                    "The token is used only for this download and is not saved:",
+                    QLineEdit.Password,
+                )
+                token = token.strip() if accepted else ""
+            if token:
+                task["github_token"] = token
+                task["status"] = "Checking metadata"
+                self.status.setText("Retrying GitHub artifact access with the supplied credentials…")
+                self.probe_download_task(task_id)
+                return
         if info.get("error"):
             task.update({"status": "Failed", "speed": 0.0, "eta": -1.0})
             self.save_history_entry(task, error=info["error"])
@@ -5078,13 +5224,18 @@ class FDMX(QWidget):
             task["destination_path"] = existing_path if choice == "overwrite" else unique_path(task["folder"], task["name"])
         else:
             task["destination_path"] = existing_path
+        # Metadata is ready: enqueue and start automatically. The details window
+        # mirrors this task; it must not require a second Start click.
+        task["status"] = "Queued"
+        task["scheduled_at"] = ""
         self.save_tasks()
         self.refresh_table()
         self.show_download_details(task_id)
         self.status.setText(
             f"File information ready: {task['name']} — "
-            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Press Start to download."
+            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Starting download…"
         )
+        self.start_queue()
 
     def add_torrent_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open torrent file", "", "Torrent files (*.torrent)")
@@ -5164,7 +5315,13 @@ class FDMX(QWidget):
                 worker.existing_file.connect(self.on_youtube_existing_file)
             else:
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
-                worker = DownloadWorker(task_id, task["url"], task["folder"], self.speed_limit.value(), self.parts_count.value(), proxy_url, task.get("destination_path", ""))
+                # Metadata probing already established whether authentication is needed.
+                github_token = task.get("github_token", "")
+                worker = DownloadWorker(
+                    task_id, task["url"], task["folder"], self.speed_limit.value(),
+                    self.parts_count.value(), proxy_url, task.get("destination_path", ""),
+                    github_token=github_token,
+                )
             task["worker"] = worker
             self.workers[task_id] = worker
             worker.progress.connect(self.on_progress)
@@ -5412,7 +5569,8 @@ class FDMX(QWidget):
             task.update({
                 "status": "Completed", "path": path,
                 "downloaded": os.path.getsize(path) if os.path.exists(path) else task["downloaded"],
-                "speed": 0.0, "eta": 0.0, "worker": None
+                "speed": 0.0, "eta": 0.0, "worker": None,
+                "completed_at": time.time(),
             })
             self.save_history_entry(task)
             self.refresh_table()
@@ -5693,7 +5851,8 @@ class FDMX(QWidget):
                         "status": "Completed", "downloaded": entry.get("size", 0),
                         "total": entry.get("size", 0), "speed": 0.0,
                         "eta": 0.0, "path": entry.get("path", ""),
-                        "worker": None, "history": True
+                        "worker": None, "history": True,
+                        "completed_at": _history_entry_timestamp(entry),
                     }
         except (OSError, ValueError, TypeError):
             self.history = []
@@ -5701,6 +5860,7 @@ class FDMX(QWidget):
     def save_history_entry(self, task, error=""):
         entry = {
             "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "completed_at": task.get("completed_at", time.time()) if task.get("status") == "Completed" else 0,
             "url": task["url"], "folder": task["folder"],
             "name": task["name"], "status": task["status"],
             "path": task.get("path", ""),
