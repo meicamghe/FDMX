@@ -65,4 +65,4 @@ jobs:
           fi
           test -f "$APP"
           find "dist/GNS Downloader" \( -iname '*yt_dlp*'  -o -iname '*socks*' \) | grep -q .
-          echo "Frozen app and YouTube/FFmpeg dependency payloads are present."
+          echo "Frozen app and YouTube runtime dependencies are present; FFmpeg remains optional and is not bundled."
