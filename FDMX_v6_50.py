@@ -5201,13 +5201,18 @@ class FDMX(QWidget):
             task["destination_path"] = existing_path if choice == "overwrite" else unique_path(task["folder"], task["name"])
         else:
             task["destination_path"] = existing_path
+        # Metadata is ready: enqueue and start automatically. The details window
+        # mirrors this task; it must not require a second Start click.
+        task["status"] = "Queued"
+        task["scheduled_at"] = ""
         self.save_tasks()
         self.refresh_table()
         self.show_download_details(task_id)
         self.status.setText(
             f"File information ready: {task['name']} — "
-            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Press Start to download."
+            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Starting download…"
         )
+        self.start_queue()
 
     def add_torrent_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open torrent file", "", "Torrent files (*.torrent)")
