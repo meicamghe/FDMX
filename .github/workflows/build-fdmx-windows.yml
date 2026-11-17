@@ -66,6 +66,7 @@ jobs:
       - name: Run application regression tests
         run: |
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+          python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
 
       - name: Verify generated icon
         shell: pwsh
@@ -208,6 +209,7 @@ jobs:
         run: |
           python -m py_compile FDMX_v6_50.py ubuntu.py
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+          python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
 
       - name: Launch app and verify Ubuntu Yaru theme
         run: |
