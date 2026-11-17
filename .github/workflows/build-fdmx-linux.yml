@@ -55,6 +55,7 @@ jobs:
         run: |
           python -m py_compile FDMX_v6_50.py ubuntu.py
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+          python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
 
       - name: Build frozen Linux application
         run: |
