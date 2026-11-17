@@ -119,11 +119,12 @@ def find_github_cli_token():
 
 def _task_completion_timestamp(task):
     """Return a sortable completion time, including legacy history records."""
-    value = task.get("completed_at", 0)
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError, OverflowError):
-        pass
+    value = task.get("completed_at")
+    if value not in (None, "", 0, "0"):
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            pass
     legacy = task.get("completed_time", "")
     try:
         return datetime.datetime.strptime(legacy, "%Y-%m-%d %H:%M:%S").timestamp()
@@ -132,11 +133,12 @@ def _task_completion_timestamp(task):
 
 
 def _history_entry_timestamp(entry):
-    value = entry.get("completed_at", 0)
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError, OverflowError):
-        pass
+    value = entry.get("completed_at")
+    if value not in (None, "", 0, "0"):
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            pass
     try:
         return datetime.datetime.strptime(entry.get("time", ""), "%Y-%m-%d %H:%M:%S").timestamp()
     except (TypeError, ValueError, OverflowError):
