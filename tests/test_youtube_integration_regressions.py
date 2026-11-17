@@ -462,10 +462,12 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('"Paused", "Retrying", "Canceling", "Seeding"', SOURCE)
         self.assertNotIn("same_target =", SOURCE)
 
-    def test_video_download_requires_and_configures_ffmpeg(self):
+    def test_video_download_uses_optional_ffmpeg_and_falls_back_without_it(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
-        self.assertIn("Best-quality YouTube video downloads need FFmpeg.", SOURCE)
+        self.assertIn('options["format"] = "best"', SOURCE)
+        self.assertIn('options.pop("merge_output_format", None)', SOURCE)
+        self.assertIn('return shutil.which("ffmpeg")', SOURCE)
 
     def test_audio_download_does_not_require_ffmpeg(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
