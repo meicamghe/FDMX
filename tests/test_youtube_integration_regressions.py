@@ -64,7 +64,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("Test update checker", SOURCE)
         self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
-        self.assertIn('APP_VERSION = "6.50"', SOURCE)
+        self.assertIn('APP_VERSION = "6.51"', SOURCE)
 
     def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
         tree = ast.parse(SOURCE)
