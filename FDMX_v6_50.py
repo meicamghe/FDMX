@@ -1055,22 +1055,54 @@ class FileInfoWorker(QThread):
                 pass
 
     def run(self):
-        info = {"size": -1, "name": "", "content_type": "", "accept_ranges": False, "error": ""}
-        headers = {"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "*/*"}
+        info = {
+            "size": -1, "name": "", "content_type": "",
+            "accept_ranges": False, "error": "", "final_url": ""
+        }
+        # GitHub Actions artifact URLs can redirect through more than one host
+        # before reaching a short-lived object-storage URL. Use a browser-like
+        # GET first: several download endpoints reject HEAD or ranged metadata
+        # probes even though a normal GET follows the complete redirect chain.
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+        }
         response = None
+        last_error = None
         try:
-            request = urllib.request.Request(self.url, headers=headers, method="HEAD")
-            try:
-                response = urllib.request.urlopen(request, timeout=4)
-            except Exception:
+            for method in ("GET", "HEAD"):
                 if self.cancel_event.is_set():
                     return
-                request = urllib.request.Request(self.url, headers={**headers, "Range": "bytes=0-0"})
-                response = urllib.request.urlopen(request, timeout=4)
+                request = urllib.request.Request(self.url, headers=headers, method=method)
+                try:
+                    response = urllib.request.urlopen(request, timeout=20)
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    if self.cancel_event.is_set():
+                        return
+                    if response is not None:
+                        try:
+                            response.close()
+                        except Exception:
+                            pass
+                        response = None
+            if response is None:
+                raise last_error or OSError("Unable to resolve the download URL.")
             with self._response_lock:
                 self._active_response = response
             if self.cancel_event.is_set():
                 return
+
+            # urllib follows standard 301/302/303/307/308 redirects. Keep the
+            # resolved URL for diagnostics, but retain the original URL in the
+            # task because GitHub's signed artifact URL can expire.
+            info["final_url"] = response.geturl()
             content_range = response.headers.get("Content-Range", "")
             if "/" in content_range and content_range.rsplit("/", 1)[1].isdigit():
                 info["size"] = int(content_range.rsplit("/", 1)[1])
@@ -1079,7 +1111,10 @@ class FileInfoWorker(QThread):
                 if raw_size.isdigit():
                     info["size"] = int(raw_size)
             info["content_type"] = response.headers.get("Content-Type", "")
-            info["accept_ranges"] = "bytes" in response.headers.get("Accept-Ranges", "").lower() or response.status == 206
+            info["accept_ranges"] = (
+                "bytes" in response.headers.get("Accept-Ranges", "").lower()
+                or response.status == 206
+            )
             disposition = response.headers.get("Content-Disposition", "")
             if disposition:
                 message = Message()
@@ -1087,12 +1122,23 @@ class FileInfoWorker(QThread):
                 filename = message.get_filename()
                 if filename:
                     info["name"] = os.path.basename(filename)
+            if method == "GET":
+                response.read(1)
+            if not info["name"]:
+                final_path = urllib.parse.unquote(
+                    urllib.parse.urlsplit(info["final_url"] or self.url).path
+                )
+                fallback_name = os.path.basename(final_path.rstrip("/"))
+                if fallback_name and "." in fallback_name:
+                    info["name"] = fallback_name
         except Exception as exc:
             info["error"] = str(exc)
         finally:
             if response is not None:
-                try: response.close()
-                except Exception: pass
+                try:
+                    response.close()
+                except Exception:
+                    pass
             with self._response_lock:
                 self._active_response = None
         if not self.cancel_event.is_set():
