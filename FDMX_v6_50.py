@@ -5094,7 +5094,7 @@ class FDMX(QWidget):
             self.start_queue()
             return
         # Try anonymously first; ask for a token only after GitHub denies access.
-        github_token = find_github_cli_token() if github_actions_artifact_api_url(url) else ""
+        github_token = ""
         task_id = uuid.uuid4().hex
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or "Download"
