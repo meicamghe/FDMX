@@ -3,6 +3,7 @@ from pathlib import Path
 import ast
 import datetime
 import urllib.parse
+import urllib.request
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
