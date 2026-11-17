@@ -3218,14 +3218,7 @@ class GitHubUpdateWorker(QThread):
 
 
 def _youtube_ffmpeg_executable():
-    """Locate bundled imageio-ffmpeg first, then a system FFmpeg executable."""
-    try:
-        import imageio_ffmpeg
-        executable = imageio_ffmpeg.get_ffmpeg_exe()
-        if executable and os.path.isfile(executable):
-            return executable
-    except Exception:
-        pass
+    """Locate an optional system FFmpeg without bundling a large binary."""
     return shutil.which("ffmpeg")
 
 
@@ -3376,12 +3369,14 @@ class YouTubeDownloadWorker(QThread):
                 options["proxy"] = self.proxy_url
             if self.media_type == "video":
                 ffmpeg_executable = _youtube_ffmpeg_executable()
-                if not ffmpeg_executable:
-                    raise RuntimeError(
-                        "Best-quality YouTube video downloads need FFmpeg. "
-                        "Install FFmpeg or install the imageio-ffmpeg Python package."
-                    )
-                options["ffmpeg_location"] = ffmpeg_executable
+                if ffmpeg_executable:
+                    options["ffmpeg_location"] = ffmpeg_executable
+                else:
+                    # Keep YouTube video downloads working on a small install.
+                    # Without FFmpeg, request the best single-file stream instead
+                    # of downloading separate audio/video streams that need merging.
+                    options["format"] = "best"
+                    options.pop("merge_output_format", None)
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
                 info = downloader.extract_info(self.url, download=False)
