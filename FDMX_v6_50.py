@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.50"
+APP_VERSION = "6.51"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -1237,16 +1237,20 @@ class FileInfoWorker(QThread):
                 if fallback_name and "." in fallback_name:
                     info["name"] = fallback_name
         except urllib.error.HTTPError as exc:
-            if exc.code == 404 and "api.github.com" in self.url:
-                info["error"] = (
-                    "GitHub returned 404 for this Actions artifact. The artifact may have expired, "
-                    "or the GitHub token is missing/does not have Actions: read access for this repository."
-                )
-            elif exc.code in (401, 403):
-                info["error"] = (
-                    f"GitHub denied access to this Actions artifact (HTTP {exc.code}). "
-                    "Use a token with Actions: read permission for the repository."
-                )
+            if exc.code in (401, 403, 404) and "api.github.com" in self.url:
+                # GitHub can intentionally return 404 for private resources.
+                info["auth_required"] = not bool(self.github_token)
+                if self.github_token:
+                    info["error"] = (
+                        f"GitHub returned HTTP {exc.code} for this Actions artifact. "
+                        "The artifact may have expired, the ID may be invalid, or this token "
+                        "may lack Actions: read permission."
+                    )
+                else:
+                    info["error"] = (
+                        f"GitHub returned HTTP {exc.code} for this Actions artifact. "
+                        "It may be private or expired; retry with a GitHub token if appropriate."
+                    )
             else:
                 info["error"] = f"HTTP {exc.code}: {exc.reason}"
         except Exception as exc:
@@ -5089,21 +5093,8 @@ class FDMX(QWidget):
             self.status.setText("YouTube download added to the queue.")
             self.start_queue()
             return
-        github_token = ""
-        if github_actions_artifact_api_url(url):
-            github_token = find_github_cli_token()
-            if not github_token:
-                github_token, accepted = QInputDialog.getText(
-                    self, "GitHub Actions authentication",
-                    "This Actions artifact requires GitHub repository access.\n"
-                    "Enter a GitHub token with Actions: read permission for this repository.\n"
-                    "The token is used only for this download and is not saved:",
-                    QLineEdit.Password,
-                )
-                if not accepted or not github_token.strip():
-                    self.status.setText("GitHub Actions artifact download canceled: authentication is required.")
-                    return
-                github_token = github_token.strip()
+        # Try anonymously first; ask for a token only after GitHub denies access.
+        github_token = find_github_cli_token() if github_actions_artifact_api_url(url) else ""
         task_id = uuid.uuid4().hex
         name = os.path.basename(urllib.parse.unquote(parsed.path)) or "Download"
         name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or "Download"
@@ -5176,6 +5167,23 @@ class FDMX(QWidget):
             return
         if task.get("status") in ("Canceled", "Canceling"):
             return
+        if info.get("error") and info.get("auth_required") and github_actions_artifact_api_url(task.get("url", "")):
+            token = task.get("github_token", "") or find_github_cli_token()
+            if not token:
+                token, accepted = QInputDialog.getText(
+                    self, "GitHub Actions authentication",
+                    "GitHub rejected the request. If this artifact belongs to a private repository, "
+                    "enter a token with Actions: read permission.\n"
+                    "The token is used only for this download and is not saved:",
+                    QLineEdit.Password,
+                )
+                token = token.strip() if accepted else ""
+            if token:
+                task["github_token"] = token
+                task["status"] = "Checking metadata"
+                self.status.setText("Retrying GitHub artifact access with the supplied credentials…")
+                self.probe_download_task(task_id)
+                return
         if info.get("error"):
             task.update({"status": "Failed", "speed": 0.0, "eta": -1.0})
             self.save_history_entry(task, error=info["error"])
@@ -5307,22 +5315,8 @@ class FDMX(QWidget):
                 worker.existing_file.connect(self.on_youtube_existing_file)
             else:
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+                # Metadata probing already established whether authentication is needed.
                 github_token = task.get("github_token", "")
-                if github_actions_artifact_api_url(task.get("url", "")) and not github_token:
-                    github_token = find_github_cli_token()
-                    if not github_token:
-                        github_token, accepted = QInputDialog.getText(
-                            self, "GitHub Actions authentication",
-                            "Enter a GitHub token with Actions: read permission for this repository.\n"
-                            "The token is used only for this download and is not saved:",
-                            QLineEdit.Password,
-                        )
-                        if not accepted or not github_token.strip():
-                            task["status"] = "Paused"
-                            self.status.setText("GitHub Actions download paused: authentication is required.")
-                            continue
-                        github_token = github_token.strip()
-                    task["github_token"] = github_token
                 worker = DownloadWorker(
                     task_id, task["url"], task["folder"], self.speed_limit.value(),
                     self.parts_count.value(), proxy_url, task.get("destination_path", ""),

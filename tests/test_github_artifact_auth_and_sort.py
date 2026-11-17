@@ -103,9 +103,22 @@ class GitHubArtifactAndOrderingTests(unittest.TestCase):
         self.assertIn('headers["X-GitHub-Api-Version"] = "2022-11-28"', SOURCE)
         self.assertIn('github_actions_artifact_api_url(url) or url', SOURCE)
         self.assertIn('find_github_cli_token()', SOURCE)
-        self.assertIn('QLineEdit.Password', SOURCE)
-        self.assertIn('"github_token": github_token', SOURCE)
-        self.assertNotIn('"github_token", "post_action_enabled"', SOURCE)
+        self.assertIn('info["auth_required"] = not bool(self.github_token)', SOURCE)
+        self.assertIn('task["github_token"] = token', SOURCE)
+
+    def test_manual_token_prompt_is_deferred_until_anonymous_request_fails(self):
+        tree = ast.parse(SOURCE)
+        fdmx = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "FDMX")
+        add_download = next(node for node in fdmx.body if isinstance(node, ast.FunctionDef) and node.name == "add_download")
+        file_info_ready = next(node for node in fdmx.body if isinstance(node, ast.FunctionDef) and node.name == "on_file_info_ready")
+        schedule = next(node for node in fdmx.body if isinstance(node, ast.FunctionDef) and node.name == "schedule_downloads")
+        self.assertFalse(any(isinstance(node, ast.Name) and node.id == "QInputDialog" for node in ast.walk(add_download)))
+        self.assertTrue(any(isinstance(node, ast.Name) and node.id == "QInputDialog" for node in ast.walk(file_info_ready)))
+        self.assertFalse(any(isinstance(node, ast.Name) and node.id == "QInputDialog" for node in ast.walk(schedule)))
+
+    def test_github_token_is_not_persisted_to_task_history(self):
+        save_tasks = SOURCE[SOURCE.index("def save_tasks"):SOURCE.index("def load_tasks")]
+        self.assertNotIn('"github_token"', save_tasks)
 
 
 if __name__ == "__main__":
