@@ -143,6 +143,15 @@ def _history_entry_timestamp(entry):
         return 0.0
 
 
+def _sort_completed_tasks(items):
+    """Sort completed downloads newest-first while preserving other task order."""
+    items.sort(key=lambda item: (
+        item[1].get("status") != "Completed",
+        -_task_completion_timestamp(item[1]) if item[1].get("status") == "Completed" else 0.0,
+    ))
+    return items
+
+
 def _is_duplicate_download(existing, url, kind="http", media_type="video"):
     """Detect the same active source, not merely two URLs with the same basename.
 
@@ -4809,13 +4818,8 @@ class FDMX(QWidget):
             if query and query not in task.get("name", "").lower() and query not in task.get("url", "").lower():
                 continue
             result.append((task_id, task))
-        # Keep completed downloads together at the top, newest completion first.
-        # Stable sorting leaves the relative order of active and queued tasks intact.
-        result.sort(key=lambda item: (
-            item[1].get("status") != "Completed",
-            -_task_completion_timestamp(item[1]) if item[1].get("status") == "Completed" else 0.0,
-        ))
-        return result
+        # Completed downloads appear first, newest completion at the top.
+        return _sort_completed_tasks(result)
 
     def show_context_menu(self, position):
         row = self.table.rowAt(position.y())
