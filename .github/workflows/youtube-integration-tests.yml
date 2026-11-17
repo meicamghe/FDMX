@@ -7,6 +7,7 @@ on:
     paths:
       - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
+      - "tests/test_github_artifact_auth_and_sort.py"
       - ".github/workflows/youtube-integration-tests.yml"
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
     paths:
       - "FDMX_v6_50.py"
       - "tests/test_youtube_integration_regressions.py"
+      - "tests/test_github_artifact_auth_and_sort.py"
       - ".github/workflows/youtube-integration-tests.yml"
 
 permissions:
@@ -38,3 +40,6 @@ jobs:
 
       - name: Run offline YouTube integration tests
         run: python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+
+      - name: Run GitHub artifact authentication and ordering tests
+        run: python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
