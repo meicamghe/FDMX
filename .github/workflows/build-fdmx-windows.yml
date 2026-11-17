@@ -53,7 +53,7 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp imageio-ffmpeg PySocks
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks
 
       - name: Generate red G application icon
         run: |
@@ -75,7 +75,7 @@ jobs:
       - name: Build GNS Downloader as an onedir application
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/app --contents-directory _internal --collect-all yt_dlp --collect-all imageio_ffmpeg --hidden-import socks FDMX_v6_50.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "GNS Downloader" --icon installer/gns-downloader.ico --distpath dist --workpath build/app --contents-directory _internal --collect-all yt_dlp --hidden-import socks FDMX_v6_50.py
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
       - name: Verify package inputs and report sizes
@@ -202,7 +202,7 @@ jobs:
       - name: Install PySide6
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials yt-dlp imageio-ffmpeg PySocks
+          python -m pip install PySide6-Essentials yt-dlp PySocks
 
       - name: Compile source and run regression tests
         run: |
