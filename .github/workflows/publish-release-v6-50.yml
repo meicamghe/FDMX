@@ -102,6 +102,24 @@ jobs:
           Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "release-assets/GNS-Downloader-Portable-Windows-x64.zip" -Force
           Copy-Item "dist/installer/GNS-Downloader-Setup-6.50.exe" "release-assets/GNS-Downloader-Setup.exe"
 
+      - name: Enforce the 50 MiB limit on Windows release assets
+        shell: pwsh
+        run: |
+          $limit = 50MB
+          $packages = @(
+            "release-assets/GNS-Downloader-Setup.exe",
+            "release-assets/GNS-Downloader-Portable-Windows-x64.zip"
+          )
+          foreach ($path in $packages) {
+            if (-not (Test-Path $path)) { throw "Required release asset is missing: $path" }
+            $file = Get-Item $path
+            $sizeMB = [math]::Round($file.Length / 1MB, 2)
+            Write-Host "$($file.Name): $sizeMB MiB"
+            if ($file.Length -gt $limit) {
+              throw "$($file.Name) is $sizeMB MiB; the maximum allowed size is 50 MiB."
+            }
+          }
+
       - name: Upload Windows release assets
         uses: actions/upload-artifact@v7
         with:
