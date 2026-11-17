@@ -107,6 +107,12 @@ jobs:
           EOF
           dpkg-deb --build --root-owner-group "$ROOT" "dist/GNS-Downloader-6.50-amd64.deb"
           dpkg-deb --info "dist/GNS-Downloader-6.50-amd64.deb"
+          PACKAGE_SIZE=$(stat -c%s "dist/GNS-Downloader-6.50-amd64.deb")
+          echo "Linux DEB size: $((PACKAGE_SIZE / 1048576)) MiB"
+          if [ "$PACKAGE_SIZE" -gt $((50 * 1024 * 1024)) ]; then
+            echo "Linux DEB exceeds the 50 MiB package limit."
+            exit 1
+          fi
           dpkg-deb --contents "dist/GNS-Downloader-6.50-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
 
       - name: Install package and smoke-test launcher
