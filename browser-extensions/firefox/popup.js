@@ -1,7 +1,7 @@
 const API="http://127.0.0.1:38471";
 const status=document.getElementById("status");
 async function send(url){
- if(!url || !/^https?:\\/\\//i.test(url)){status.textContent="No supported HTTP/HTTPS URL found.";return false;}
+ if(!url || !/^https?:\/\//i.test(url)){status.textContent="No supported HTTP/HTTPS URL found.";return false;}
  try{
   let resolved={url,browserSession:false};
   try{resolved=await fdmxResolveBrowserAuthenticatedUrl(url);}catch(e){status.textContent=e.message+" Trying the regular downloader route…";}
