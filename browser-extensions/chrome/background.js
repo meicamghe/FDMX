@@ -8,7 +8,7 @@ async function sendToFDMX(url) {
     catch (error) { console.warn("GitHub browser-session resolution:", error); }
     const response = await fetch(API + "/download", {
       method: "POST", headers: {"Content-Type": "text/plain;charset=UTF-8"},
-      body: JSON.stringify({url: resolved.url})
+      body: JSON.stringify({url, resolved_url: resolved.browserSession ? resolved.url : ""})
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "FDMX is not responding");
