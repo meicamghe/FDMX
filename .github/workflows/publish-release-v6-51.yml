@@ -5,28 +5,20 @@ on:
     branches:
       - main
     paths:
-      - "FDMX_v6_50.py"
-      - "ubuntu.py"
-      - "installer/FDMX.iss"
       - "installer/create_icon.py"
       - "tests/test_youtube_integration_regressions.py"
       - "tests/test_github_artifact_auth_and_sort.py"
       - "tests/test_auto_start_and_package_size.py"
       - "docs/releases/6.51.md"
-      - ".github/workflows/publish-release-v6-51.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "FDMX_v6_50.py"
-      - "ubuntu.py"
-      - "installer/FDMX.iss"
       - "installer/create_icon.py"
       - "tests/test_youtube_integration_regressions.py"
       - "tests/test_github_artifact_auth_and_sort.py"
       - "tests/test_auto_start_and_package_size.py"
       - "docs/releases/6.51.md"
-      - ".github/workflows/publish-release-v6-51.yml"
   workflow_dispatch:
 
 permissions:
