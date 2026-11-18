@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - release/6.51-finalization
+      - release/6.52-finalization
       - feature/fdmx-6.22-advanced-fingerprinting
       - feature/fdmx-6.40-github-updater-ubuntu-theme
       - fix/http-download-compatibility
@@ -110,7 +110,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.51.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.52.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -132,21 +132,21 @@ jobs:
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.51-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.52-Windows-x64.zip" -Force
 
       - name: Prepare stable GitHub Release asset names
         shell: pwsh
         run: |
-          Copy-Item "dist/installer/GNS-Downloader-Setup-6.51.exe" "dist/installer/GNS-Downloader-Setup.exe"
-          Copy-Item "dist/GNS-Downloader-Portable-v6.51-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.52.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.52-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
 
       - name: Enforce the 50 MiB Windows package limit
         shell: pwsh
         run: |
           $limit = 50MB
           $packages = @(
-            "dist/installer/GNS-Downloader-Setup-6.51.exe",
-            "dist/GNS-Downloader-Portable-v6.51-Windows-x64.zip"
+            "dist/installer/GNS-Downloader-Setup-6.52.exe",
+            "dist/GNS-Downloader-Portable-v6.52-Windows-x64.zip"
           )
           foreach ($path in $packages) {
             if (-not (Test-Path $path)) { throw "Required package is missing: $path" }
@@ -161,16 +161,16 @@ jobs:
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Portable-v6.51
-          path: dist/GNS-Downloader-Portable-v6.51-Windows-x64.zip
+          name: GNS-Downloader-Portable-v6.52
+          path: dist/GNS-Downloader-Portable-v6.52-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload installer Setup
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Setup-v6.51
-          path: dist/installer/GNS-Downloader-Setup-6.51.exe
+          name: GNS-Downloader-Setup-v6.52
+          path: dist/installer/GNS-Downloader-Setup-6.52.exe
           if-no-files-found: error
           retention-days: 14
 
