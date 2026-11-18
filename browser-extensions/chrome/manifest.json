@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FDMX Download Manager",
-  "version": "1.0.0",
-  "description": "Send links from Chrome to the FDMX desktop download manager.",
+  "version": "1.1.0",
+  "description": "Send links from Chrome to FDMX and resolve GitHub Actions artifacts using your signed-in browser session.",
   "permissions": [
     "contextMenus",
     "activeTab",
@@ -10,7 +10,12 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://127.0.0.1:38471/*"
+    "http://127.0.0.1:38471/*",
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "https://*.githubusercontent.com/*",
+    "https://*.blob.core.windows.net/*",
+    "https://*.amazonaws.com/*"
   ],
   "background": {
     "service_worker": "background.js"
