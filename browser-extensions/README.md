@@ -1,6 +1,6 @@
 # FDMX Browser Extensions 1.1.0
 
-Firefox and Chrome extensions for sending HTTP/HTTPS URLs to GNS Downloader 6.51 or newer.
+Firefox and Chrome extensions for sending HTTP/HTTPS URLs to GNS Downloader 6.52 or newer.
 
 ## GitHub Actions browser-session support
 
@@ -9,7 +9,7 @@ For a GitHub Actions artifact link in the form `https://github.com/OWNER/REPO/ac
 The signed download URL is temporary. Add the link to GNS Downloader immediately after the extension resolves it. The extension does not make private GitHub repositories public or bypass repository permissions.
 
 ## Desktop requirement
-Use GNS Downloader 6.51 or newer containing the local browser bridge. It listens only on 127.0.0.1:38471. The bridge accepts requests only from browser-extension origins and validates HTTP/HTTPS URLs.
+Use GNS Downloader 6.52 or newer containing the local browser bridge. It listens only on 127.0.0.1:38471. The bridge accepts requests only from browser-extension origins and validates HTTP/HTTPS URLs.
 
 ## Chrome
 1. Open chrome://extensions
