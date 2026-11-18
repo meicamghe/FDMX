@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.51"
+APP_VERSION = "6.52"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -3599,7 +3599,7 @@ def is_youtube_url(url):
 
 
 class FDMX(QWidget):
-    browser_download_requested = Signal(str)
+    browser_download_requested = Signal(str, str)
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -5003,10 +5003,15 @@ class FDMX(QWidget):
                         raise ValueError("Invalid request size")
                     payload = json.loads(self.rfile.read(length).decode("utf-8"))
                     url = str(payload.get("url", "")).strip()
+                    resolved_url = str(payload.get("resolved_url", "")).strip()
                     parsed = urllib.parse.urlsplit(url)
                     if parsed.scheme not in ("http", "https") or not parsed.netloc:
                         raise ValueError("Only HTTP and HTTPS links are supported")
-                    window.browser_download_requested.emit(url)
+                    if resolved_url:
+                        resolved = urllib.parse.urlsplit(resolved_url)
+                        if resolved.scheme != "https" or not resolved.netloc or resolved.hostname in ("github.com", "api.github.com"):
+                            raise ValueError("Invalid browser-resolved download URL")
+                    window.browser_download_requested.emit(url, resolved_url)
                     self._send(202, {"ok": True, "message": f"Added to {APP_NAME} queue"})
                 except Exception as exc:
                     self._send(400, {"ok": False, "error": str(exc)})
@@ -5023,8 +5028,9 @@ class FDMX(QWidget):
             self._browser_server = None
             self.status.setText(f"Browser bridge unavailable: {exc}")
 
-    def add_download_from_browser(self, url):
-        """Queue a browser-submitted URL using the current download folder."""
+    def add_download_from_browser(self, url, resolved_url=""):
+        """Queue a browser-submitted URL while keeping its temporary signed URL in memory only."""
+        self._pending_browser_resolved_url = resolved_url or ""
         self.url.setText(url)
         self.add_download()
 
@@ -5058,6 +5064,8 @@ class FDMX(QWidget):
 
     def add_download(self):
         url = self.url.text().strip()
+        browser_resolved_url = getattr(self, "_pending_browser_resolved_url", "")
+        self._pending_browser_resolved_url = ""
         folder = self.folder.text().strip()
         if url.lower().startswith("magnet:?"):
             self.add_torrent_source(url)
@@ -5111,6 +5119,7 @@ class FDMX(QWidget):
             "scheduled_at": "", "total_known": False,
             "category": category_for_filename(name),
             "github_token": github_token,
+            "browser_resolved_url": browser_resolved_url,
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -5122,7 +5131,7 @@ class FDMX(QWidget):
         task = self.tasks.get(task_id)
         if not task:
             return
-        worker = FileInfoWorker(task["url"], task.get("github_token", ""))
+        worker = FileInfoWorker(task.get("browser_resolved_url") or task["url"], task.get("github_token", ""))
         task["metadata_worker"] = worker
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
         worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
@@ -5318,7 +5327,7 @@ class FDMX(QWidget):
                 # Metadata probing already established whether authentication is needed.
                 github_token = task.get("github_token", "")
                 worker = DownloadWorker(
-                    task_id, task["url"], task["folder"], self.speed_limit.value(),
+                    task_id, task.get("browser_resolved_url") or task["url"], task["folder"], self.speed_limit.value(),
                     self.parts_count.value(), proxy_url, task.get("destination_path", ""),
                     github_token=github_token,
                 )
