@@ -1,16 +1,18 @@
+importScripts("github-auth.js");
 const API = "http://127.0.0.1:38471";
-function sendToFDMX(url) {
-  if (!url || !(url.startsWith("http://") || url.startsWith("https://"))) return;
-  fetch(API + "/download", {
-    method: "POST",
-    headers: {"Content-Type": "text/plain;charset=UTF-8"},
-    body: JSON.stringify({url})
-  }).then(async response => {
+async function sendToFDMX(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return;
+  try {
+    let resolved = {url, browserSession: false};
+    try { resolved = await fdmxResolveBrowserAuthenticatedUrl(url); }
+    catch (error) { console.warn("GitHub browser-session resolution:", error); }
+    const response = await fetch(API + "/download", {
+      method: "POST", headers: {"Content-Type": "text/plain;charset=UTF-8"},
+      body: JSON.stringify({url, resolved_url: resolved.browserSession ? resolved.url : ""})
+    });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "FDMX is not responding");
-  }).catch(error => {
-    console.warn("FDMX bridge:", error);
-  });
+  } catch (error) { console.warn("FDMX bridge:", error); }
 }
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({id:"fdmx-link", title:"Download link with FDMX", contexts:["link"]});

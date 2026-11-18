@@ -34,8 +34,8 @@ class AutoStartAndPackageSizeTests(unittest.TestCase):
 
     def test_windows_release_assets_are_limited_to_50_mib(self):
         self.assertIn("$limit = 50MB", WINDOWS_WORKFLOW)
-        self.assertIn("GNS-Downloader-Setup-6.51.exe", WINDOWS_WORKFLOW)
-        self.assertIn("GNS-Downloader-Portable-v6.51-Windows-x64.zip", WINDOWS_WORKFLOW)
+        self.assertIn("GNS-Downloader-Setup-6.52.exe", WINDOWS_WORKFLOW)
+        self.assertIn("GNS-Downloader-Portable-v6.52-Windows-x64.zip", WINDOWS_WORKFLOW)
         self.assertIn("if ($file.Length -gt $limit)", WINDOWS_WORKFLOW)
 
 
