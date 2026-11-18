@@ -1,7 +1,7 @@
 importScripts("github-auth.js");
 const API = "http://127.0.0.1:38471";
 async function sendToFDMX(url) {
-  if (!url || !/^https?:\\/\\//i.test(url)) return;
+  if (!url || !/^https?:\/\//i.test(url)) return;
   try {
     let resolved = {url, browserSession: false};
     try { resolved = await fdmxResolveBrowserAuthenticatedUrl(url); }
