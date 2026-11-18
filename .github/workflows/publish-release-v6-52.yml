@@ -12,6 +12,7 @@ on:
       - "tests/test_youtube_integration_regressions.py"
       - "tests/test_github_artifact_auth_and_sort.py"
       - "tests/test_github_browser_session.py"
+      - "tests/test_github_browser_session.py"
       - "tests/test_auto_start_and_package_size.py"
       - "docs/releases/6.52.md"
       - ".github/workflows/publish-release-v6-52.yml"
@@ -25,6 +26,7 @@ on:
       - "installer/create_icon.py"
       - "tests/test_youtube_integration_regressions.py"
       - "tests/test_github_artifact_auth_and_sort.py"
+      - "tests/test_github_browser_session.py"
       - "tests/test_auto_start_and_package_size.py"
       - "docs/releases/6.52.md"
       - ".github/workflows/publish-release-v6-52.yml"
@@ -172,6 +174,7 @@ jobs:
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
           python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
           python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
+          python -m unittest discover -s tests -p "test_github_browser_session.py" -v
 
       - name: Build frozen Linux application
         run: |
