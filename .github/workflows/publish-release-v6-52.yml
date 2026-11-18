@@ -12,7 +12,6 @@ on:
       - "tests/test_youtube_integration_regressions.py"
       - "tests/test_github_artifact_auth_and_sort.py"
       - "tests/test_github_browser_session.py"
-      - "tests/test_github_browser_session.py"
       - "tests/test_auto_start_and_package_size.py"
       - "docs/releases/6.52.md"
       - ".github/workflows/publish-release-v6-52.yml"
