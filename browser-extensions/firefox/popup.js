@@ -5,7 +5,7 @@ async function send(url){
  try{
   let resolved={url,browserSession:false};
   try{resolved=await fdmxResolveBrowserAuthenticatedUrl(url);}catch(e){status.textContent=e.message+" Trying the regular downloader route…";}
-  const r=await fetch(API+"/download",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({url:resolved.url})});
+  const r=await fetch(API+"/download",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({url, resolved_url:resolved.browserSession?resolved.url:""})});
   const d=await r.json();if(!r.ok)throw new Error(d.error||"FDMX error");
   status.textContent=resolved.browserSession?"✓ Added using your signed-in GitHub browser session.":"✓ Added to FDMX queue";return true;
  }catch(e){status.textContent="Cannot connect to FDMX. Open the desktop app first. "+e.message;return false;}
