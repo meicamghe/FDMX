@@ -1,4 +1,4 @@
-name: Build browser extensions
+name: Build browser extensions 1.1.0
 on:
   workflow_dispatch:
   push:
@@ -10,15 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate desktop bridge syntax
-        run: python -m py_compile FDMX_v6_3.py
-      - name: Package Chrome extension
-        run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome.zip .
-      - name: Package Firefox XPI
-        run: cd browser-extensions/firefox && zip -r ../../FDMX-Firefox.xpi .
+      - name: Validate desktop source and extension scripts
+        run: |
+          python -m py_compile FDMX_v6_50.py
+          node --check browser-extensions/github-auth.js
+          node --check browser-extensions/chrome/github-auth.js
+          node --check browser-extensions/chrome/background.js
+          node --check browser-extensions/chrome/popup.js
+          node --check browser-extensions/firefox/github-auth.js
+          node --check browser-extensions/firefox/background.js
+          node --check browser-extensions/firefox/popup.js
+          python - <<'PY'
+          import json
+          for path in ("browser-extensions/chrome/manifest.json", "browser-extensions/firefox/manifest.json"):
+              with open(path, encoding="utf-8") as stream:
+                  manifest = json.load(stream)
+              assert manifest["version"] == "1.1.0", (path, manifest["version"])
+          PY
+      - name: Package Chrome extension 1.1.0
+        run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome-1.1.0.zip .
+      - name: Package Firefox extension 1.1.0
+        run: cd browser-extensions/firefox && zip -r ../../FDMX-Firefox-1.1.0.xpi .
       - uses: actions/upload-artifact@v4
         with:
-          name: FDMX-browser-extensions
+          name: FDMX-browser-extensions-1.1.0
           path: |
-            FDMX-Chrome.zip
-            FDMX-Firefox.xpi
+            FDMX-Chrome-1.1.0.zip
+            FDMX-Firefox-1.1.0.xpi
