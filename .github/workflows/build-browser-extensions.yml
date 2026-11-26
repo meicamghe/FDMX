@@ -1,4 +1,4 @@
-name: Build GNS Downloader browser extensions 1.2.0
+name: Build GNS Downloader browser extensions 1.3.0
 on:
   workflow_dispatch:
   push:
@@ -30,9 +30,11 @@ jobs:
           node --check browser-extensions/chrome/github-auth.js
           node --check browser-extensions/chrome/background.js
           node --check browser-extensions/chrome/popup.js
+          node --check browser-extensions/chrome/media-detect.js
           node --check browser-extensions/firefox/github-auth.js
           node --check browser-extensions/firefox/background.js
           node --check browser-extensions/firefox/popup.js
+          node --check browser-extensions/firefox/media-detect.js
           python - <<'PY'
           import json
           from pathlib import Path
@@ -40,19 +42,19 @@ jobs:
               root = Path("browser-extensions") / browser
               manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
               assert manifest["name"] == "GNS Downloader"
-              assert manifest["version"] == "1.2.0"
+              assert manifest["version"] == "1.3.0"
               assert "downloads" in manifest["permissions"]
               assert "notifications" in manifest["permissions"]
               for size in (16, 32, 48, 128):
                   assert (root / "icons" / f"gns-downloader-{size}.png").is_file()
           PY
-      - name: Package Chrome extension 1.2.0
-        run: cd browser-extensions/chrome && zip -r ../../GNS-Downloader-Chrome-1.2.0.zip .
-      - name: Package Firefox extension 1.2.0
-        run: cd browser-extensions/firefox && zip -r ../../GNS-Downloader-Firefox-1.2.0.xpi .
+      - name: Package Chrome extension 1.3.0
+        run: cd browser-extensions/chrome && zip -r ../../GNS-Downloader-Chrome-1.3.0.zip .
+      - name: Package Firefox extension 1.3.0
+        run: cd browser-extensions/firefox && zip -r ../../GNS-Downloader-Firefox-1.3.0.xpi .
       - uses: actions/upload-artifact@v4
         with:
-          name: GNS-Downloader-browser-extensions-1.2.0
+          name: GNS-Downloader-browser-extensions-1.3.0
           path: |
-            GNS-Downloader-Chrome-1.2.0.zip
-            GNS-Downloader-Firefox-1.2.0.xpi
+            GNS-Downloader-Chrome-1.3.0.zip
+            GNS-Downloader-Firefox-1.3.0.xpi
