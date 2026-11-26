@@ -56,7 +56,12 @@
     const {host, shadow} = buildPanel();
     shadow.querySelector(".message").textContent = "Finding available video qualities and audio…";
     shadow.querySelector(".status").textContent = "Checking with GNS Downloader";
-    const response = await request({type: "GNS_YOUTUBE_FORMATS", url: location.href});
+    let response = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      response = await request({type: "GNS_YOUTUBE_FORMATS", url: location.href});
+      if (response && response.ok) break;
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 1500));
+    }
     if (!host.isConnected) return;
     if (!response || !response.ok) {
       shadow.querySelector(".message").textContent = "YouTube media detected.";
@@ -151,6 +156,24 @@
     const media = findDirectMedia();
     if (media) showDirectMediaPanel(media);
   }
+
+
+  const downloadExtensions = /\\.(?:7z|apk|avi|csv|deb|dmg|docx?|exe|flac|gz|iso|m4a|mkv|mov|mp3|mp4|msi|pdf|png|pptx?|rar|rpm|tar|wav|webm|xlsx?|zip)$/i;
+  document.addEventListener("click", event => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+    if (!anchor) return;
+    const url = directUrl(anchor.href);
+    if (!url) return;
+    let path = "";
+    try { path = new URL(url).pathname; } catch (_) { return; }
+    if (!anchor.hasAttribute("download") && !downloadExtensions.test(path)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    request({type: "GNS_SEND_URL", url}).then(result => {
+      if (!result || !result.ok) console.warn("GNS Downloader could not take over this link.", result && result.error);
+    });
+  }, true);
 
   detect();
   const observer = new MutationObserver(() => detect());
