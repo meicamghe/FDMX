@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "browser-extensions/**"
+      - "FDMX_v6_50.py"
+      - "tests/test_browser_media_handoff.py"
       - ".github/workflows/build-browser-extensions.yml"
 jobs:
   package:
