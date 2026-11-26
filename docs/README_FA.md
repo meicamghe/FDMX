@@ -58,26 +58,26 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-انتشار رسمی نسخه 6.53 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
+آخرین انتشار رسمی فعلی نسخه 6.52 است. فایل‌های قابل دریافت از لینک‌های زیر هستند:
 
-- **[نسخه Portable ZIP — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
-- **[بسته لینوکس Ubuntu/Debian — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb)** — مخصوص AMD64.
+- **[نسخه Portable ZIP — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Setup — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[بسته لینوکس Ubuntu/Debian — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb)** — مخصوص AMD64.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow انتشار: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
+Workflow انتشار: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.52](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
 
 
 
 ## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
+بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.52 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
 ### نصب سریع: بسته آماده لینوکس
 
-نسخه 6.53 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
+نسخه 6.52 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
 
 معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
 
