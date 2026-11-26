@@ -113,8 +113,8 @@
     const media = Array.from(document.querySelectorAll("video,audio"));
     for (const element of media) {
       const candidates = [element.currentSrc, element.src, ...Array.from(element.querySelectorAll("source"), node => node.src)];
-      const url = candidates.map(directUrl).find(Boolean);
-      if (url) return {url, type: element.tagName.toLowerCase()};
+      const url = candidates.map(directUrl).find(Boolean) || "";
+      return {url, type: element.tagName.toLowerCase()};
     }
     return null;
   }
@@ -122,18 +122,22 @@
   async function showDirectMediaPanel(found) {
     if (!found || document.getElementById("gns-downloader-media-panel")) return;
     const {host, shadow} = buildPanel();
-    shadow.querySelector(".message").textContent = (found.type === "audio" ? "Audio" : "Video") + " media detected on this page.";
+    shadow.querySelector(".message").textContent = found.url
+      ? (found.type === "audio" ? "Audio" : "Video") + " media detected on this page."
+      : "A media player was detected. Its stream URL is hidden or segmented.";
     const choices = shadow.querySelector(".choices");
     const actions = document.createElement("div");
     actions.className = "actions";
     const download = document.createElement("button");
-    download.textContent = "Download with GNS";
+    download.textContent = found.url ? "Download with GNS" : "Inspect page with GNS";
     download.addEventListener("click", async () => {
       download.disabled = true;
-      shadow.querySelector(".status").textContent = "Sending media to GNS Downloader…";
-      const result = await request({type:"GNS_SEND_URL",url:found.url});
+      shadow.querySelector(".status").textContent = found.url ? "Sending media to GNS Downloader…" : "Opening the GNS website scanner…";
+      const result = await request(found.url
+        ? {type:"GNS_SEND_URL",url:found.url}
+        : {type:"GNS_OPEN_WEBSITE",url:location.href});
       shadow.querySelector(".status").textContent = result && result.ok
-        ? "Added to the GNS Downloader queue."
+        ? (found.url ? "Added to the GNS Downloader queue." : "Website scanner opened in GNS Downloader.")
         : (result && result.error) || "Could not start the download.";
       download.disabled = false;
     });
@@ -143,7 +147,7 @@
     dismiss.addEventListener("click", () => host.remove());
     actions.append(download, dismiss);
     choices.appendChild(actions);
-    shadow.querySelector(".status").textContent = "The media URL is sent only after you choose Download.";
+    shadow.querySelector(".status").textContent = "The media URL is sent only after you choose Download; hidden streams open the GNS website scanner instead.";
   }
 
   function detect() {
