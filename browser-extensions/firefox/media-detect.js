@@ -79,10 +79,13 @@
       select.appendChild(option);
     }
     if (response.audio_available !== false) {
-      const option = document.createElement("option");
-      option.value = "audio:0";
-      option.textContent = "Audio only · best available";
-      select.appendChild(option);
+      const audioQualities = response.audio_qualities || [{label:"Best audio",bitrate:0}];
+      for (const quality of audioQualities) {
+        const option = document.createElement("option");
+        option.value = "audio:0:" + Number(quality.bitrate || 0);
+        option.textContent = "Audio only · " + quality.label;
+        select.appendChild(option);
+      }
     }
     choices.appendChild(select);
     const actions = document.createElement("div");
@@ -90,12 +93,12 @@
     const download = document.createElement("button");
     download.textContent = "Download with GNS";
     download.addEventListener("click", async () => {
-      const [mediaType, height] = select.value.split(":");
+      const [mediaType, height, audioBitrate] = select.value.split(":");
       download.disabled = true;
       shadow.querySelector(".status").textContent = "Sending to GNS Downloader…";
       const result = await request({
         type: "GNS_YOUTUBE_DOWNLOAD", url: location.href,
-        media_type: mediaType, height: Number(height || 0)
+        media_type: mediaType, height: Number(height || 0), audio_bitrate: Number(audioBitrate || 0)
       });
       shadow.querySelector(".status").textContent = result && result.ok
         ? "Added to the GNS Downloader queue."
