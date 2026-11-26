@@ -5,24 +5,20 @@ async function send(url){
  try{
   let resolved={url,browserSession:false};
   try{resolved=await fdmxResolveBrowserAuthenticatedUrl(url);}catch(e){status.textContent=e.message+" Trying the regular downloader route…";}
-  const r=await fetch(API+"/download",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({url, resolved_url:resolved.browserSession?resolved.url:""})});
-  const d=await r.json();if(!r.ok)throw new Error(d.error||"FDMX error");
-  status.textContent=resolved.browserSession?"✓ Added using your signed-in GitHub browser session.":"✓ Added to FDMX queue";return true;
- }catch(e){status.textContent="Cannot connect to FDMX. Open the desktop app first. "+e.message;return false;}
+  const r=await fetch(API+"/download",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({url,resolved_url:resolved.browserSession?resolved.url:""})});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"GNS Downloader error");
+  status.textContent=resolved.browserSession?"✓ Added using your signed-in GitHub browser session.":"✓ Added to GNS Downloader queue";return true;
+ }catch(e){status.textContent="Cannot connect to GNS Downloader. Open the desktop app first. "+e.message;return false;}
 }
 document.getElementById("current").addEventListener("click",async()=>{const [tab]=await chrome.tabs.query({active:true,currentWindow:true});send(tab&&tab.url);});
 document.getElementById("video").addEventListener("click",async()=>{
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
  if(!tab||!tab.id){status.textContent="No active tab.";return;}
  try{
-  let urls=[];
-  if(chrome.scripting&&chrome.scripting.executeScript){
-   const results=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>Array.from(document.querySelectorAll("video, source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))});
-   urls=(results[0]&&results[0].result)||[];
-  }else{
-   urls=await new Promise((resolve,reject)=>chrome.tabs.executeScript(tab.id,{code:'Array.from(document.querySelectorAll("video,source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))'},r=>chrome.runtime.lastError?reject(chrome.runtime.lastError):resolve(r&&r[0]||[])));
-  }
-  urls=[...new Set(urls)];if(!urls.length){status.textContent="No direct video URL found on this page.";return;}
-  let count=0;for(const url of urls)if(await send(url))count++;status.textContent="Sent "+count+" media URL(s) to FDMX.";
+  const results=await chrome.tabs.executeScript(tab.id,{code:'Array.from(document.querySelectorAll("video,source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))'});
+  const urls=[...new Set((results&&results[0])||[])];
+  if(!urls.length){status.textContent="No direct video URL found on this page.";return;}
+  let count=0;for(const url of urls)if(await send(url))count++;
+  status.textContent="Sent "+count+" media URL(s) to GNS Downloader.";
  }catch(e){status.textContent="This page does not allow media inspection. "+e.message;}
 });
