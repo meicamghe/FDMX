@@ -158,7 +158,7 @@
   }
 
 
-  const downloadExtensions = /\\.(?:7z|apk|avi|csv|deb|dmg|docx?|exe|flac|gz|iso|m4a|mkv|mov|mp3|mp4|msi|pdf|png|pptx?|rar|rpm|tar|wav|webm|xlsx?|zip)$/i;
+  const downloadExtensions = /\.(?:7z|apk|avi|csv|deb|dmg|docx?|exe|flac|gz|iso|m4a|mkv|mov|mp3|mp4|msi|pdf|png|pptx?|rar|rpm|tar|wav|webm|xlsx?|zip)$/i;
   document.addEventListener("click", event => {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.target && event.target.closest ? event.target.closest("a[href]") : null;
