@@ -81,6 +81,8 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         iss = (ROOT / "installer/FDMX.iss").read_text(encoding="utf-8")
         linux = (ROOT / ".github/workflows/build-fdmx-linux.yml").read_text(encoding="utf-8")
         self.assertIn('Subkey: "gnsdownloader"', iss)
+        self.assertIn("HKEY_CURRENT_USER", SOURCE)
+        self.assertIn("register_gns_protocol_handler()", SOURCE)
         self.assertIn('""%1"""', iss)
         self.assertIn("x-scheme-handler/gnsdownloader", linux)
         self.assertIn("Exec=gns-downloader %u", linux)
