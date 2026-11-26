@@ -3,106 +3,156 @@ const MENU_LINK = "gns-download-link";
 const MENU_PAGE = "gns-download-page";
 const MENU_SELECTION = "gns-download-selection";
 
+async function resolveUrl(url) {
+  let resolvedUrl = "";
+  try {
+    const result = await fdmxResolveBrowserAuthenticatedUrl(url);
+    if (result && result.browserSession) resolvedUrl = result.url;
+  } catch (error) {
+    console.warn("GNS Downloader GitHub session resolution:", error);
+  }
+  return resolvedUrl;
+}
+
+async function postToGNS(path, payload) {
+  const response = await fetch(API + path, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain;charset=UTF-8"},
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.ok) throw new Error(data.error || "GNS Downloader is unavailable");
+  return data;
+}
+
 async function sendToGNS(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return {ok: false, resolvedUrl: ""};
+  const resolvedUrl = await resolveUrl(url);
+  try {
+    await postToGNS("/download", {url, resolved_url: resolvedUrl});
+    return {ok: true, resolvedUrl};
+  } catch (error) {
+    console.warn("GNS Downloader local bridge:", error);
+    return {ok: false, resolvedUrl};
+  }
+}
+
+function protocolUrl(action, values) {
+  const target = new URL("gnsdownloader://" + action);
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null && value !== "") target.searchParams.set(key, String(value));
+  }
+  return target.href;
+}
+
+async function launchGNS(url, resolvedUrl = "") {
   if (!url || !/^https?:\/\//i.test(url)) return false;
   try {
-    let resolved = {url, browserSession: false};
-    try { resolved = await fdmxResolveBrowserAuthenticatedUrl(url); }
-    catch (error) { console.warn("GitHub browser-session resolution:", error); }
-    const response = await fetch(API + "/download", {
-      method: "POST",
-      headers: {"Content-Type": "text/plain;charset=UTF-8"},
-      body: JSON.stringify({url, resolved_url: resolved.browserSession ? resolved.url : ""})
+    await chrome.tabs.create({
+      url: protocolUrl("download", {url, resolved_url: resolvedUrl}),
+      active: false
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "GNS Downloader is not responding");
     return true;
   } catch (error) {
-    console.warn("GNS Downloader bridge:", error);
-    try {
-      await chrome.notifications.create("gns-bridge-error", {
-        type: "basic", iconUrl: "icons/gns-downloader-128.png",
-        title: "GNS Downloader", message: "Could not connect. Open GNS Downloader and try again."
-      });
-    } catch (_) {}
+    console.warn("GNS Downloader protocol launch failed:", error);
     return false;
   }
+}
+
+async function sendOrLaunch(url) {
+  const result = await sendToGNS(url);
+  if (result.ok) return true;
+  return launchGNS(url, result.resolvedUrl);
 }
 
 function createMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: MENU_LINK, title: "Download link with GNS Downloader",
+      id: MENU_LINK,
+      title: "Download with GNS Downloader",
       contexts: ["link", "image", "video", "audio"]
     });
     chrome.contextMenus.create({
-      id: MENU_PAGE, title: "Send page address to GNS Downloader", contexts: ["page"]
+      id: MENU_PAGE,
+      title: "Send page to GNS Downloader",
+      contexts: ["page"]
     });
     chrome.contextMenus.create({
-      id: MENU_SELECTION, title: "Send selected URL to GNS Downloader", contexts: ["selection"]
+      id: MENU_SELECTION,
+      title: "Download selected URL with GNS Downloader",
+      contexts: ["selection"]
     });
   });
 }
 
+chrome.runtime.onInstalled.addListener(createMenus);
+chrome.runtime.onStartup.addListener(createMenus);
+createMenus();
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === MENU_LINK) sendToGNS(info.linkUrl || info.srcUrl);
-  if (info.menuItemId === MENU_PAGE) sendToGNS(info.pageUrl || (tab && tab.url));
-  if (info.menuItemId === MENU_SELECTION) sendToGNS((info.selectionText || "").trim());
-});
-chrome.runtime.onMessage.addListener(message => {
-  if (message && message.type === "GNS_DOWNLOAD") sendToGNS(message.url);
+  if (info.menuItemId === MENU_LINK) sendOrLaunch(info.linkUrl || info.srcUrl);
+  if (info.menuItemId === MENU_PAGE) sendOrLaunch(info.pageUrl || (tab && tab.url));
+  if (info.menuItemId === MENU_SELECTION) sendOrLaunch((info.selectionText || "").trim());
 });
 
-function isHttpDownload(item) {
-  return !!(item && item.id !== undefined && /^https?:\/\//i.test(item.url || ""));
-}
 chrome.downloads.onCreated.addListener(async item => {
-  if (!isHttpDownload(item)) return;
-  const notificationId = "gns-download-" + item.id;
-  try { await chrome.downloads.pause(item.id); } catch (_) {}
-  const filename = (item.filename || item.url.split("/").pop() || "download").split(/[\\/]/).pop();
+  if (!item || item.id === undefined || !/^https?:\/\//i.test(item.url || "")) return;
+  if (item.byExtension) return;
+  let paused = false;
   try {
-    await chrome.notifications.create(notificationId, {
-      type: "basic",
-      iconUrl: "icons/gns-downloader-128.png",
-      title: "Download with GNS Downloader?",
-      message: filename + " — choose GNS Downloader or keep the browser download.",
-      buttons: [{title: "Download with GNS"}, {title: "Keep in browser"}],
-      priority: 2
-    });
-  } catch (error) {
-    console.warn("GNS download prompt:", error);
+    await chrome.downloads.pause(item.id);
+    paused = true;
+  } catch (_) {
+    // Some downloads cannot be paused immediately; do not cancel until handoff succeeds.
+  }
+
+  const result = await sendToGNS(item.url);
+  let handedOff = result.ok;
+  if (!handedOff) handedOff = await launchGNS(item.url, result.resolvedUrl);
+
+  if (handedOff) {
+    try { await chrome.downloads.cancel(item.id); } catch (_) {}
+    try {
+      await chrome.notifications.create("gns-auto-" + item.id, {
+        type: "basic",
+        iconUrl: "icons/gns-downloader-128.png",
+        title: "GNS Downloader",
+        message: "Download transferred to GNS Downloader."
+      });
+    } catch (_) {}
+  } else if (paused) {
     try { await chrome.downloads.resume(item.id); } catch (_) {}
   }
 });
 
-async function handleDownloadChoice(notificationId, useGNS) {
-  if (!notificationId.startsWith("gns-download-")) return;
-  const id = Number(notificationId.slice("gns-download-".length));
-  if (!Number.isInteger(id)) return;
-  const items = await chrome.downloads.search({id});
-  const item = items && items[0];
-  if (!item) return;
-  if (useGNS) {
-    try { await chrome.downloads.cancel(id); } catch (_) {}
-    await sendToGNS(item.url);
-  } else {
-    try { await chrome.downloads.resume(id); } catch (_) {}
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || !message.type) return false;
+  if (message.type === "GNS_SEND_URL") {
+    sendOrLaunch(message.url).then(ok => sendResponse({ok})).catch(error => sendResponse({ok: false, error: error.message}));
+    return true;
   }
-  try { await chrome.notifications.clear(notificationId); } catch (_) {}
-}
-chrome.notifications.onButtonClicked.addListener((id, index) => handleDownloadChoice(id, index === 0));
-chrome.notifications.onClicked.addListener(id => handleDownloadChoice(id, true));
-chrome.notifications.onClosed.addListener(id => {
-  if (!id.startsWith("gns-download-")) return;
-  const downloadId = Number(id.slice("gns-download-".length));
-  if (!Number.isInteger(downloadId)) return;
-  chrome.downloads.search({id: downloadId}).then(items => {
-    if (items && items[0] && items[0].state === "in_progress") {
-      return chrome.downloads.resume(downloadId);
-    }
-  }).catch(() => {});
+  if (message.type === "GNS_YOUTUBE_FORMATS") {
+    postToGNS("/youtube/formats", {url: message.url})
+      .then(data => sendResponse(data))
+      .catch(error => sendResponse({ok: false, error: error.message}));
+    return true;
+  }
+  if (message.type === "GNS_YOUTUBE_DOWNLOAD") {
+    const payload = {
+      url: message.url,
+      media_type: message.media_type,
+      height: message.height || 0
+    };
+    postToGNS("/youtube/download", payload)
+      .then(data => sendResponse(data))
+      .catch(error => {
+        // The app can also be started through the registered desktop protocol.
+        const target = protocolUrl("youtube", payload);
+        chrome.tabs.create({url: target, active: false})
+          .then(() => sendResponse({ok: true, launched: true}))
+          .catch(() => sendResponse({ok: false, error: error.message}));
+      });
+    return true;
+  }
+  return false;
 });
-
-// Reconcile context menus whenever this background context starts.
-createMenus();
