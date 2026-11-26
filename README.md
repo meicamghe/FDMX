@@ -22,6 +22,29 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 GNS Downloader **v6.52** is the latest official public release. The maintained application source is `FDMX_v6_50.py`.
 
+## Browser integration — 6.53 development
+
+The current development branch adds a browser companion extension update (1.3.0) and the matching desktop bridge (6.53):
+
+- Direct file links and browser downloads are automatically handed to GNS Downloader. If the desktop app is closed, the registered `gnsdownloader://` protocol launches it and queues the URL.
+- Right-click links in Chrome or Firefox and choose **Download with GNS Downloader**; the extension icon is included.
+- Pages exposing direct audio/video URLs show a media prompt. YouTube pages ask the desktop `yt-dlp` engine for available quality choices, including audio-only.
+- **Tools → Browser extensions…** in the desktop app explains Firefox AMO installation and Chrome Developer mode / Load unpacked installation.
+- The existing Firefox AMO listing and Gecko ID (`fdmx-browser@gns.local`) are retained for an in-place update.
+
+The 6.53 work is under review in [PR #33](https://github.com/meicamghe/FDMX/pull/33); it is not the public release yet. The latest public desktop release remains 6.52. The 1.3.0 browser package is produced by the [browser-extension CI workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
+
+### Install Chrome extension (development build)
+
+1. Open the [browser-extension Actions workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml) and download the latest successful `GNS-Downloader-browser-extensions-1.3.0` artifact.
+2. Extract the artifact ZIP, then extract `GNS-Downloader-Chrome-1.3.0.zip`.
+3. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select the extracted Chrome extension folder containing `manifest.json`.
+
+### Install or update Firefox
+
+Use the [GNS Download Manager AMO listing](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/). The 1.3.0 XPI is intended as an update to that same listing; temporary Developer Edition testing is available through `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
+
+
 - YouTube video and audio downloads use the optional `yt-dlp` runtime. Best-quality video merging requires FFmpeg; audio-only downloads do not.
 - Download proxy support includes HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h. SOCKS support is bundled through PySocks in the packaged build. Proxy entries require a hostname and port; endpoint paths, query strings and fragments are rejected instead of silently ignored.
 - The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
