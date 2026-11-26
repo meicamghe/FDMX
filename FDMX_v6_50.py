@@ -3210,15 +3210,15 @@ class GitHubUpdateWorker(QThread):
             notes = str(release.get("body") or "").strip()
             if notes:
                 notes = (
-                    notes.replace("\\\\r\\\\n", "\\n")
-                    .replace("\\\\n", "\\n")
-                    .replace("\\\\r", "\\n")
+                    notes.replace("\\\\r\\\n", "\n")
+                    .replace("\\\n", "\n")
+                    .replace("\\\\r", "\n")
                 )
             else:
                 notes = (
-                    "Highlights:\\n"
-                    "- Detects the highest published stable GitHub release instead of relying on the stale /latest pointer.\\n"
-                    "- Adds YouTube video and audio downloads through yt-dlp.\\n"
+                    "Highlights:\n"
+                    "- Detects the highest published stable GitHub release instead of relying on the stale /latest pointer.\n"
+                    "- Adds YouTube video and audio downloads through yt-dlp.\n"
                     "- Retains the existing HTTP and torrent download workflows."
                 )
             asset_url = ""
@@ -5163,11 +5163,11 @@ class FDMX(QWidget):
         box.setWindowTitle("GNS Downloader — Browser integration")
         box.setIcon(QMessageBox.Information)
         box.setText(
-            "Firefox: install or update the approved GNS Download Manager add-on from Mozilla Add-ons.\\n\\n"
+            "Firefox: install or update the approved GNS Download Manager add-on from Mozilla Add-ons.\n\n"
             "Chrome: open the extension build workflow, download the latest successful "
             "GNS-Downloader-browser-extensions artifact, extract it, extract the Chrome ZIP, "
             "open chrome://extensions, enable Developer mode, choose Load unpacked, and select "
-            "the extracted Chrome extension folder.\\n\\n"
+            "the extracted Chrome extension folder.\n\n"
             "Keep GNS Downloader 6.53 or newer installed. The browser can start it through "
             "the gnsdownloader:// protocol when the desktop app is closed."
         )
