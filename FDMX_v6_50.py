@@ -4,6 +4,7 @@ import re
 import csv
 import json
 import time
+_MODULE_STARTED_AT = time.perf_counter()
 import uuid
 import hashlib
 import mimetypes
@@ -27,8 +28,6 @@ from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-_MODULE_STARTED_AT = time.perf_counter()
 
 from PySide6.QtCore import QThread, Signal, Slot, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
@@ -3677,17 +3676,23 @@ class FDMX(QWidget):
         self.browser_download_requested.connect(self.add_download_from_browser)
         self.browser_youtube_requested.connect(self.add_youtube_download_from_browser)
         self.browser_website_requested.connect(self.open_website_from_browser)
-        self.start_browser_bridge()
-        self._log_startup_stage("browser bridge initialized")
         QApplication.clipboard().dataChanged.connect(self.on_clipboard_changed)
         self.refresh_table()
         self.scheduler_timer = self.startTimer(400)
         self.autosave_timer = QTimer(self)
         self.autosave_timer.timeout.connect(self.save_tasks)
         self.autosave_timer.start(5000)
+        # Start services and show recovery prompts only after the first window paint.
+        QTimer.singleShot(0, self.finish_deferred_startup)
+        self._log_startup_stage("window construction complete")
+
+    def finish_deferred_startup(self):
+        """Start background-facing services after the main window has appeared."""
+        self.start_browser_bridge()
+        self._log_startup_stage("browser bridge initialized")
         self.prompt_recovery()
         self.start_queue()
-        self._log_startup_stage("startup complete")
+        self._log_startup_stage("deferred startup complete")
 
     def _log_startup_stage(self, stage):
         """Record startup timings to help diagnose slow first launches."""
@@ -4743,27 +4748,39 @@ class FDMX(QWidget):
         QMessageBox.warning(self, "Update check failed", f"Could not check GitHub for updates:\n{message}")
 
     def on_update_available(self, version, notes, release_url, asset_url, asset_size, asset_digest):
-        summary = (
-            f"GNS Downloader {version} is available.\n"
-            f"Current version: {APP_VERSION}\n\n"
-            "Release notes:\n"
-            + (notes[:12000] if notes else "No release notes were provided.")
+        """Keep the update prompt compact; put full notes behind a collapsed details toggle."""
+        note_lines = [line.strip() for line in str(notes or "").splitlines() if line.strip()]
+        highlights = []
+        for line in note_lines:
+            clean = re.sub(r"^#{1,6}\s*|^[-*+]\s*|^\d+[.)]\s*", "", line).strip()
+            if clean and clean.lower() not in ("release notes", "what's changed", "changes"):
+                highlights.append(clean)
+            if len(highlights) >= 3:
+                break
+        short_notes = " • ".join(highlights)
+        if len(short_notes) > 360:
+            short_notes = short_notes[:357].rstrip() + "…"
+        if not short_notes:
+            short_notes = "Release notes are available in the details."
+        message = QMessageBox(self)
+        message.setIcon(QMessageBox.Information)
+        message.setWindowTitle("Update available")
+        message.setText(f"GNS Downloader {version} is available.")
+        message.setInformativeText(
+            f"Current version: {APP_VERSION}\n{short_notes}\n\n"
+            + ("Download and install this update now?" if asset_url else
+               "Open GitHub Releases to download the portable package?")
         )
-        if not asset_url:
-            answer = QMessageBox.question(
-                self, "Update available", summary + "\n\nOpen GitHub Releases to download the portable package?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
-            )
-            if answer == QMessageBox.Yes:
-                QDesktopServices.openUrl(QUrl(release_url))
-            return
-
-        answer = QMessageBox.question(
-            self, "Update available", summary + "\n\nDownload and install this update now? The application will close automatically after verification.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
-        )
+        message.setDetailedText((str(notes or "No release notes were provided.")[:6000]))
+        message.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        message.setDefaultButton(QMessageBox.Yes)
+        answer = message.exec()
         if answer != QMessageBox.Yes:
-            self.status.setText("Update postponed.")
+            if asset_url:
+                self.status.setText("Update postponed.")
+            return
+        if not asset_url:
+            QDesktopServices.openUrl(QUrl(release_url))
             return
         self.start_update_download(version, asset_url, asset_size, asset_digest)
 
@@ -6203,23 +6220,51 @@ class FDMX(QWidget):
             QMessageBox.warning(self, "SHA-256", str(exc))
 
     def open_folder(self):
+        """Reveal the selected download in its file manager, selecting the file."""
         task_id = self.selected_task()
         task = self.tasks.get(task_id)
         if not task:
             return
-        path = task.get("path") if task.get("path") and os.path.exists(task["path"]) else task["folder"]
-        if os.path.isdir(path):
-            target = path
-        else:
-            target = os.path.dirname(path)
-        if os.name == "nt":
-            os.startfile(target)
-        elif sys.platform == "darwin":
-            import subprocess
-            subprocess.Popen(["open", target])
-        else:
-            import subprocess
-            subprocess.Popen(["xdg-open", target])
+        path = task.get("path") or task.get("folder", "")
+        if not path:
+            return
+        path = os.path.abspath(os.path.expanduser(path))
+        is_file = os.path.isfile(path)
+        target = path if is_file else (path if os.path.isdir(path) else os.path.dirname(path))
+        if not target:
+            return
+        try:
+            if os.name == "nt":
+                if is_file:
+                    subprocess.Popen(["explorer.exe", "/select,", os.path.normpath(target)])
+                else:
+                    os.startfile(target)
+            elif sys.platform == "darwin":
+                if is_file:
+                    subprocess.Popen(["open", "-R", target])
+                else:
+                    subprocess.Popen(["open", target])
+            elif is_file and shutil.which("gdbus"):
+                # FileManager1.ShowItems asks GNOME, KDE and compatible managers
+                # to reveal the exact file rather than merely opening its parent.
+                file_uri = QUrl.fromLocalFile(target).toString()
+                subprocess.Popen([
+                    "gdbus", "call", "--session", "--dest", "org.freedesktop.FileManager1",
+                    "--object-path", "/org/freedesktop/FileManager1",
+                    "--method", "org.freedesktop.FileManager1.ShowItems",
+                    "['" + file_uri.replace("'", "%27") + "']", ""
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif is_file:
+                manager = next((name for name in ("nautilus", "dolphin", "thunar", "nemo")
+                                if shutil.which(name)), "")
+                if manager:
+                    subprocess.Popen([manager, "--select", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    subprocess.Popen(["xdg-open", os.path.dirname(target)])
+            else:
+                subprocess.Popen(["xdg-open", target])
+        except OSError as exc:
+            QMessageBox.warning(self, "Open containing folder", str(exc))
 
     def timerEvent(self, event):
         self.schedule_downloads()
