@@ -5,7 +5,7 @@ Official Chrome and Firefox companion extensions for **GNS Downloader 6.53 or ne
 ## What's new in 1.3.0
 
 - Uses the GNS Downloader name and the matching red G application icon.
-- Right-click links, images, audio, or video and choose **Download with GNS Downloader**.
+- Right-click links, images, audio, or video and choose **Download with GDM**.
 - Normal HTTP/HTTPS browser downloads are automatically handed to GNS Downloader. The extension pauses the browser transfer, submits the URL to the desktop app, then cancels the browser copy only after the desktop app accepts the request.
 - If the desktop app is closed, the extension invokes the registered `gnsdownloader://` desktop protocol. The new app instance queues the URL and starts the download. If the app does not become available, the extension resumes the browser download instead.
 - Pages with directly addressable audio/video elements show a small GNS media panel and wait for the user's choice.
