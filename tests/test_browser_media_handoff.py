@@ -106,7 +106,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
             self.assertIn("downloads", manifest["permissions"])
             self.assertIn("media-detect.js", str(manifest["content_scripts"]))
         self.assertEqual(
-            firefox["applications"]["gecko"]["id"],
+            firefox["browser_specific_settings"]["gecko"]["id"],
             "fdmx-browser@gns.local",
         )
 
