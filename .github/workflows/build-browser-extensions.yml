@@ -27,6 +27,7 @@ jobs:
       - name: Validate extension scripts and manifests
         run: |
           python -m py_compile FDMX_v6_50.py
+          python -m unittest discover -s tests -p "test_browser_media_handoff.py" -v
           node --check browser-extensions/chrome/github-auth.js
           node --check browser-extensions/chrome/background.js
           node --check browser-extensions/chrome/popup.js
