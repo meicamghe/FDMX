@@ -100,3 +100,6 @@ chrome.notifications.onClosed.addListener((id, byUser) => {
   const downloadId = Number(id.slice("gns-download-".length));
   if (Number.isInteger(downloadId)) chrome.downloads.resume(downloadId).catch(() => {});
 });
+
+// Reconcile context menus on background startup as well as install/update.
+createMenus();
