@@ -1,14 +1,14 @@
-const API="http://127.0.0.1:38471";
 const status=document.getElementById("status");
 async function send(url){
  if(!url || !/^https?:\/\//i.test(url)){status.textContent="No supported HTTP/HTTPS URL found.";return false;}
  try{
-  let resolved={url,browserSession:false};
-  try{resolved=await fdmxResolveBrowserAuthenticatedUrl(url);}catch(e){status.textContent=e.message+" Trying the regular downloader route…";}
-  const r=await fetch(API+"/download",{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify({url,resolved_url:resolved.browserSession?resolved.url:""})});
-  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"GNS Downloader error");
-  status.textContent=resolved.browserSession?"✓ Added using your signed-in GitHub browser session.":"✓ Added to GNS Downloader queue";return true;
- }catch(e){status.textContent="Cannot connect to GNS Downloader. Open the desktop app first. "+e.message;return false;}
+  const result=await new Promise(resolve=>chrome.runtime.sendMessage({type:"GNS_SEND_URL",url},response=>{
+   if(chrome.runtime.lastError)resolve({ok:false,error:chrome.runtime.lastError.message});
+   else resolve(response||{ok:false,error:"No response from GNS Downloader"});
+  }));
+  status.textContent=result.ok?"✓ Sent to GNS Downloader.":(result.error||"Could not start GNS Downloader.");
+  return !!result.ok;
+ }catch(e){status.textContent=e.message;return false;}
 }
 document.getElementById("current").addEventListener("click",async()=>{const [tab]=await chrome.tabs.query({active:true,currentWindow:true});send(tab&&tab.url);});
 document.getElementById("video").addEventListener("click",async()=>{
