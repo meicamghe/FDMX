@@ -171,7 +171,10 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     request({type: "GNS_SEND_URL", url}).then(result => {
-      if (!result || !result.ok) console.warn("GNS Downloader could not take over this link.", result && result.error);
+      if (!result || !result.ok) {
+        console.warn("GNS Downloader could not take over this link; returning to the browser.", result && result.error);
+        window.location.assign(url);
+      }
     });
   }, true);
 
