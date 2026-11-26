@@ -43,8 +43,6 @@ function createMenus() {
     });
   });
 }
-chrome.runtime.onInstalled.addListener(createMenus);
-chrome.runtime.onStartup.addListener(createMenus);
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_LINK) sendToGNS(info.linkUrl || info.srcUrl);
@@ -106,5 +104,5 @@ chrome.notifications.onClosed.addListener(id => {
   }).catch(() => {});
 });
 
-// Reconcile context menus on background startup as well as install/update.
+// Reconcile context menus whenever this background context starts.
 createMenus();
