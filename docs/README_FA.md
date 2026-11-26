@@ -227,7 +227,7 @@ python FDMX_v6_50.py
 
 افزونه تأییدشده فعلی: [GNS Download Manager در Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/).
 
-نسخه 1.3.0 باید به‌عنوان به‌روزرسانی همان فهرست AMO ارسال شود؛ شناسه Gecko موجود `fdmx-browser@gns.local` حفظ شده است. برای تست موقت در Firefox Developer Edition از `about:debugging#/runtime/this-firefox` و **Load Temporary Add-on** استفاده کنید.
+نسخه 1.3.0 باید به‌عنوان به‌روزرسانی همان فهرست AMO ارسال شود؛ شناسه Gecko موجود `fdmx-browser@gns.local` حفظ شده است. حداقل Firefox 140 لازم است. به‌دلیل ارسال آدرس لینک‌ها و دانلودها به برنامه دسکتاپ محلی، مجوز `websiteActivity` در manifest اعلام شده است؛ آدرس‌ها به سرویس ابری GNS ارسال نمی‌شوند. برای تست موقت در Firefox Developer Edition از `about:debugging#/runtime/this-firefox` و **Load Temporary Add-on** استفاده کنید.
 
 ### نصب در Chrome
 
