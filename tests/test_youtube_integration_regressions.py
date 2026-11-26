@@ -285,7 +285,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn('"merge_output_format": "mp4"', SOURCE)
 
     def test_audio_selects_best_available_audio_without_forcing_conversion(self):
-        self.assertIn('"format": "bestvideo+bestaudio/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio"', SOURCE)
+        self.assertIn('bestaudio[ext=m4a]/bestaudio', SOURCE)
+        self.assertIn('bestaudio[abr<={self.max_abr}]', SOURCE)
 
     def test_final_postprocessed_filepath_is_preferred(self):
         resolve = load_output_resolver()
@@ -478,7 +479,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_youtube_tasks_keep_media_type_when_persisted_and_restored(self):
         self.assertIn('"media_type": entry.get("media_type", "video")', SOURCE)
-        self.assertIn('"category", "kind", "media_type", "scheduled_at"', SOURCE)
+        self.assertIn('"category", "kind", "media_type", "max_height", "max_abr", "scheduled_at"', SOURCE)
 
     def test_pause_cancel_and_progress_hooks_are_connected(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
