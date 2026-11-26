@@ -160,6 +160,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendOrLaunch(message.url).then(ok => sendResponse({ok})).catch(error => sendResponse({ok: false, error: error.message}));
     return true;
   }
+  if (message.type === "GNS_OPEN_WEBSITE") {
+    postToGNS("/website/open", {url: message.url})
+      .then(data => sendResponse(data))
+      .catch(async error => {
+        if (!error.bridgeUnavailable) {
+          sendResponse({ok: false, error: error.message});
+          return;
+        }
+        try {
+          await chrome.tabs.create({url: protocolUrl("website", {url: message.url}), active: false});
+          sendResponse({ok: true, launched: true});
+        } catch (_) {
+          sendResponse({ok: false, error: error.message});
+        }
+      });
+    return true;
+  }
   if (message.type === "GNS_YOUTUBE_FORMATS") {
     postToGNS("/youtube/formats", {url: message.url})
       .then(data => sendResponse(data))
