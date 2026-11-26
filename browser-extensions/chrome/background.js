@@ -1,3 +1,4 @@
+importScripts("github-auth.js");
 const API = "http://127.0.0.1:38471";
 const MENU_LINK = "gns-download-link";
 const MENU_PAGE = "gns-download-page";
@@ -59,6 +60,18 @@ async function launchGNS(url, resolvedUrl = "") {
   }
 }
 
+async function waitForGNS(timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(API + "/health", {cache: "no-store"});
+      if (response.ok) return true;
+    } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+  return false;
+}
+
 async function sendOrLaunch(url) {
   const result = await sendToGNS(url);
   if (result.ok) return true;
@@ -85,9 +98,11 @@ function createMenus() {
   });
 }
 
-chrome.runtime.onInstalled.addListener(createMenus);
-chrome.runtime.onStartup.addListener(createMenus);
-createMenus();
+if (chrome.runtime.getManifest().manifest_version === 3) {
+  chrome.runtime.onInstalled.addListener(createMenus);
+} else {
+  createMenus();
+}
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_LINK) sendOrLaunch(info.linkUrl || info.srcUrl);
@@ -108,7 +123,10 @@ chrome.downloads.onCreated.addListener(async item => {
 
   const result = await sendToGNS(item.url);
   let handedOff = result.ok;
-  if (!handedOff) handedOff = await launchGNS(item.url, result.resolvedUrl);
+  if (!handedOff) {
+    const launched = await launchGNS(item.url, result.resolvedUrl);
+    handedOff = launched && await waitForGNS();
+  }
 
   if (handedOff) {
     try { await chrome.downloads.cancel(item.id); } catch (_) {}
@@ -134,7 +152,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GNS_YOUTUBE_FORMATS") {
     postToGNS("/youtube/formats", {url: message.url})
       .then(data => sendResponse(data))
-      .catch(error => sendResponse({ok: false, error: error.message}));
+      .catch(async error => {
+        try {
+          await chrome.tabs.create({url: "gnsdownloader://open", active: false});
+          sendResponse({ok: false, error: "GNS Downloader is starting. Please retry format detection in a moment."});
+        } catch (_) {
+          sendResponse({ok: false, error: error.message});
+        }
+      });
     return true;
   }
   if (message.type === "GNS_YOUTUBE_DOWNLOAD") {
