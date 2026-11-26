@@ -12,7 +12,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 - توکن در فایل‌های وظایف و تاریخچه ذخیره نمی‌شود و هنگام انتقال به دامنه دیگر در هدر درخواست ارسال نخواهد شد.
 - دانلودهای تکمیل‌شده بر اساس جدیدترین زمان پایان در بالای فهرست قرار می‌گیرند و با اولین کلیک Start دانلود آغاز می‌شود.
 
-نسخه **6.53** آخرین انتشار رسمی GNS Downloader در GitHub است. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
+نسخه 6.53 در شاخه توسعه و در حال بررسی CI است؛ آخرین انتشار رسمی و قابل دریافت فعلی **6.52** است. نسخه 6.53 تا زمان Merge و انتشار رسمی نباید به‌عنوان نسخه عمومی معرفی شود. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
 
 - دانلود ویدئو و صدا از YouTube با کتابخانه `yt-dlp` انجام می‌شود. برای ادغام بهترین کیفیت تصویر و صدا به FFmpeg نیاز است؛ دانلود فقط صوت به FFmpeg نیاز ندارد.
 - انواع پروکسی HTTP، HTTPS، SOCKS4، SOCKS4a، SOCKS5 و SOCKS5h پشتیبانی می‌شوند. در بسته‌های آماده، پشتیبانی SOCKS با PySocks همراه برنامه بسته‌بندی می‌شود. آدرس پروکسی باید میزبان و پورت معتبر داشته باشد؛ مسیر، Query و Fragment در آدرس پذیرفته نمی‌شوند تا اشتباهاً نادیده گرفته نشوند.
@@ -60,14 +60,14 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 انتشار رسمی نسخه 6.53 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
 
-- **[نسخه Portable ZIP — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
-- **[بسته لینوکس Ubuntu/Debian — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb)** — مخصوص AMD64.
+- **[نسخه Portable ZIP — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Setup — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[بسته لینوکس Ubuntu/Debian — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb)** — مخصوص AMD64.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow انتشار: [Publish GNS Downloader v6.53](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.53) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
+Workflow انتشار: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
 
 
 
@@ -88,8 +88,8 @@ dpkg --print-architecture
 دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb" -o /tmp/GNS-Downloader-6.53-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.53-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb" -o /tmp/GNS-Downloader-6.52-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.52-amd64.deb
 ```
 
 پس از نصب، برنامه را از منوی برنامه‌های دسکتاپ اجرا کنید یا در ترمینال دستور `gns-downloader` را بزنید. بسته روی Ubuntu 22.04 با معماری AMD64 ساخته و تست نصب و اجرا شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند.
@@ -213,28 +213,33 @@ python FDMX_v6_50.py
 
 ساخت فایل اجرایی ویندوز باید روی ویندوز انجام شود؛ PyInstaller ابزار Cross-Compile نیست. برای ساخت به Python 3.12، PySide6-Essentials، PyInstaller، Pillow و Inno Setup نیاز دارید. روش استاندارد ساخت و تست در Workflow گیت‌هاب تعریف شده است.
 
-## افزونه مرورگر GNS Downloader نسخه 1.3.0
+## افزونه مرورگر GNS Downloader نسخه 1.3.0 (شاخه توسعه)
 
-نسخه جدید افزونه‌های Chrome و Firefox با نام و آیکون هماهنگ با برنامه دسکتاپ:
+نسخه 1.3.0 در حال ساخت و بررسی CI است و به نسخه دسکتاپ **6.53** نیاز دارد.
 
-- نام افزونه در مرورگر: **GNS Downloader**
-- آیکون: همان نشان G قرمز روی زمینه سفید برنامه
-- منوی کلیک راست فایرفاکس اصلاح شده و گزینه **Download with GNS Downloader** برای لینک، تصویر، ویدئو و صوت نمایش داده می‌شود.
-- هنگام شروع دانلود فایل از طریق HTTP/HTTPS، افزونه پیشنهاد می‌دهد دانلود با GNS Downloader انجام شود یا در مرورگر ادامه پیدا کند. با انتخاب GNS، دانلود مرورگر لغو و لینک به برنامه ارسال می‌شود؛ با انتخاب ادامه در مرورگر یا بستن اعلان، دانلود عادی ادامه می‌یابد.
-- پشتیبانی نشست واردشده GitHub حفظ شده است؛ کوکی‌ها خوانده یا ذخیره نمی‌شوند.
+- کلیک روی لینک فایل و دانلودهای عادی HTTP/HTTPS به‌صورت خودکار به GNS منتقل می‌شود؛ اگر برنامه بسته باشد، پروتکل `gnsdownloader://` برنامه را اجرا می‌کند.
+- منوی راست‌کلیک Chrome و Firefox گزینه **Download with GNS Downloader** را همراه آیکون برنامه نشان می‌دهد.
+- صفحات دارای ویدئو یا صوت مستقیم، پنل پیشنهاد دانلود نمایش می‌دهند.
+- در YouTube، افزونه کیفیت‌های موجود و گزینه صوت-only را از موتور `yt-dlp` برنامه می‌گیرد تا کاربر انتخاب کند.
+- نشست GitHub حفظ شده و کوکی‌ها خوانده یا ذخیره نمی‌شوند.
 
-### نصب در Firefox Developer Edition
+### نصب در Firefox
 
-1. فایل `GNS-Downloader-Firefox-1.2.0.xpi` را دریافت کنید.
-2. وارد `about:debugging#/runtime/this-firefox` شوید.
-3. روی **Load Temporary Add-on** بزنید و فایل XPI را انتخاب کنید.
+افزونه تأییدشده فعلی: [GNS Download Manager در Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/).
 
-نصب موقت با بستن فایرفاکس حذف می‌شود. اگر نسخه قبلی در AMO تأیید شده و در فهرست افزونه‌های Mozilla قرار دارد، این نسخه باید به‌عنوان به‌روزرسانی همان افزونه و با همان شناسه Gecko ارسال شود؛ افزونه جدید با شناسه متفاوت نسازید.
+نسخه 1.3.0 باید به‌عنوان به‌روزرسانی همان فهرست AMO ارسال شود؛ شناسه Gecko موجود `fdmx-browser@gns.local` حفظ شده است. برای تست موقت در Firefox Developer Edition از `about:debugging#/runtime/this-firefox` و **Load Temporary Add-on** استفاده کنید.
 
-برای استفاده از افزونه، برنامه دسکتاپ **GNS Downloader 6.53 یا جدیدتر** باید باز باشد.
+### نصب در Chrome
+
+1. [Workflow ساخت افزونه‌ها](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml) را باز کنید.
+2. آخرین اجرای موفق را انتخاب و Artifact با نام `GNS-Downloader-browser-extensions-1.3.0` را دانلود کنید.
+3. ZIP اصلی را استخراج کنید؛ سپس `GNS-Downloader-Chrome-1.3.0.zip` را نیز استخراج کنید.
+4. در Chrome وارد `chrome://extensions` شوید و **Developer mode** را روشن کنید.
+5. روی **Load unpacked** بزنید و پوشه‌ای را انتخاب کنید که فایل `manifest.json` افزونه داخل آن است.
+
+برای نصب افزونه، برنامه دسکتاپ **GNS Downloader 6.53** باید نصب باشد. اولین بار که مرورگر پروتکل خارجی برنامه را اجرا می‌کند ممکن است تأیید باز کردن برنامه را بخواهد.
 
 راهنمای کامل: [browser-extensions/README.md](../browser-extensions/README.md)
-
 ## افزونه مرورگر و حریم خصوصی
 
 سورس افزونه‌های Chrome و Firefox در پوشه `browser-extensions/` قرار دارد. سرویس ارتباط دسکتاپ فقط روی 127.0.0.1:38471 گوش می‌دهد؛ آن را روی شبکه محلی یا اینترنت عمومی منتشر نکنید.
