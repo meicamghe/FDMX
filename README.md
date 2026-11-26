@@ -27,7 +27,7 @@ GNS Downloader **v6.52** is the latest official public release. The maintained a
 The current development branch adds a browser companion extension update (1.3.0) and the matching desktop bridge (6.53):
 
 - Direct file links and browser downloads are automatically handed to GNS Downloader. If the desktop app is closed, the registered `gnsdownloader://` protocol launches it and queues the URL.
-- Right-click links in Chrome or Firefox and choose **Download with GNS Downloader**; the extension icon is included.
+- Right-click links in Chrome or Firefox and choose **Download with GDM**; the extension icon is included.
 - Pages exposing direct audio/video URLs show a media prompt. YouTube pages ask the desktop `yt-dlp` engine for available quality choices, including audio-only.
 - **Tools → Browser extensions…** in the desktop app explains Firefox AMO installation and Chrome Developer mode / Load unpacked installation.
 - The existing Firefox AMO listing and Gecko ID (`fdmx-browser@gns.local`) are retained for an in-place update.
