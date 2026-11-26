@@ -116,6 +116,13 @@
       const url = candidates.map(directUrl).find(value => value && !/\.(?:m3u8|mpd)$/i.test(new URL(value).pathname)) || "";
       return {url, type: element.tagName.toLowerCase()};
     }
+    const mediaLink = Array.from(document.querySelectorAll("a[href]"))
+      .map(anchor => directUrl(anchor.href))
+      .find(url => url && /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav|avi|m4v|mkv|mov|mp4|mpeg|mpg|webm)$/i.test(new URL(url).pathname));
+    if (mediaLink) {
+      const path = new URL(mediaLink).pathname.toLowerCase();
+      return {url: mediaLink, type: /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav)$/.test(path) ? "audio" : "video"};
+    }
     return null;
   }
 
