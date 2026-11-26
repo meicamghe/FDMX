@@ -4,7 +4,11 @@
   "version": "1.3.0",
   "description": "Automatically sends browser downloads to GNS Downloader and offers media and YouTube quality choices.",
   "permissions": [
-    "contextMenus", "activeTab", "tabs", "downloads", "notifications",
+    "contextMenus",
+    "activeTab",
+    "tabs",
+    "downloads",
+    "notifications",
     "http://127.0.0.1:38471/*",
     "https://github.com/*",
     "https://api.github.com/*",
@@ -13,12 +17,25 @@
     "https://*.amazonaws.com/*",
     "<all_urls>"
   ],
-  "background": {"scripts": ["github-auth.js", "background.js"], "persistent": true},
-  "content_scripts": [{
-    "matches": ["http://*/*", "https://*/*"],
-    "js": ["media-detect.js"],
-    "run_at": "document_idle"
-  }],
+  "background": {
+    "scripts": [
+      "github-auth.js",
+      "background.js"
+    ],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "media-detect.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "browser_action": {
     "default_title": "GNS Downloader",
     "default_popup": "popup.html",
@@ -35,10 +52,15 @@
     "48": "icons/gns-downloader-48.png",
     "128": "icons/gns-downloader-128.png"
   },
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
       "id": "fdmx-browser@gns.local",
-      "strict_min_version": "109.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "websiteActivity"
+        ]
+      }
     }
   }
 }
