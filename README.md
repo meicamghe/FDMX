@@ -29,7 +29,7 @@ The current development branch adds a browser companion extension update (1.3.0)
 - Direct file links and browser downloads are automatically handed to GNS Downloader. If the desktop app is closed, the registered `gnsdownloader://` protocol launches it and queues the URL.
 - Right-click links in Chrome or Firefox and choose **Download with GDM**; the extension icon is included.
 - Pages exposing direct audio/video URLs show a media prompt. YouTube pages ask the desktop `yt-dlp` engine for available video resolutions and audio bitrates, including audio-only.
-- **Tools → Browser extensions…** in the desktop app explains Firefox AMO installation and Chrome Developer mode / Load unpacked installation.
+- **Tools → Install browser extensions…** in the desktop app explains Firefox AMO installation and Chrome Developer mode / Load unpacked installation.
 - The existing Firefox AMO listing and Gecko ID (`fdmx-browser@gns.local`) are retained for an in-place update.
 
 The 6.53 work is under review in [PR #33](https://github.com/meicamghe/FDMX/pull/33); it is not the public release yet. The latest public desktop release remains 6.52. The 1.3.0 browser package is produced by the [browser-extension CI workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
