@@ -70,7 +70,7 @@ async function launchGNS(url, resolvedUrl = "") {
   }
 }
 
-async function waitForGNS(timeoutMs = 6000) {
+async function waitForGNS(timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -171,9 +171,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         try {
           await chrome.tabs.create({url: "gnsdownloader://open", active: false});
-          sendResponse({ok: false, error: "GNS Downloader is starting. Please retry format detection in a moment."});
-        } catch (_) {
-          sendResponse({ok: false, error: error.message});
+          if (!await waitForGNS(15000)) {
+            sendResponse({ok: false, error: "GNS Downloader did not start. Check the desktop installation."});
+            return;
+          }
+          const retry = await postToGNS("/youtube/formats", {url: message.url});
+          sendResponse(retry);
+        } catch (retryError) {
+          sendResponse({ok: false, error: retryError.message});
         }
       });
     return true;
