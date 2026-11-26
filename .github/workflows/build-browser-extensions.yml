@@ -55,13 +55,27 @@ jobs:
         run: cd browser-extensions/chrome && zip -r ../../GNS-Downloader-Chrome-1.3.0.zip .
       - name: Package Firefox extension 1.3.0
         run: cd browser-extensions/firefox && zip -r ../../GNS-Downloader-Firefox-1.3.0.xpi .
-      - name: Create Mozilla AMO source archive
+      - name: Create and verify Mozilla AMO source archive
         run: |
-          zip -X -r GNS-Downloader-AMO-Source-1.3.0.zip \
-            browser-extensions/SOURCE-BUILD.md \
-            browser-extensions/build.sh \
-            browser-extensions/firefox \
-            browser-extensions/chrome
+          (
+            cd browser-extensions
+            zip -X -r ../GNS-Downloader-AMO-Source-1.3.0.zip \
+              SOURCE-BUILD.md build.sh firefox chrome
+          )
+          test -s GNS-Downloader-AMO-Source-1.3.0.zip
+          source_check="$(mktemp -d)"
+          unzip -q GNS-Downloader-AMO-Source-1.3.0.zip -d "$source_check"
+          test -f "$source_check/SOURCE-BUILD.md"
+          test -f "$source_check/build.sh"
+          test -f "$source_check/firefox/manifest.json"
+          test -f "$source_check/chrome/manifest.json"
+          bash "$source_check/build.sh" "$source_check/rebuilt"
+          test -s "$source_check/rebuilt/GNS-Downloader-Firefox-1.3.0.xpi"
+          test -s "$source_check/rebuilt/GNS-Downloader-Chrome-1.3.0.zip"
+          archive_size="$(stat -c %s GNS-Downloader-AMO-Source-1.3.0.zip)"
+          test "$archive_size" -lt 209715200
+          echo "Verified AMO source archive: $archive_size bytes"
+          rm -rf "$source_check"
       - uses: actions/upload-artifact@v4
         with:
           name: GNS-Downloader-browser-extensions-1.3.0
