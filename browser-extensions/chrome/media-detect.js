@@ -111,10 +111,12 @@
 
   function findDirectMedia() {
     const media = Array.from(document.querySelectorAll("video,audio"));
+    let hiddenPlayer = null;
     for (const element of media) {
       const candidates = [element.currentSrc, element.src, ...Array.from(element.querySelectorAll("source"), node => node.src)];
       const url = candidates.map(directUrl).find(value => value && !/\.(?:m3u8|mpd)$/i.test(new URL(value).pathname)) || "";
-      return {url, type: element.tagName.toLowerCase()};
+      if (url) return {url, type: element.tagName.toLowerCase()};
+      if (!hiddenPlayer) hiddenPlayer = {url: "", type: element.tagName.toLowerCase()};
     }
     const mediaLink = Array.from(document.querySelectorAll("a[href]"))
       .map(anchor => directUrl(anchor.href))
@@ -123,7 +125,7 @@
       const path = new URL(mediaLink).pathname.toLowerCase();
       return {url: mediaLink, type: /\.(?:aac|flac|m4a|mp3|oga|ogg|opus|wav)$/.test(path) ? "audio" : "video"};
     }
-    return null;
+    return hiddenPlayer;
   }
 
   async function showDirectMediaPanel(found) {
