@@ -1,4 +1,4 @@
-name: Build browser extensions 1.1.0
+name: Build GNS Downloader browser extensions 1.2.0
 on:
   workflow_dispatch:
   push:
@@ -10,10 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate desktop source and extension scripts
+      - name: Install SVG icon renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+      - name: Build matching GNS Downloader icons
+        run: |
+          for browser in chrome firefox; do
+            mkdir -p "browser-extensions/$browser/icons"
+            for size in 16 32 48 128; do
+              rsvg-convert -w "$size" -h "$size" \
+                "browser-extensions/$browser/icons/gns-downloader.svg" \
+                -o "browser-extensions/$browser/icons/gns-downloader-$size.png"
+            done
+          done
+      - name: Validate extension scripts and manifests
         run: |
           python -m py_compile FDMX_v6_50.py
-          node --check browser-extensions/github-auth.js
           node --check browser-extensions/chrome/github-auth.js
           node --check browser-extensions/chrome/background.js
           node --check browser-extensions/chrome/popup.js
@@ -22,18 +35,24 @@ jobs:
           node --check browser-extensions/firefox/popup.js
           python - <<'PY'
           import json
-          for path in ("browser-extensions/chrome/manifest.json", "browser-extensions/firefox/manifest.json"):
-              with open(path, encoding="utf-8") as stream:
-                  manifest = json.load(stream)
-              assert manifest["version"] == "1.1.0", (path, manifest["version"])
+          from pathlib import Path
+          for browser in ("chrome", "firefox"):
+              root = Path("browser-extensions") / browser
+              manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+              assert manifest["name"] == "GNS Downloader"
+              assert manifest["version"] == "1.2.0"
+              assert "downloads" in manifest["permissions"]
+              assert "notifications" in manifest["permissions"]
+              for size in (16, 32, 48, 128):
+                  assert (root / "icons" / f"gns-downloader-{size}.png").is_file()
           PY
-      - name: Package Chrome extension 1.1.0
-        run: cd browser-extensions/chrome && zip -r ../../FDMX-Chrome-1.1.0.zip .
-      - name: Package Firefox extension 1.1.0
-        run: cd browser-extensions/firefox && zip -r ../../FDMX-Firefox-1.1.0.xpi .
+      - name: Package Chrome extension 1.2.0
+        run: cd browser-extensions/chrome && zip -r ../../GNS-Downloader-Chrome-1.2.0.zip .
+      - name: Package Firefox extension 1.2.0
+        run: cd browser-extensions/firefox && zip -r ../../GNS-Downloader-Firefox-1.2.0.xpi .
       - uses: actions/upload-artifact@v4
         with:
-          name: FDMX-browser-extensions-1.1.0
+          name: GNS-Downloader-browser-extensions-1.2.0
           path: |
-            FDMX-Chrome-1.1.0.zip
-            FDMX-Firefox-1.1.0.xpi
+            GNS-Downloader-Chrome-1.2.0.zip
+            GNS-Downloader-Firefox-1.2.0.xpi
