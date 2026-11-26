@@ -113,7 +113,7 @@
     const media = Array.from(document.querySelectorAll("video,audio"));
     for (const element of media) {
       const candidates = [element.currentSrc, element.src, ...Array.from(element.querySelectorAll("source"), node => node.src)];
-      const url = candidates.map(directUrl).find(Boolean) || "";
+      const url = candidates.map(directUrl).find(value => value && !/\.(?:m3u8|mpd)$/i.test(new URL(value).pathname)) || "";
       return {url, type: element.tagName.toLowerCase()};
     }
     return null;
@@ -151,7 +151,7 @@
   }
 
   function detect() {
-    if (isYouTube && /\/(watch|shorts|live)(\/|$)/.test(location.pathname)) {
+    if (isYouTube && (/(?:^|\/)(watch|shorts|live|embed)(?:\/|$)/.test(location.pathname) || /(^|\.)youtu\.be$/i.test(location.hostname))) {
       showYouTubePanel();
       return;
     }
