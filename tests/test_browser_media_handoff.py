@@ -50,6 +50,8 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         audio = parse("gnsdownloader://youtube?" + urllib.parse.urlencode({"url": url, "media_type": "audio", "audio_bitrate": "160"}))
         self.assertEqual(audio["media_type"], "audio")
         self.assertEqual(audio["audio_bitrate"], 160)
+        website = parse("gnsdownloader://website?" + urllib.parse.urlencode({"url": "https://example.com/music"}))
+        self.assertEqual(website, {"action": "website", "url": "https://example.com/music"})
 
     def test_protocol_parser_rejects_invalid_scheme_and_signed_url_host(self):
         parse = load_protocol_parser()
@@ -63,6 +65,8 @@ class BrowserMediaHandoffTests(unittest.TestCase):
     def test_browser_bridge_has_youtube_format_and_queue_routes(self):
         self.assertIn('route == "/youtube/formats"', SOURCE)
         self.assertIn('route == "/youtube/download"', SOURCE)
+        self.assertIn('route == "/website/open"', SOURCE)
+        self.assertIn("window.browser_website_requested.emit(url)", SOURCE)
         self.assertIn("window.browser_youtube_requested.emit(url, media_type, height)", SOURCE)
         self.assertIn('"qualities": qualities', SOURCE)
         self.assertIn('"audio_available": audio_available', SOURCE)
@@ -121,6 +125,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
             self.assertIn("Audio only", source)
             self.assertIn("Download with GNS", source)
             self.assertIn("GNS_SEND_URL", source)
+            self.assertIn("GNS_OPEN_WEBSITE", source)
 
 
 if __name__ == "__main__":
