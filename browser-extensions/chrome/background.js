@@ -95,10 +95,15 @@ async function handleDownloadChoice(notificationId, useGNS) {
 }
 chrome.notifications.onButtonClicked.addListener((id, index) => handleDownloadChoice(id, index === 0));
 chrome.notifications.onClicked.addListener(id => handleDownloadChoice(id, true));
-chrome.notifications.onClosed.addListener((id, byUser) => {
-  if (!byUser || !id.startsWith("gns-download-")) return;
+chrome.notifications.onClosed.addListener(id => {
+  if (!id.startsWith("gns-download-")) return;
   const downloadId = Number(id.slice("gns-download-".length));
-  if (Number.isInteger(downloadId)) chrome.downloads.resume(downloadId).catch(() => {});
+  if (!Number.isInteger(downloadId)) return;
+  chrome.downloads.search({id: downloadId}).then(items => {
+    if (items && items[0] && items[0].state === "in_progress") {
+      return chrome.downloads.resume(downloadId);
+    }
+  }).catch(() => {});
 });
 
 // Reconcile context menus on background startup as well as install/update.
