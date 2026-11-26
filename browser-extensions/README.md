@@ -24,7 +24,7 @@ The existing approved Mozilla Add-ons listing is:
 
 https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/
 
-The Gecko ID remains `fdmx-browser@gns.local`, so version 1.3.0 must be submitted as an update to that existing AMO listing, not as a new add-on. The current public listing is version 1.0.0; upload the new XPI from the successful 1.3.0 build and complete Mozilla review/signing.
+The Gecko ID remains `fdmx-browser@gns.local`, so version 1.3.0 must be submitted as an update to that existing AMO listing, not as a new add-on. The current public listing is version 1.0.0; upload the new XPI from the successful 1.3.0 build and complete Mozilla review/signing. The manifest declares `websiteActivity` because page/download URLs are handed to the locally installed desktop app; those URLs are not sent to a remote GNS service. Firefox 140 or newer is required for the built-in data-consent declaration.
 
 For temporary testing in Firefox Developer Edition:
 1. Open `about:debugging#/runtime/this-firefox`.
