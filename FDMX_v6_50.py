@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.52"
+APP_VERSION = "6.53"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -3302,13 +3302,14 @@ class YouTubeDownloadWorker(QThread):
     file_conflict = Signal(str, str)
     existing_file = Signal(str, str)
 
-    def __init__(self, task_id, url, folder, media_type="video", proxy_url=""):
+    def __init__(self, task_id, url, folder, media_type="video", proxy_url="", max_height=0):
         super().__init__()
         self.task_id = task_id
         self.url = url
         self.folder = folder
         self.media_type = media_type if media_type in ("video", "audio") else "video"
         self.proxy_url = normalize_proxy_url(proxy_url)
+        self.max_height = max(0, min(4320, _safe_int(max_height, 0)))
         self.pause_event = threading.Event()
         self.pause_event.set()
         self.cancel_event = threading.Event()
@@ -3373,7 +3374,7 @@ class YouTubeDownloadWorker(QThread):
             os.makedirs(self.folder, exist_ok=True)
             output_template = os.path.join(self.folder, "%(title).180B [%(id)s].%(ext)s")
             options = {
-                "format": "bestvideo+bestaudio/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio",
+                "format": (f"bestvideo[height<={self.max_height}]+bestaudio/best[height<={self.max_height}]" if self.max_height else "bestvideo+bestaudio/best") if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio",
                 "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
@@ -3399,7 +3400,7 @@ class YouTubeDownloadWorker(QThread):
                     # Keep YouTube video downloads working on a small install.
                     # Without FFmpeg, request the best single-file stream instead
                     # of downloading separate audio/video streams that need merging.
-                    options["format"] = "best"
+                    options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"
                     options.pop("merge_output_format", None)
             self.state.emit("Downloading")
             with yt_dlp.YoutubeDL(options) as downloader:
@@ -3600,6 +3601,7 @@ def is_youtube_url(url):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str, str)
+    browser_youtube_requested = Signal(str, str, int)
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -3632,6 +3634,7 @@ class FDMX(QWidget):
         self.load_preferences()
         self._log_startup_stage("preferences loaded")
         self.browser_download_requested.connect(self.add_download_from_browser)
+        self.browser_youtube_requested.connect(self.add_youtube_download_from_browser)
         self.start_browser_bridge()
         self._log_startup_stage("browser bridge initialized")
         QApplication.clipboard().dataChanged.connect(self.on_clipboard_changed)
@@ -3734,6 +3737,7 @@ class FDMX(QWidget):
         tools_menu = self.menu_bar.addMenu("Tools")
         tools_menu.addAction("Add torrent file…", self.add_torrent_file)
         tools_menu.addAction("Website Downloader…", self.open_website_downloader)
+        tools_menu.addAction("Browser extensions…", self.show_browser_extension_help)
         tools_menu.addAction("Read URL from clipboard", self.paste_clipboard_url)
         tools_menu.addAction("Export report (CSV / JSON)…", self.export_analytics_report)
         tools_menu.addAction("Verify SHA-256…", self.calculate_hash)
@@ -5316,7 +5320,7 @@ class FDMX(QWidget):
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
                 worker = YouTubeDownloadWorker(
                     task_id, task["url"], task["folder"],
-                    task.get("media_type", "video"), proxy_url
+                    task.get("media_type", "video"), proxy_url, task.get("max_height", 0)
                 )
                 # Connect to QObject-bound handlers so Qt can marshal UI work
                 # from the worker thread onto the main GUI thread.
@@ -5775,6 +5779,7 @@ class FDMX(QWidget):
                 "content_type": entry.get("content_type", "Unknown"),
                 "kind": entry.get("kind", "http"),
                 "media_type": entry.get("media_type", "video"),
+                "max_height": max(0, min(4320, _safe_int(entry.get("max_height"), 0))),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
                 "retry_attempts": _safe_int(entry.get("retry_attempts"), 0),
@@ -5813,7 +5818,7 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "media_type", "scheduled_at", "content_type", "retry_attempts",
+                "category", "kind", "media_type", "max_height", "scheduled_at", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
                 "parts_count"
             )})
