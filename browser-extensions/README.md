@@ -1,50 +1,66 @@
-# GNS Downloader Browser Extensions 1.2.0
+# GNS Downloader Browser Extensions 1.3.0
 
-Official Chrome and Firefox companion extensions for **GNS Downloader 6.52 or newer**.
+Official Chrome and Firefox companion extensions for **GNS Downloader 6.53 or newer**.
 
-## What's new in 1.2.0
+## What's new in 1.3.0
 
-- Correct product name: GNS Downloader (no FDMX branding in the browser UI).
-- Matching app icon: white rounded square with the red G mark used by the desktop application.
-- Firefox context menu is registered idempotently on install/update and browser startup; right-click a link, image, video, or audio item and choose **Download with GNS Downloader**.
-- Automatic download handoff prompt: when Firefox or Chrome starts an HTTP/HTTPS file download, the extension offers **Download with GNS** or **Keep in browser**. Choosing GNS cancels the browser transfer and submits the original URL to the desktop app. Dismissing the prompt keeps/resumes the browser download.
-- Existing signed-in GitHub Actions artifact resolution remains supported. Browser cookies are never read, exported, logged, or persisted.
+- Uses the GNS Downloader name and the matching red G application icon.
+- Right-click links, images, audio, or video and choose **Download with GNS Downloader**.
+- Normal HTTP/HTTPS browser downloads are automatically handed to GNS Downloader. The extension pauses the browser transfer, submits the URL to the desktop app, then cancels the browser copy only after the desktop app accepts the request.
+- If the desktop app is closed, the extension invokes the registered `gnsdownloader://` desktop protocol. The new app instance queues the URL and starts the download. If the app does not become available, the extension resumes the browser download instead.
+- Pages with directly addressable audio/video elements show a small GNS media panel and wait for the user's choice.
+- YouTube pages query the app's `yt-dlp` engine for available video heights and audio availability. The user can select a video quality or audio-only before queueing.
+- GitHub Actions artifacts continue to use the browser's signed-in session. Cookies are never read, exported, logged, or persisted.
 
 ## Desktop requirement
 
-Run GNS Downloader 6.52 or newer. The local bridge listens only on `127.0.0.1:38471`.
+Install **GNS Downloader 6.53 or newer**. This version registers the `gnsdownloader://` URL protocol and exposes a loopback-only bridge on `127.0.0.1:38471`.
 
-## Firefox Developer Edition
+The first time a browser opens the external `gnsdownloader://` protocol, the browser or operating system may ask permission to open GNS Downloader. Approve that one-time prompt.
 
+## Firefox
+
+The existing approved Mozilla Add-ons listing is:
+
+https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/
+
+The Gecko ID remains `fdmx-browser@gns.local`, so version 1.3.0 must be submitted as an update to that existing AMO listing, not as a new add-on. The current public listing is version 1.0.0; upload the new XPI from the successful 1.3.0 build and complete Mozilla review/signing.
+
+For temporary testing in Firefox Developer Edition:
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Choose **Load Temporary Add-on**.
-3. Select `GNS-Downloader-Firefox-1.2.0.xpi`.
+3. Select `GNS-Downloader-Firefox-1.3.0.xpi`.
 
-Temporary installation is removed when Firefox closes. If this add-on already has an approved AMO listing, submit this XPI as an update to the same listing and keep the existing Gecko add-on ID; do not create a new listing or change the ID.
+Temporary add-ons are removed when Firefox closes.
 
-## Chrome
+## Chrome — load unpacked
 
-1. Extract `GNS-Downloader-Chrome-1.2.0.zip`.
-2. Open `chrome://extensions` and enable Developer mode.
-3. Choose **Load unpacked** and select the extracted folder.
+1. Open the [GNS Downloader browser-extension build workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
+2. Open the latest successful run on the feature branch or main.
+3. Under **Artifacts**, download `GNS-Downloader-browser-extensions-1.3.0`.
+4. Extract the downloaded artifact ZIP.
+5. Extract `GNS-Downloader-Chrome-1.3.0.zip` into a normal folder.
+6. Open `chrome://extensions`.
+7. Turn on **Developer mode**.
+8. Click **Load unpacked** and select the extracted Chrome extension folder (the folder containing `manifest.json`).
 
-## Automatic file-download prompt
+Keep that folder in place; Chrome loads the unpacked extension from it. To update, extract the newer Chrome ZIP to a new folder, remove the old unpacked extension, then load the new folder.
 
-The extension listens to the browser's downloads API. For HTTP/HTTPS downloads it pauses the browser transfer where supported and shows a notification with two choices:
+For a public one-click Chrome installation, the extension must be submitted to the Chrome Web Store and pass its review. Until then, Developer mode is the supported installation method.
 
-- **Download with GNS** — cancel the browser transfer and send the URL to GNS Downloader.
-- **Keep in browser** — resume/continue the normal browser download.
+## Automatic downloads and privacy
 
-If the notification is dismissed or times out, the extension resumes any still-active browser download. The extension does not intercept ordinary page navigation, and it cannot hand off browser-only `blob:` or `data:` URLs.
+The extension hands off HTTP/HTTPS downloads that the browser exposes through its downloads API. It does not silently read page cookies or transmit browsing history. Direct media URLs are sent to the local GNS bridge only after the user chooses the media panel action. YouTube format metadata is requested from the desktop app, and the selected media type/quality is sent back to the app.
 
-## GitHub Actions browser-session support
+The browser bridge binds only to loopback. Do not expose port 38471 to the LAN or Internet. Browser page content is inspected locally to detect media elements; it is not uploaded to a remote service.
 
-For GitHub Actions artifact links, the extension resolves the authenticated GitHub redirect from the browser background context using the browser's own session. It never reads, exports, or stores session cookies. Only the short-lived signed download URL is passed to the local desktop bridge; the original GitHub URL remains the task/history URL.
+## Limitations
 
-## Privacy and permissions
-
-The extension uses the browser downloads and notifications APIs to offer download handoff. GitHub session cookies are not accessed directly. The desktop bridge accepts requests only on loopback and validates HTTP/HTTPS URLs.
+- Browser-only `blob:` URLs and DRM-protected media cannot be passed as ordinary direct downloads.
+- Some sites expose segmented or encrypted streams rather than a direct media URL. Detection may identify the player without being able to retrieve the media.
+- YouTube format availability depends on the installed `yt-dlp` version, network access, and the video's restrictions. FFmpeg is needed to merge separate best-quality video and audio streams; without it, the app selects a compatible single-file stream at or below the chosen height.
+- A browser may require a one-time confirmation before launching an external desktop protocol handler.
 
 ## Packaging
 
-GitHub Actions creates versioned Chrome ZIP and Firefox XPI packages. An unsigned XPI can be loaded temporarily in Firefox Developer Edition; for a permanent standard Firefox installation, submit the update to addons.mozilla.org for signing.
+GitHub Actions validates scripts/manifests, renders the matching GNS icon sizes, and produces the Chrome ZIP and Firefox XPI as a versioned artifact.
