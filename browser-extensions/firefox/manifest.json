@@ -1,12 +1,10 @@
 {
   "manifest_version": 2,
-  "name": "FDMX Download Manager",
-  "version": "1.1.0",
-  "description": "Send links from Firefox to FDMX and resolve GitHub Actions artifacts using your signed-in browser session.",
+  "name": "GNS Downloader",
+  "version": "1.2.0",
+  "description": "Send links and downloads from Firefox to GNS Downloader, including authenticated GitHub Actions artifacts.",
   "permissions": [
-    "contextMenus",
-    "activeTab",
-    "tabs",
+    "contextMenus", "activeTab", "tabs", "downloads", "notifications",
     "http://127.0.0.1:38471/*",
     "https://github.com/*",
     "https://api.github.com/*",
@@ -14,15 +12,22 @@
     "https://*.blob.core.windows.net/*",
     "https://*.amazonaws.com/*"
   ],
-  "background": {
-    "scripts": [
-      "github-auth.js",
-      "background.js"
-    ]
-  },
+  "background": {"scripts": ["github-auth.js", "background.js"]},
   "browser_action": {
-    "default_title": "FDMX",
-    "default_popup": "popup.html"
+    "default_title": "GNS Downloader",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/gns-downloader-16.png",
+      "32": "icons/gns-downloader-32.png",
+      "48": "icons/gns-downloader-48.png",
+      "128": "icons/gns-downloader-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/gns-downloader-16.png",
+    "32": "icons/gns-downloader-32.png",
+    "48": "icons/gns-downloader-48.png",
+    "128": "icons/gns-downloader-128.png"
   },
   "applications": {
     "gecko": {
