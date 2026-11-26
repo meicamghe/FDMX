@@ -15,9 +15,14 @@ document.getElementById("video").addEventListener("click",async()=>{
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
  if(!tab||!tab.id){status.textContent="No active tab.";return;}
  try{
-  const results=await chrome.tabs.executeScript(tab.id,{code:'Array.from(document.querySelectorAll("video,source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))'});
-  const urls=[...new Set((results&&results[0])||[])];
-  if(!urls.length){status.textContent="No direct video URL found on this page.";return;}
+  let urls=[];
+  if(chrome.scripting&&chrome.scripting.executeScript){
+   const results=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>Array.from(document.querySelectorAll("video,source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))});
+   urls=(results[0]&&results[0].result)||[];
+  }else{
+   urls=await new Promise((resolve,reject)=>chrome.tabs.executeScript(tab.id,{code:'Array.from(document.querySelectorAll("video,source")).map(x=>x.currentSrc||x.src).filter(x=>/^https?:/.test(x))'},r=>chrome.runtime.lastError?reject(chrome.runtime.lastError):resolve(r&&r[0]||[])));
+  }
+  urls=[...new Set(urls)];if(!urls.length){status.textContent="No direct video URL found on this page.";return;}
   let count=0;for(const url of urls)if(await send(url))count++;
   status.textContent="Sent "+count+" media URL(s) to GNS Downloader.";
  }catch(e){status.textContent="This page does not allow media inspection. "+e.message;}
