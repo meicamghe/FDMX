@@ -117,6 +117,10 @@ jobs:
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
           $app = Join-Path $installDir "GNS Downloader.exe"
           if (-not (Test-Path $app)) { throw "Installed application not found: $app" }
+          $protocol = Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\gnsdownloader" -ErrorAction Stop
+          if ($protocol.'URL Protocol' -ne "") { throw "GNS Downloader URL protocol marker is missing." }
+          $protocolCommand = (Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\gnsdownloader\shell\open\command").'(default)'
+          if ($protocolCommand -notmatch [regex]::Escape($app)) { throw "GNS Downloader URL protocol is not registered to the installed app." }
           $started = Get-Date
           $process = Start-Process -FilePath $app -PassThru
           $ready = $false
