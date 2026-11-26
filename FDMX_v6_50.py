@@ -3779,7 +3779,7 @@ class FDMX(QWidget):
         tools_menu = self.menu_bar.addMenu("Tools")
         tools_menu.addAction("Add torrent file…", self.add_torrent_file)
         tools_menu.addAction("Website Downloader…", self.open_website_downloader)
-        tools_menu.addAction("Browser extensions…", self.show_browser_extension_help)
+        tools_menu.addAction("Install browser extensions…", self.show_browser_extension_help)
         tools_menu.addAction("Read URL from clipboard", self.paste_clipboard_url)
         tools_menu.addAction("Export report (CSV / JSON)…", self.export_analytics_report)
         tools_menu.addAction("Verify SHA-256…", self.calculate_hash)
