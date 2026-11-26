@@ -8,7 +8,7 @@ Official Chrome and Firefox companion extensions for **GNS Downloader 6.53 or ne
 - Right-click links, images, audio, or video and choose **Download with GDM**.
 - Normal HTTP/HTTPS browser downloads are automatically handed to GNS Downloader. The extension pauses the browser transfer, submits the URL to the desktop app, then cancels the browser copy only after the desktop app accepts the request.
 - If the desktop app is closed, the extension invokes the registered `gnsdownloader://` desktop protocol. The new app instance queues the URL and starts the download. If the app does not become available, the extension resumes the browser download instead.
-- Pages with directly addressable audio/video elements show a small GNS media panel and wait for the user's choice.
+- Pages with audio/video elements show a small GNS media panel. Direct media URLs can be downloaded immediately; hidden or segmented streams open the desktop Website Downloader for a user-reviewed scan.
 - YouTube pages query the app's `yt-dlp` engine for available video heights and audio availability. The user can select a video quality or audio-only before queueing.
 - GitHub Actions artifacts continue to use the browser's signed-in session. Cookies are never read, exported, logged, or persisted.
 
@@ -58,7 +58,7 @@ The browser bridge binds only to loopback. Do not expose port 38471 to the LAN o
 
 - Browser-only `blob:` URLs and DRM-protected media cannot be passed as ordinary direct downloads.
 - Some sites expose segmented or encrypted streams rather than a direct media URL. Detection may identify the player without being able to retrieve the media.
-- YouTube format availability depends on the installed `yt-dlp` version, network access, and the video's restrictions. FFmpeg is needed to merge separate best-quality video and audio streams; without it, the app selects a compatible single-file stream at or below the chosen height.
+- YouTube format availability depends on the installed `yt-dlp` version, network access, and the video's restrictions. The picker lists available video heights and audio bitrates. FFmpeg is needed to merge separate best-quality video and audio streams; without it, the app selects a compatible single-file stream at or below the chosen height.
 - A browser may require a one-time confirmation before launching an external desktop protocol handler.
 
 ## Packaging
