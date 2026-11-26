@@ -1,4 +1,4 @@
-# راهنمای GNS Downloader نسخه 6.53
+# راهنمای GNS Downloader — نسخه 6.53 در حال آماده‌سازی
 
 GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python و PySide6 است.
 
