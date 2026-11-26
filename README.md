@@ -4,6 +4,23 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 **فارسی:** [راهنمای فارسی نصب و استفاده](docs/README_FA.md)
 
+
+## Browser extensions — GNS Downloader 1.3.0
+
+<details>
+<summary><strong>Download Firefox / Chrome extensions</strong></summary>
+
+The browser companion package is available from the successful GitHub Actions build:
+
+- **[Download browser extensions 1.3.0 (ZIP)](https://github.com/meicamghe/FDMX/actions/runs/45807544405)** — open the run and download the `GNS-Downloader-browser-extensions-1.3.0` artifact.
+- **[Firefox Add-ons submission portal](https://addons.mozilla.org/developers/)** — upload `GNS-Downloader-Firefox-1.3.0.xpi` as an update to the existing [GNS Download Manager listing](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/). Keep the existing add-on listing/ID; do not submit it as a new add-on.
+- **[Chrome installation guide](https://github.com/meicamghe/FDMX#browser-extensions-and-privacy)** — extract the Chrome ZIP, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked**.
+
+Firefox public installation/update becomes available after Mozilla review and signing. Until then, test the XPI using `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
+
+</details>
+
+
 ## Current version
 
 - Application version: **6.52**
