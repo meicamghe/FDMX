@@ -3611,6 +3611,11 @@ def parse_gns_protocol_request(value):
         resolved_url = str((query.get("resolved_url") or [""])[0]).strip()
         if parsed.netloc.lower() == "open":
             return {"action": "open"}
+        if parsed.netloc.lower() == "website":
+            target = urllib.parse.urlsplit(url)
+            if target.scheme in ("http", "https") and target.netloc:
+                return {"action": "website", "url": url}
+            return None
         if parsed.netloc.lower() == "download":
             target = urllib.parse.urlsplit(url)
             if target.scheme not in ("http", "https") or not target.netloc:
@@ -3637,6 +3642,7 @@ def parse_gns_protocol_request(value):
 class FDMX(QWidget):
     browser_download_requested = Signal(str, str)
     browser_youtube_requested = Signal(str, str, int, int)
+    browser_website_requested = Signal(str)
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -3670,6 +3676,7 @@ class FDMX(QWidget):
         self._log_startup_stage("preferences loaded")
         self.browser_download_requested.connect(self.add_download_from_browser)
         self.browser_youtube_requested.connect(self.add_youtube_download_from_browser)
+        self.browser_website_requested.connect(self.open_website_from_browser)
         self.start_browser_bridge()
         self._log_startup_stage("browser bridge initialized")
         QApplication.clipboard().dataChanged.connect(self.on_clipboard_changed)
@@ -5045,6 +5052,13 @@ class FDMX(QWidget):
                     payload = json.loads(self.rfile.read(length).decode("utf-8"))
                     route = urllib.parse.urlsplit(self.path).path
                     url = str(payload.get("url", "")).strip()
+                    if route == "/website/open":
+                        parsed = urllib.parse.urlsplit(url)
+                        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                            raise ValueError("Only HTTP and HTTPS page URLs are supported")
+                        window.browser_website_requested.emit(url)
+                        self._send(202, {"ok": True, "message": "Website scan opened in GNS Downloader"})
+                        return
                     if route == "/download":
                         resolved_url = str(payload.get("resolved_url", "")).strip()
                         parsed = urllib.parse.urlsplit(url)
@@ -5209,6 +5223,17 @@ class FDMX(QWidget):
 
     def open_website_downloader(self):
         self.tabs.setCurrentWidget(self.website_page)
+
+    def open_website_from_browser(self, url):
+        """Open the existing website scanner on a page that contains non-direct media."""
+        if not url:
+            return
+        self.website_page.url_input.setText(url)
+        self.open_website_downloader()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self.website_page.start_scan()
 
     def add_website_downloads(self, urls_and_names, destination_folder):
         """Queue reviewed website resources in the site's dedicated folder."""
@@ -6287,6 +6312,8 @@ if __name__ == "__main__":
             QTimer.singleShot(0, lambda request=protocol_request: window.add_youtube_download_from_browser(
                 request["url"], request["media_type"], request["height"], request.get("audio_bitrate", 0)
             ))
+        elif protocol_request["action"] == "website":
+            QTimer.singleShot(0, lambda request=protocol_request: window.open_website_from_browser(request["url"]))
         elif protocol_request["action"] == "open":
             QTimer.singleShot(0, window.raise_)
     sys.exit(app.exec())
