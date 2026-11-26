@@ -466,7 +466,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_video_download_uses_optional_ffmpeg_and_falls_back_without_it(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
-        self.assertIn('options["format"] = "best"', SOURCE)
+        self.assertIn('options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"', SOURCE)
         self.assertIn('options.pop("merge_output_format", None)', SOURCE)
         self.assertIn('return shutil.which("ffmpeg")', SOURCE)
 
