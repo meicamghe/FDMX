@@ -5000,6 +5000,8 @@ class FDMX(QWidget):
     def start_browser_bridge(self):
         """Local-only HTTP bridge used by the official Firefox and Chrome extensions."""
         window = self
+        self._browser_proxy_lock = threading.Lock()
+        self._browser_proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
 
         class Handler(BaseHTTPRequestHandler):
             def _send(self, code, payload):
@@ -5061,7 +5063,8 @@ class FDMX(QWidget):
                         except ImportError as exc:
                             raise RuntimeError("YouTube support is unavailable: yt-dlp is not installed") from exc
                         options = {"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True, "socket_timeout": 20}
-                        proxy_url = window.proxy_url.text().strip() if window.proxy_enabled.isChecked() else ""
+                        with window._browser_proxy_lock:
+                            proxy_url = window._browser_proxy_url
                         if proxy_url:
                             options["proxy"] = normalize_proxy_url(proxy_url)
                         with yt_dlp.YoutubeDL(options) as downloader:
@@ -6073,6 +6076,9 @@ class FDMX(QWidget):
         self.settings.setValue("proxy_enabled", self.proxy_enabled.isChecked())
         self.settings.setValue("proxy_url", self.proxy_url.text().strip())
         self.settings.sync()
+        if hasattr(self, "_browser_proxy_lock"):
+            with self._browser_proxy_lock:
+                self._browser_proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
         self.apply_proxy_settings()
 
     def apply_proxy_settings(self):
