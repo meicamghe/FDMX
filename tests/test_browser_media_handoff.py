@@ -109,6 +109,11 @@ class BrowserMediaHandoffTests(unittest.TestCase):
             firefox["browser_specific_settings"]["gecko"]["id"],
             "fdmx-browser@gns.local",
         )
+        self.assertEqual(
+            firefox["browser_specific_settings"]["gecko"]["data_collection_permissions"]["required"],
+            ["websiteActivity"],
+        )
+        self.assertEqual(firefox["browser_specific_settings"]["gecko"]["strict_min_version"], "140.0")
 
     def test_context_menu_and_automatic_download_handoff_exist_in_both_browsers(self):
         for browser in (CHROME, FIREFOX):
