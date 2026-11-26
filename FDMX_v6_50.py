@@ -3302,7 +3302,7 @@ class YouTubeDownloadWorker(QThread):
     file_conflict = Signal(str, str)
     existing_file = Signal(str, str)
 
-    def __init__(self, task_id, url, folder, media_type="video", proxy_url="", max_height=0):
+    def __init__(self, task_id, url, folder, media_type="video", proxy_url="", max_height=0, max_abr=0):
         super().__init__()
         self.task_id = task_id
         self.url = url
@@ -3310,6 +3310,7 @@ class YouTubeDownloadWorker(QThread):
         self.media_type = media_type if media_type in ("video", "audio") else "video"
         self.proxy_url = normalize_proxy_url(proxy_url)
         self.max_height = max(0, min(4320, _safe_int(max_height, 0)))
+        self.max_abr = max(0, min(1000, _safe_int(max_abr, 0)))
         self.pause_event = threading.Event()
         self.pause_event.set()
         self.cancel_event = threading.Event()
@@ -3374,7 +3375,7 @@ class YouTubeDownloadWorker(QThread):
             os.makedirs(self.folder, exist_ok=True)
             output_template = os.path.join(self.folder, "%(title).180B [%(id)s].%(ext)s")
             options = {
-                "format": (f"bestvideo[height<={self.max_height}]+bestaudio/best[height<={self.max_height}]" if self.max_height else "bestvideo+bestaudio/best") if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio",
+                "format": (f"bestvideo[height<={self.max_height}]+bestaudio/best[height<={self.max_height}]" if self.max_height else "bestvideo+bestaudio/best") if self.media_type == "video" else (f"bestaudio[abr<={self.max_abr}]/bestaudio[ext=m4a]/bestaudio" if self.max_abr else "bestaudio[ext=m4a]/bestaudio"),
                 "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
@@ -3624,9 +3625,10 @@ def parse_gns_protocol_request(value):
             if media_type not in ("video", "audio"):
                 return None
             height = _safe_int((query.get("height") or ["0"])[0], 0)
-            if height < 0 or height > 4320:
+            audio_bitrate = _safe_int((query.get("audio_bitrate") or ["0"])[0], 0)
+            if height < 0 or height > 4320 or audio_bitrate < 0 or audio_bitrate > 1000:
                 return None
-            return {"action": "youtube", "url": url, "media_type": media_type, "height": height}
+            return {"action": "youtube", "url": url, "media_type": media_type, "height": height, "audio_bitrate": audio_bitrate}
     except (TypeError, ValueError):
         return None
     return None
@@ -3634,7 +3636,7 @@ def parse_gns_protocol_request(value):
 
 class FDMX(QWidget):
     browser_download_requested = Signal(str, str)
-    browser_youtube_requested = Signal(str, str, int)
+    browser_youtube_requested = Signal(str, str, int, int)
     def __init__(self):
         super().__init__()
         # Use the application's own title-bar controls; hide the native Windows frame buttons.
@@ -5077,6 +5079,13 @@ class FDMX(QWidget):
                             and item.get("vcodec") not in (None, "none")
                             and _safe_int(item.get("height"), 0) > 0
                         }, reverse=True)
+                        audio_bitrates = sorted({
+                            _safe_int(item.get("abr"), 0)
+                            for item in formats
+                            if isinstance(item, dict)
+                            and item.get("acodec") not in (None, "none")
+                            and _safe_int(item.get("abr"), 0) > 0
+                        }, reverse=True)
                         audio_available = any(
                             isinstance(item, dict) and item.get("acodec") not in (None, "none")
                             for item in formats
@@ -5085,7 +5094,10 @@ class FDMX(QWidget):
                         qualities.extend({"label": f"{height}p", "height": height} for height in heights)
                         self._send(200, {
                             "ok": True, "title": str(info.get("title") or "YouTube media"),
-                            "qualities": qualities, "audio_available": audio_available
+                            "qualities": qualities, "audio_available": audio_available,
+                            "audio_qualities": [{"label": "Best audio", "bitrate": 0}] + [
+                                {"label": f"{bitrate} kbps", "bitrate": bitrate} for bitrate in audio_bitrates
+                            ]
                         })
                         return
                     if route == "/youtube/download":
@@ -5097,7 +5109,10 @@ class FDMX(QWidget):
                         height = _safe_int(payload.get("height"), 0)
                         if height < 0 or height > 4320:
                             raise ValueError("Unsupported video height")
-                        window.browser_youtube_requested.emit(url, media_type, height)
+                        audio_bitrate = _safe_int(payload.get("audio_bitrate"), 0)
+                        if audio_bitrate < 0 or audio_bitrate > 1000:
+                            raise ValueError("Unsupported audio bitrate")
+                        window.browser_youtube_requested.emit(url, media_type, height, audio_bitrate)
                         self._send(202, {"ok": True, "message": f"YouTube {media_type} added to {APP_NAME} queue"})
                         return
                     self._send(404, {"ok": False, "error": "Unknown browser bridge endpoint"})
@@ -5125,12 +5140,13 @@ class FDMX(QWidget):
         self.raise_()
         self.activateWindow()
 
-    def add_youtube_download_from_browser(self, url, media_type="video", max_height=0):
+    def add_youtube_download_from_browser(self, url, media_type="video", max_height=0, max_abr=0):
         """Queue a browser-selected YouTube video/audio quality without a second Start click."""
         if not is_youtube_url(url):
             return
         media_type = media_type if media_type in ("video", "audio") else "video"
         max_height = max(0, min(4320, _safe_int(max_height, 0)))
+        max_abr = max(0, min(1000, _safe_int(max_abr, 0)))
         folder = self.folder.text().strip() or os.path.join(os.path.expanduser("~"), "Downloads")
         os.makedirs(folder, exist_ok=True)
         for existing in self.tasks.values():
@@ -5148,7 +5164,7 @@ class FDMX(QWidget):
             "status": "Queued", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
             "history": False, "kind": "youtube", "media_type": media_type,
-            "max_height": max_height, "scheduled_at": "",
+            "max_height": max_height, "max_abr": max_abr, "scheduled_at": "",
             "category": "Audio" if media_type == "audio" else "Video",
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
@@ -5469,7 +5485,7 @@ class FDMX(QWidget):
                 proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
                 worker = YouTubeDownloadWorker(
                     task_id, task["url"], task["folder"],
-                    task.get("media_type", "video"), proxy_url, task.get("max_height", 0)
+                    task.get("media_type", "video"), proxy_url, task.get("max_height", 0), task.get("max_abr", 0)
                 )
                 # Connect to QObject-bound handlers so Qt can marshal UI work
                 # from the worker thread onto the main GUI thread.
@@ -5929,6 +5945,7 @@ class FDMX(QWidget):
                 "kind": entry.get("kind", "http"),
                 "media_type": entry.get("media_type", "video"),
                 "max_height": max(0, min(4320, _safe_int(entry.get("max_height"), 0))),
+                "max_abr": max(0, min(1000, _safe_int(entry.get("max_abr"), 0))),
                 "scheduled_at": entry.get("scheduled_at", ""),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
                 "retry_attempts": _safe_int(entry.get("retry_attempts"), 0),
@@ -5967,7 +5984,7 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "media_type", "max_height", "scheduled_at", "content_type", "retry_attempts",
+                "category", "kind", "media_type", "max_height", "max_abr", "scheduled_at", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
                 "parts_count"
             )})
@@ -6264,7 +6281,7 @@ if __name__ == "__main__":
             ))
         elif protocol_request["action"] == "youtube":
             QTimer.singleShot(0, lambda request=protocol_request: window.add_youtube_download_from_browser(
-                request["url"], request["media_type"], request["height"]
+                request["url"], request["media_type"], request["height"], request.get("audio_bitrate", 0)
             ))
         elif protocol_request["action"] == "open":
             QTimer.singleShot(0, window.raise_)
