@@ -6217,7 +6217,33 @@ class FDMX(QWidget):
         event.accept()
 
 
+def register_gns_protocol_handler():
+    """Register the browser launch protocol for the current Windows user (no admin required)."""
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+        if getattr(sys, "frozen", False):
+            command = f'"{sys.executable}" "%1"'
+            icon_path = sys.executable
+        else:
+            script_path = os.path.abspath(__file__)
+            command = f'"{sys.executable}" "{script_path}" "%1"'
+            icon_path = sys.executable
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:GNS Downloader Protocol")
+            winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader\\DefaultIcon") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"{icon_path},0")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader\\shell\\open\\command") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
+        return True
+    except (OSError, ImportError):
+        return False
+
+
 if __name__ == "__main__":
+    register_gns_protocol_handler()
     protocol_request = next(
         (parse_gns_protocol_request(arg) for arg in sys.argv[1:] if str(arg).lower().startswith("gnsdownloader://")),
         None,
