@@ -67,7 +67,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow انتشار: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.52](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
+ساخت نسخه‌های جدید از طریق [Workflow ویندوز](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml) و [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-linux.yml) انجام می‌شود. انتشار رسمی فعلی [GNS Downloader v6.52](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
 
 
 
