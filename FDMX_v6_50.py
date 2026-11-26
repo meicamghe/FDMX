@@ -6230,12 +6230,12 @@ def register_gns_protocol_handler():
             script_path = os.path.abspath(__file__)
             command = f'"{sys.executable}" "{script_path}" "%1"'
             icon_path = sys.executable
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader") as key:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\gnsdownloader") as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:GNS Downloader Protocol")
             winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader\\DefaultIcon") as key:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\gnsdownloader\DefaultIcon") as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"{icon_path},0")
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\\Classes\\gnsdownloader\\shell\\open\\command") as key:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\gnsdownloader\shell\open\command") as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
         return True
     except (OSError, ImportError):
