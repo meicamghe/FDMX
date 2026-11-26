@@ -82,7 +82,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         self.assertIn('task.get("max_height", 0)', SOURCE)
 
     def test_tools_menu_exposes_browser_install_guide(self):
-        self.assertIn('tools_menu.addAction("Browser extensions…", self.show_browser_extension_help)', SOURCE)
+        self.assertIn('tools_menu.addAction("Install browser extensions…", self.show_browser_extension_help)', SOURCE)
         self.assertIn("addons.mozilla.org/en-US/firefox/addon/gns-download-manager/", SOURCE)
         self.assertIn("chrome://extensions", SOURCE)
         self.assertIn("Load unpacked", SOURCE)
