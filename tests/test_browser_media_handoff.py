@@ -101,7 +101,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
     def test_context_menu_and_automatic_download_handoff_exist_in_both_browsers(self):
         for browser in (CHROME, FIREFOX):
             source = (browser / "background.js").read_text(encoding="utf-8")
-            self.assertIn("Download with GNS Downloader", source)
+            self.assertIn("Download with GDM", source)
             self.assertIn("chrome.downloads.onCreated.addListener", source)
             self.assertIn("gnsdownloader://", source)
             self.assertIn("chrome.downloads.cancel(item.id)", source)
