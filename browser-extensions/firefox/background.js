@@ -15,13 +15,23 @@ async function resolveUrl(url) {
 }
 
 async function postToGNS(path, payload) {
-  const response = await fetch(API + path, {
-    method: "POST",
-    headers: {"Content-Type": "text/plain;charset=UTF-8"},
-    body: JSON.stringify(payload)
-  });
+  let response;
+  try {
+    response = await fetch(API + path, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain;charset=UTF-8"},
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    error.bridgeUnavailable = true;
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.ok) throw new Error(data.error || "GNS Downloader is unavailable");
+  if (!response.ok || !data.ok) {
+    const error = new Error(data.error || "GNS Downloader rejected the request");
+    error.bridgeUnavailable = false;
+    throw error;
+  }
   return data;
 }
 
@@ -33,7 +43,7 @@ async function sendToGNS(url) {
     return {ok: true, resolvedUrl};
   } catch (error) {
     console.warn("GNS Downloader local bridge:", error);
-    return {ok: false, resolvedUrl};
+    return {ok: false, resolvedUrl, bridgeUnavailable: !!error.bridgeUnavailable};
   }
 }
 
@@ -74,7 +84,9 @@ async function waitForGNS(timeoutMs = 6000) {
 async function sendOrLaunch(url) {
   const result = await sendToGNS(url);
   if (result.ok) return true;
-  return launchGNS(url, result.resolvedUrl);
+  if (!result.bridgeUnavailable) return false;
+  const launched = await launchGNS(url, result.resolvedUrl);
+  return launched && await waitForGNS();
 }
 
 function createMenus() {
@@ -122,7 +134,7 @@ chrome.downloads.onCreated.addListener(async item => {
 
   const result = await sendToGNS(item.url);
   let handedOff = result.ok;
-  if (!handedOff) {
+  if (!handedOff && result.bridgeUnavailable) {
     const launched = await launchGNS(item.url, result.resolvedUrl);
     handedOff = launched && await waitForGNS();
   }
@@ -152,6 +164,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     postToGNS("/youtube/formats", {url: message.url})
       .then(data => sendResponse(data))
       .catch(async error => {
+        if (!error.bridgeUnavailable) {
+          sendResponse({ok: false, error: error.message});
+          return;
+        }
         try {
           await chrome.tabs.create({url: "gnsdownloader://open", active: false});
           sendResponse({ok: false, error: "GNS Downloader is starting. Please retry format detection in a moment."});
@@ -170,6 +186,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     postToGNS("/youtube/download", payload)
       .then(data => sendResponse(data))
       .catch(error => {
+        if (!error.bridgeUnavailable) {
+          sendResponse({ok: false, error: error.message});
+          return;
+        }
         // The app can also be started through the registered desktop protocol.
         const target = protocolUrl("youtube", payload);
         chrome.tabs.create({url: target, active: false})
