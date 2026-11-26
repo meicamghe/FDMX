@@ -35,7 +35,7 @@ The extension listens to the browser's downloads API. For HTTP/HTTPS downloads i
 - **Download with GNS** — cancel the browser transfer and send the URL to GNS Downloader.
 - **Keep in browser** — resume/continue the normal browser download.
 
-Closing the notification resumes the browser download. The extension does not intercept ordinary page navigation, and it cannot hand off browser-only `blob:` or `data:` URLs.
+If the notification is dismissed or times out, the extension resumes any still-active browser download. The extension does not intercept ordinary page navigation, and it cannot hand off browser-only `blob:` or `data:` URLs.
 
 ## GitHub Actions browser-session support
 
