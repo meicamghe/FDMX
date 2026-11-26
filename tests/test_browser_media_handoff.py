@@ -67,7 +67,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         self.assertIn('route == "/youtube/download"', SOURCE)
         self.assertIn('route == "/website/open"', SOURCE)
         self.assertIn("window.browser_website_requested.emit(url)", SOURCE)
-        self.assertIn("window.browser_youtube_requested.emit(url, media_type, height)", SOURCE)
+        self.assertIn("window.browser_youtube_requested.emit(url, media_type, height, audio_bitrate)", SOURCE)
         self.assertIn('"qualities": qualities', SOURCE)
         self.assertIn('"audio_available": audio_available', SOURCE)
         self.assertIn('"audio_qualities":', SOURCE)
@@ -77,7 +77,7 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         self.assertIn('"max_height": max_height', SOURCE)
         self.assertIn('"max_abr": max_abr', SOURCE)
         self.assertIn("self.max_abr", SOURCE)
-        self.assertIn('"max_height", "scheduled_at"', SOURCE)
+        self.assertIn('"max_height", "max_abr", "scheduled_at"', SOURCE)
         self.assertIn('max_height=0', SOURCE)
         self.assertIn('task.get("max_height", 0)', SOURCE)
 
