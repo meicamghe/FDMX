@@ -50,6 +50,8 @@ For a public one-click Chrome installation, the extension must be submitted to t
 
 ## Automatic downloads and privacy
 
+Privacy notice for store review: [PRIVACY.md](PRIVACY.md).
+
 The extension hands off HTTP/HTTPS downloads that the browser exposes through its downloads API. It does not silently read page cookies or transmit browsing history. Direct media URLs are sent to the local GNS bridge only after the user chooses the media panel action. YouTube format metadata is requested from the desktop app, and the selected media type/quality is sent back to the app.
 
 The browser bridge binds only to loopback. Do not expose port 38471 to the LAN or Internet. Browser page content is inspected locally to detect media elements; it is not uploaded to a remote service.
