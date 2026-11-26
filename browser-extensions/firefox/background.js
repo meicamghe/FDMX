@@ -93,7 +93,7 @@ function createMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: MENU_LINK,
-      title: "Download with GNS Downloader",
+      title: "Download with GDM",
       contexts: ["link", "image", "video", "audio"]
     });
     chrome.contextMenus.create({
