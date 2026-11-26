@@ -1,25 +1,29 @@
-# راهنمای GNS Downloader نسخه 6.52
+# راهنمای GNS Downloader نسخه 6.53
 
 GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python و PySide6 است.
 
-## نسخه 6.52
+## نسخه 6.53
+
+- نسخه 6.53 قابلیت انتقال خودکار دانلودهای مرورگر به برنامه را از طریق افزونه و پروتکل `gnsdownloader://` اضافه می‌کند. در صورت بسته بودن برنامه، پروتکل ثبت‌شده در نصب‌کننده آن را اجرا می‌کند.
+- افزونه نسخه 1.3.0 در صفحات دارای رسانه مستقیم پیشنهاد دانلود نمایش می‌دهد و برای YouTube کیفیت‌های موجود و حالت صوت-only را از موتور `yt-dlp` برنامه دریافت می‌کند.
+- از منوی **Tools → Browser extensions…** راهنمای نصب افزونه Firefox و Chrome در دسترس است. Firefox از فهرست رسمی AMO نصب می‌شود؛ Chrome تا زمان انتشار در Chrome Web Store با Developer mode و گزینه Load unpacked نصب می‌شود.
 
 - دانلود Artifactهای GitHub Actions ابتدا بدون توکن امتحان می‌شود؛ فقط اگر GitHub دسترسی را رد کند، درخواست توکن نمایش داده می‌شود.
 - توکن در فایل‌های وظایف و تاریخچه ذخیره نمی‌شود و هنگام انتقال به دامنه دیگر در هدر درخواست ارسال نخواهد شد.
 - دانلودهای تکمیل‌شده بر اساس جدیدترین زمان پایان در بالای فهرست قرار می‌گیرند و با اولین کلیک Start دانلود آغاز می‌شود.
 
-نسخه **6.52** آخرین انتشار رسمی GNS Downloader در GitHub است. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
+نسخه **6.53** آخرین انتشار رسمی GNS Downloader در GitHub است. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
 
 - دانلود ویدئو و صدا از YouTube با کتابخانه `yt-dlp` انجام می‌شود. برای ادغام بهترین کیفیت تصویر و صدا به FFmpeg نیاز است؛ دانلود فقط صوت به FFmpeg نیاز ندارد.
 - انواع پروکسی HTTP، HTTPS، SOCKS4، SOCKS4a، SOCKS5 و SOCKS5h پشتیبانی می‌شوند. در بسته‌های آماده، پشتیبانی SOCKS با PySocks همراه برنامه بسته‌بندی می‌شود. آدرس پروکسی باید میزبان و پورت معتبر داشته باشد؛ مسیر، Query و Fragment در آدرس پذیرفته نمی‌شوند تا اشتباهاً نادیده گرفته نشوند.
 - آپدیتر فقط انتشارهای پایدار با تگ نسخه عددی معتبر را بررسی می‌کند، بالاترین نسخه را انتخاب می‌کند و اندازه فایل و در صورت وجود SHA-256 اعلام‌شده در GitHub را اعتبارسنجی می‌کند. لغو دانلود فایل نصب‌کننده نیز پشتیبانی می‌شود.
 - نسخه‌های Portable و اجرای مستقیم از سورس، صفحه انتشار GitHub را باز می‌کنند؛ نصب خودکار Setup برای نسخه نصب‌شده ویندوز در نظر گرفته شده است.
 
-تست‌های آفلاین رگرسیون و بررسی بسته‌بندی ویندوز و لینوکس برای نسخه 6.52 در CI اجرا می‌شوند. این تست‌ها جایگزین آزمایش واقعی دانلود از YouTube، اتصال پروکسی و تست دستی رابط گرافیکی نیستند.
+تست‌های آفلاین رگرسیون و بررسی بسته‌بندی ویندوز و لینوکس برای نسخه 6.53 در CI اجرا می‌شوند. این تست‌ها جایگزین آزمایش واقعی دانلود از YouTube، اتصال پروکسی و تست دستی رابط گرافیکی نیستند.
 
 ## نسخه و محیط اجرا
 
-- **نسخه برنامه:** 6.52
+- **نسخه برنامه:** 6.53
 - **فایل اصلی و مرجع پروژه:** `FDMX_v6_50.py`
 - **نسخه Python:** **3.12**
 - **ویندوز:** بسته‌های اجرایی Windows 10/11 نسخه ۶۴ بیتی
@@ -54,26 +58,26 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-انتشار رسمی نسخه 6.52 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
+انتشار رسمی نسخه 6.53 انجام شده است. فایل‌ها را از لینک‌های زیر دریافت کنید:
 
-- **[نسخه Portable ZIP — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
-- **[بسته لینوکس Ubuntu/Debian — نسخه 6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb)** — مخصوص AMD64.
+- **[نسخه Portable ZIP — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
+- **[نسخه Setup — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
+- **[بسته لینوکس Ubuntu/Debian — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb)** — مخصوص AMD64.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-Workflow انتشار: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.52](https://github.com/meicamghe/FDMX/releases/tag/v6.52) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
+Workflow انتشار: [Publish GNS Downloader v6.53](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). انتشار رسمی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.53) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
 
 
 
 ## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.52 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
+بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
 ### نصب سریع: بسته آماده لینوکس
 
-نسخه 6.52 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
+نسخه 6.53 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
 
 معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
 
@@ -84,8 +88,8 @@ dpkg --print-architecture
 دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb" -o /tmp/GNS-Downloader-6.52-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.52-amd64.deb
+curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb" -o /tmp/GNS-Downloader-6.53-amd64.deb
+sudo apt install /tmp/GNS-Downloader-6.53-amd64.deb
 ```
 
 پس از نصب، برنامه را از منوی برنامه‌های دسکتاپ اجرا کنید یا در ترمینال دستور `gns-downloader` را بزنید. بسته روی Ubuntu 22.04 با معماری AMD64 ساخته و تست نصب و اجرا شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند.
@@ -209,7 +213,7 @@ python FDMX_v6_50.py
 
 ساخت فایل اجرایی ویندوز باید روی ویندوز انجام شود؛ PyInstaller ابزار Cross-Compile نیست. برای ساخت به Python 3.12، PySide6-Essentials، PyInstaller، Pillow و Inno Setup نیاز دارید. روش استاندارد ساخت و تست در Workflow گیت‌هاب تعریف شده است.
 
-## افزونه مرورگر GNS Downloader نسخه 1.2.0
+## افزونه مرورگر GNS Downloader نسخه 1.3.0
 
 نسخه جدید افزونه‌های Chrome و Firefox با نام و آیکون هماهنگ با برنامه دسکتاپ:
 
@@ -227,7 +231,7 @@ python FDMX_v6_50.py
 
 نصب موقت با بستن فایرفاکس حذف می‌شود. اگر نسخه قبلی در AMO تأیید شده و در فهرست افزونه‌های Mozilla قرار دارد، این نسخه باید به‌عنوان به‌روزرسانی همان افزونه و با همان شناسه Gecko ارسال شود؛ افزونه جدید با شناسه متفاوت نسازید.
 
-برای استفاده از افزونه، برنامه دسکتاپ **GNS Downloader 6.52 یا جدیدتر** باید باز باشد.
+برای استفاده از افزونه، برنامه دسکتاپ **GNS Downloader 6.53 یا جدیدتر** باید باز باشد.
 
 راهنمای کامل: [browser-extensions/README.md](../browser-extensions/README.md)
 
