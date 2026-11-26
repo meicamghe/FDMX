@@ -3608,6 +3608,8 @@ def parse_gns_protocol_request(value):
         query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
         url = str((query.get("url") or [""])[0]).strip()
         resolved_url = str((query.get("resolved_url") or [""])[0]).strip()
+        if parsed.netloc.lower() == "open":
+            return {"action": "open"}
         if parsed.netloc.lower() == "download":
             target = urllib.parse.urlsplit(url)
             if target.scheme not in ("http", "https") or not target.netloc:
@@ -6232,4 +6234,6 @@ if __name__ == "__main__":
             QTimer.singleShot(0, lambda request=protocol_request: window.add_youtube_download_from_browser(
                 request["url"], request["media_type"], request["height"]
             ))
+        elif protocol_request["action"] == "open":
+            QTimer.singleShot(0, window.raise_)
     sys.exit(app.exec())
