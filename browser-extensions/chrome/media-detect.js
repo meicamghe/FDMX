@@ -56,12 +56,7 @@
     const {host, shadow} = buildPanel();
     shadow.querySelector(".message").textContent = "Finding available video qualities and audio…";
     shadow.querySelector(".status").textContent = "Checking with GNS Downloader";
-    let response = null;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      response = await request({type: "GNS_YOUTUBE_FORMATS", url: location.href});
-      if (response && response.ok) break;
-      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 1500));
-    }
+    const response = await request({type: "GNS_YOUTUBE_FORMATS", url: location.href});
     if (!host.isConnected) return;
     if (!response || !response.ok) {
       shadow.querySelector(".message").textContent = "YouTube media detected.";
