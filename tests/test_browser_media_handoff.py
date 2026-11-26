@@ -47,6 +47,9 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         self.assertEqual(result["action"], "youtube")
         self.assertEqual(result["media_type"], "video")
         self.assertEqual(result["height"], 1080)
+        audio = parse("gnsdownloader://youtube?" + urllib.parse.urlencode({"url": url, "media_type": "audio", "audio_bitrate": "160"}))
+        self.assertEqual(audio["media_type"], "audio")
+        self.assertEqual(audio["audio_bitrate"], 160)
 
     def test_protocol_parser_rejects_invalid_scheme_and_signed_url_host(self):
         parse = load_protocol_parser()
@@ -63,10 +66,13 @@ class BrowserMediaHandoffTests(unittest.TestCase):
         self.assertIn("window.browser_youtube_requested.emit(url, media_type, height)", SOURCE)
         self.assertIn('"qualities": qualities', SOURCE)
         self.assertIn('"audio_available": audio_available', SOURCE)
+        self.assertIn('"audio_qualities":', SOURCE)
 
     def test_youtube_quality_is_applied_to_worker_and_survives_restart(self):
         self.assertIn('bestvideo[height<={self.max_height}]+bestaudio/best[height<={self.max_height}]', SOURCE)
         self.assertIn('"max_height": max_height', SOURCE)
+        self.assertIn('"max_abr": max_abr', SOURCE)
+        self.assertIn("self.max_abr", SOURCE)
         self.assertIn('"max_height", "scheduled_at"', SOURCE)
         self.assertIn('max_height=0', SOURCE)
         self.assertIn('task.get("max_height", 0)', SOURCE)
