@@ -3,7 +3,7 @@
   window.__gnsDownloaderMediaUI = true;
 
   const runtime = chrome.runtime;
-  const isYouTube = /(^|\\.)youtube\\.com$|(^|\\.)youtu\\.be$/i.test(location.hostname);
+  const isYouTube = /(^|\.)youtube\.com$|(^|\.)youtu\.be$/i.test(location.hostname);
   const directUrl = value => {
     if (!value) return "";
     try {
@@ -144,7 +144,7 @@
   }
 
   function detect() {
-    if (isYouTube && /\\/(watch|shorts|live)(\\/|$)/.test(location.pathname)) {
+    if (isYouTube && /\/(watch|shorts|live)(\/|$)/.test(location.pathname)) {
       showYouTubePanel();
       return;
     }
