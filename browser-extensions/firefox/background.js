@@ -181,7 +181,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload = {
       url: message.url,
       media_type: message.media_type,
-      height: message.height || 0
+      height: message.height || 0,
+      audio_bitrate: message.audio_bitrate || 0
     };
     postToGNS("/youtube/download", payload)
       .then(data => sendResponse(data))
