@@ -5150,14 +5150,18 @@ class FDMX(QWidget):
         folder = self.folder.text().strip() or os.path.join(os.path.expanduser("~"), "Downloads")
         os.makedirs(folder, exist_ok=True)
         for existing in self.tasks.values():
-            if _is_duplicate_download(existing, url, "youtube", media_type):
-                self.status.setText("This YouTube item is already active in the download list.")
+            if (
+                _is_duplicate_download(existing, url, "youtube", media_type)
+                and _safe_int(existing.get("max_height"), 0) == max_height
+                and _safe_int(existing.get("max_abr"), 0) == max_abr
+            ):
+                self.status.setText("This YouTube format is already active in the download list.")
                 self.showNormal()
                 self.raise_()
                 self.activateWindow()
                 return
         task_id = uuid.uuid4().hex
-        label = f" {max_height}p" if media_type == "video" and max_height else ""
+        label = f" {max_height}p" if media_type == "video" and max_height else (f" {max_abr} kbps" if media_type == "audio" and max_abr else "")
         name = ("YouTube audio" if media_type == "audio" else "YouTube video") + label
         self.tasks[task_id] = {
             "id": task_id, "url": url, "folder": folder, "name": name,
