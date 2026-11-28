@@ -4489,16 +4489,18 @@ class FDMX(QWidget):
                 background: {raised}; color: {fg}; border: 1px solid {border};
                 border-radius: 8px; padding: 8px 15px; min-height: 20px;
             }}
-            QPushButton:enabled {{ color: #1d2635; background: {raised}; border: 1px solid #aebbd0; font-weight: 600; }}
+            QPushButton:enabled {{ color: {fg}; background: {raised}; border: 1px solid {border}; font-weight: 600; }}
             QPushButton:hover:enabled {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
-            QPushButton:pressed:enabled {{ background: {border}; }}
-            QPushButton:disabled {{ color: #778397; background: #e5e9f0; border: 1px dashed #aab4c2; font-weight: 400; }}
+            QPushButton:pressed:enabled {{ background: {border}; color: {fg}; }}
+            QPushButton:disabled {{ color: {muted}; background: {panel}; border: 1px dashed {border}; font-weight: 400; }}
             QHeaderView::section {{
                 background: {raised}; color: {fg}; border: 0;
                 border-bottom: 1px solid {border}; padding: 8px; font-weight: 700;
             }}
             QTableWidget {{ gridline-color: {border}; alternate-background-color: {raised}; }}
-            QTableWidget::item {{ padding: 5px; }}
+            QTableWidget::item {{ padding: 7px 6px; border-bottom: 1px solid {border}; }}
+            QTableWidget::item:selected {{ background: {selection}; color: {accent_text}; }}
+            QTableWidget::item:hover:!selected {{ background: {raised}; }}
             QProgressBar {{
                 background: {raised}; color: {fg}; border: 1px solid {border};
                 border-radius: 6px; text-align: center; min-height: 13px;
@@ -4677,7 +4679,7 @@ class FDMX(QWidget):
         if hasattr(self, "theme_preview"):
             self.theme_preview.setText(
                 f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
-                "Theme applied to the entire GNS Downloader interface"
+                "Live palette preview — actual controls update with this theme"
             )
             preview_background = (
                 f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
