@@ -6350,6 +6350,7 @@ class FDMX(QWidget):
                 file.flush()
                 os.fsync(file.fileno())
             os.replace(temp_path, TASKS_FILE)
+            return True
         except OSError as exc:
             if hasattr(self, "status"):
                 self.status.setText(f"Could not save pending downloads: {exc}")
@@ -6359,6 +6360,7 @@ class FDMX(QWidget):
                         os.remove(path)
                 except OSError:
                     pass
+            return False
 
     def load_history(self):
         try:
