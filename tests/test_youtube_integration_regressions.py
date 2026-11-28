@@ -290,7 +290,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_explicit_http_proxy_uses_a_worker_local_url_opener(self):
         start = SOURCE.index("def open_url_with_proxy(")
-        end = SOURCE.index("\\n\\nclass _CredentialSafeRedirectHandler", start)
+        end = SOURCE.index("class _CredentialSafeRedirectHandler", start)
         helper = SOURCE[start:end]
         self.assertIn("urllib.request.ProxyHandler", helper)
         self.assertIn("opener.open(request, timeout=timeout)", helper)
