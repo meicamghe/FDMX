@@ -1,69 +1,82 @@
 from pathlib import Path
-
 import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 QML_DIR = ROOT / "qml_ui"
-
 
 def _qt():
     pytest.importorskip("PySide6")
     from PySide6.QtGui import QGuiApplication
-    app = QGuiApplication.instance() or QGuiApplication([])
-    return app
-
+    return QGuiApplication.instance() or QGuiApplication([])
 
 def test_qml_shell_files_exist():
-    assert (QML_DIR / "main.py").is_file()
-    assert (QML_DIR / "Main.qml").is_file()
-    assert (QML_DIR / "README.md").is_file()
-    assert (QML_DIR / "models.py").is_file()
+    for name in ("main.py", "Main.qml", "README.md", "models.py", "adapter.py"):
+        assert (QML_DIR / name).is_file()
 
-
-def test_qml_shell_is_explicitly_isolated_from_production_engine():
+def test_preview_remains_isolated():
     source = (QML_DIR / "main.py").read_text(encoding="utf-8")
-    qml = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
     assert "FDMX_v6_50" not in source
-    assert "appBridge" in source
-    assert "appBridge.downloadModel" in qml
 
-
-def test_preview_does_not_claim_live_download_telemetry():
-    qml = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
-    readme = (QML_DIR / "README.md").read_text(encoding="utf-8")
-    assert "not connected to the download engine yet" in qml
-    assert "not connected" in readme
-
-
-def test_download_model_normalizes_backend_snapshots():
+def test_download_model_normalizes_backend_fields():
     _qt()
     from qml_ui.models import DownloadListModel
-
     model = DownloadListModel()
-    model.replace_downloads([{
-        "download_id": "task-1",
-        "file_name": "sample.zip",
-        "status": "Downloading",
-        "progress": 135,
-        "speed": "2.4 MB/s",
-    }])
+    model.replace_downloads([{"download_id":"task-1","file_name":"sample.zip","status":"Downloading","progress":135,"speed_text":"2.4 MB/s","downloaded":135,"total":100,"category":"Archive"}])
     assert model.rowCount() == 1
-    roles = model.roleNames()
-    assert bytes(roles[model.FileNameRole]) == b"fileName"
-    assert model.data(model.index(0, 0), model.FileNameRole) == "sample.zip"
-    assert model.data(model.index(0, 0), model.ProgressRole) == 100
+    index = model.index(0, 0)
+    assert model.data(index, model.FileNameRole) == "sample.zip"
+    assert model.data(index, model.ProgressRole) == 100
+    assert model.data(index, model.DownloadedRole) == 135
+    assert model.data(index, model.CategoryRole) == "Archive"
 
+def test_adapter_snapshots_stats_and_task_id_actions():
+    _qt()
+    from PySide6.QtCore import QObject
+    from qml_ui.adapter import FDMXDownloadAdapter
+    class Worker:
+        def __init__(self): self.calls=[]
+        def pause(self): self.calls.append("pause")
+        def resume(self): self.calls.append("resume")
+    class Controller(QObject):
+        def __init__(self):
+            super().__init__()
+            self.worker=Worker()
+            self.tasks={
+                "active":{"name":"active.bin","status":"Downloading","downloaded":50,"total":100,"speed":2048,"worker":self.worker},
+                "queued":{"name":"queued.zip","status":"Queued","worker":None},
+                "done":{"name":"done.pdf","status":"Completed","downloaded":10,"total":10},
+            }
+            self.history=[{"name":"done.pdf","status":"Completed","completed_at":1}]
+            self.saved=0; self.scheduled=0; self.canceled=[]
+        def save_tasks(self): self.saved+=1
+        def schedule_downloads(self): self.scheduled+=1
+        def cancel_task(self, task_id): self.canceled.append(task_id)
+    controller=Controller()
+    adapter=FDMXDownloadAdapter(controller, interval_ms=100000)
+    assert adapter.activeDownloads == 1
+    assert adapter.queuedDownloads == 1
+    assert adapter.completedDownloads == 1
+    assert adapter.totalSpeed == "2.0 KB/s"
+    assert adapter.downloads[0]["download_id"] == "active"
+    adapter.pause("active")
+    adapter.resume("active")
+    assert controller.worker.calls == ["pause","resume"]
+    adapter.cancel("queued")
+    assert controller.canceled == ["queued"]
+    controller.tasks["failed"]={"name":"bad.zip","status":"Failed"}
+    adapter.retry("failed")
+    assert controller.tasks["failed"]["status"] == "Queued"
+    assert controller.scheduled == 1 and controller.saved == 3
+    adapter._timer.stop()
 
 def test_qml_engine_loads_preview_window():
     _qt()
     from PySide6.QtCore import QUrl
     from PySide6.QtQml import QQmlApplicationEngine
     from qml_ui.main import AppBridge
-
-    engine = QQmlApplicationEngine()
-    bridge = AppBridge()
+    engine=QQmlApplicationEngine()
+    bridge=AppBridge()
     engine.rootContext().setContextProperty("appBridge", bridge)
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
-    assert engine.rootObjects(), "Qt Quick failed to load Main.qml"
+    assert engine.rootObjects()
     engine.clearComponentCache()
     del engine
