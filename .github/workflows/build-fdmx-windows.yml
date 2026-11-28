@@ -12,6 +12,7 @@ on:
       - "v*"
     paths:
       - "FDMX_v6_50.py"
+      - "qml_ui/**"
       - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "README.md"
@@ -25,6 +26,7 @@ on:
       - main
     paths:
       - "FDMX_v6_50.py"
+      - "qml_ui/**"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
@@ -134,6 +136,54 @@ jobs:
           if (-not $ready) { throw "GNS Downloader did not create its main window within 35 seconds" }
           Write-Host "Installed GNS Downloader window ready in $([math]::Round(((Get-Date)-$started).TotalSeconds,1)) seconds."
           Stop-Process -Id $process.Id -Force
+
+      - name: Build experimental ADM QML application
+        shell: pwsh
+        run: |
+          $qmlDir = python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).parent / 'Qt' / 'qml')"
+          if (-not (Test-Path $qmlDir)) { throw "Qt QML runtime directory not found: $qmlDir" }
+          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6 --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
+          $qmlApp = "dist-qml/ADM QML/ADM QML.exe"
+          if (-not (Test-Path $qmlApp)) { throw "ADM QML executable is missing." }
+          & $qmlApp --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML startup smoke test failed with exit code $LASTEXITCODE" }
+      - name: Create experimental ADM QML portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist-qml/ADM QML/*" -DestinationPath "dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip" -Force
+      - name: Compile experimental ADM QML installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
+          & $compiler "installer/FDMX-QML.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML installer compilation failed with exit code $LASTEXITCODE" }
+      - name: Enforce experimental QML package size
+        shell: pwsh
+        run: |
+          $limit = 50MB
+          $setup = Get-Item "dist/installer/ADM-QML-Preview-Setup-6.54.exe"
+          $portable = Get-Item "dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip"
+          foreach ($file in @($setup, $portable)) {
+            $sizeMB = [math]::Round($file.Length / 1MB, 2)
+            Write-Host "$($file.Name): $sizeMB MiB"
+            if ($file.Length -gt $limit) { throw "$($file.Name) exceeds the 50 MiB test-build limit." }
+          }
+      - name: Upload experimental ADM QML Setup
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADM-QML-Preview-Setup-v6.54
+          path: dist/installer/ADM-QML-Preview-Setup-6.54.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload experimental ADM QML Portable
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADM-QML-Preview-Portable-v6.54
+          path: dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Create portable ZIP
         shell: pwsh
