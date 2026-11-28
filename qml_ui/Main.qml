@@ -293,7 +293,7 @@ ApplicationWindow {
                             width: parent.width - 24
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
-                            text: "The QML download list is ready for the backend adapter.\nNo live downloads are connected in this preview."
+                            text: appBridge.downloads.length === 0 ? "No downloads are connected yet." : "No downloads match this view."
                             color: muted
                             font.pixelSize: 12
                         }
