@@ -53,7 +53,7 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks pytest
 
       - name: Install UPX binary compressor
         run: |
@@ -74,7 +74,7 @@ jobs:
           python -m unittest discover -s tests -p "test_browser_media_handoff.py" -v
           python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
           python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
-          python -m unittest discover -s tests -p "test_ui_usability_fixes.py" -v
+          python -m pytest -q tests/test_ui_usability_fixes.py
 
       - name: Verify generated icon
         shell: pwsh
