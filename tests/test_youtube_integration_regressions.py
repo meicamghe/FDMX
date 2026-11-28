@@ -296,6 +296,14 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("opener.open(request, timeout=timeout)", helper)
         self.assertIn("with thread_proxy(proxy_url):", helper)
 
+    def test_dns_resolution_failure_is_not_reported_as_range_rejection(self):
+        start = SOURCE.index("class DownloadWorker")
+        end = SOURCE.index("class YouTubeDownloadWorker", start)
+        worker = SOURCE[start:end]
+        self.assertIn("isinstance(reason, socket.gaierror)", worker)
+        self.assertIn("Could not resolve the server hostname", worker)
+        self.assertIn("enable a working proxy in Settings", worker)
+
     def test_youtube_worker_passes_proxy_to_ytdlp(self):
         start = SOURCE.index("class YouTubeDownloadWorker")
         end = SOURCE.index("class GitHubUpdateDownloadWorker", start)
