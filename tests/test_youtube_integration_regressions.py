@@ -64,7 +64,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("Test update checker", SOURCE)
         self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
-        self.assertIn('APP_VERSION = "6.53"', SOURCE)
+        self.assertIn('APP_VERSION = "6.54"', SOURCE)
 
     def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
         tree = ast.parse(SOURCE)
@@ -272,6 +272,37 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("_PROXY_THREAD_STATE = threading.local()", SOURCE)
         self.assertIn("with thread_proxy(proxy_url):", SOURCE)
         self.assertIn("socket.create_connection = _proxy_aware_create_connection", SOURCE)
+
+    def test_github_update_check_and_installer_download_use_configured_proxy(self):
+        update_start = SOURCE.index("class GitHubUpdateWorker")
+        update_end = SOURCE.index("def _youtube_ffmpeg_executable", update_start)
+        update_worker = SOURCE[update_start:update_end]
+        self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", update_worker)
+        self.assertIn("open_url_with_proxy(request, timeout=25, proxy_url=self.proxy_url)", update_worker)
+
+        download_start = SOURCE.index("class GitHubUpdateDownloadWorker")
+        download_end = SOURCE.index("def is_youtube_url", download_start)
+        download_worker = SOURCE[download_start:download_end]
+        self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", download_worker)
+        self.assertIn("open_url_with_proxy(request, timeout=60, proxy_url=self.proxy_url)", download_worker)
+        self.assertIn("GitHubUpdateWorker(APP_VERSION, proxy_url=proxy_url)", SOURCE)
+        self.assertIn("GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest, proxy_url=proxy_url)", SOURCE)
+
+    def test_explicit_http_proxy_uses_a_worker_local_url_opener(self):
+        start = SOURCE.index("def open_url_with_proxy(")
+        end = SOURCE.index("class _CredentialSafeRedirectHandler", start)
+        helper = SOURCE[start:end]
+        self.assertIn("urllib.request.ProxyHandler", helper)
+        self.assertIn("opener.open(request, timeout=timeout)", helper)
+        self.assertIn("with thread_proxy(proxy_url):", helper)
+
+    def test_dns_resolution_failure_is_not_reported_as_range_rejection(self):
+        start = SOURCE.index("class DownloadWorker")
+        end = SOURCE.index("class YouTubeDownloadWorker", start)
+        worker = SOURCE[start:end]
+        self.assertIn("isinstance(reason, socket.gaierror)", worker)
+        self.assertIn("Could not resolve the server hostname", worker)
+        self.assertIn("enable a working proxy in Settings", worker)
 
     def test_youtube_worker_passes_proxy_to_ytdlp(self):
         start = SOURCE.index("class YouTubeDownloadWorker")
