@@ -96,24 +96,29 @@ The v6.53 Windows installer, portable ZIP and Ubuntu/Debian package are built an
 
 The download engine preserves each task's original byte-range map across pause/resume.
 
-## Windows downloads
+## Windows and Linux downloads
 
-The v6.53 GitHub Release is published. The release page contains GitHub's source archives. Compiled packages are available as temporary workflow artifacts (14-day retention):
+The official [GNS Downloader 6.53 GitHub Release](https://github.com/meicamghe/FDMX/releases/tag/6.53) includes permanent compiled assets:
 
-- **[Windows build artifacts](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — download `GNS-Downloader-Setup-v6.53` or `GNS-Downloader-Portable-v6.53` from the Artifacts section.
-- **[Ubuntu/Debian DEB artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — download `GNS-Downloader-Linux-DEB-v6.53` from the Artifacts section.
-- **[Browser extension artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — download `GNS-Downloader-browser-extensions-1.3.0`.
-- [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
+- **[Windows Setup](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-Setup.exe)** — 64-bit installer for Windows 10/11.
+- **[Windows Portable](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run without installing.
+- **[Ubuntu/Debian DEB](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-6.53-amd64.deb)** — native AMD64 package; no Wine required.
 
-The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
+Release asset SHA-256 digests:
 
-The published release is [GNS Downloader 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53). Its compiled packages are currently available as temporary GitHub Actions artifacts (14-day retention), not as permanent Release assets.
+| Asset | SHA-256 |
+|---|---|
+| Windows Setup | `91dfc2f37114f1438febc164456cf2efcd7b1b7ef7db6eeb8e67e65e451b19a6` |
+| Windows Portable | `18e4690f1a7c273b17e2edad8e128cf96b502d15473c3423550a9581ba510d07` |
+| Ubuntu/Debian DEB | `7a0973db989ab2888028282491ad9c12bd0002f470a3ffe26569821b0c2ef94f` |
 
+The browser companion package is published separately as a GitHub Actions artifact: [browser-extension build](https://github.com/meicamghe/FDMX/actions/runs/46109571140). Firefox users can also install from the [Mozilla Add-ons listing](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/).
 
+The in-app installer update is intended for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** for version 6.53 has been built and smoke-tested. It is currently available from the [Linux Actions artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137); it has not yet been attached as a permanent asset to the GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** for version 6.53 is available as a permanent asset in the [official 6.53 Release](https://github.com/meicamghe/FDMX/releases/tag/6.53). Download the [AMD64 DEB package](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-6.53-amd64.deb) directly. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
@@ -244,6 +249,6 @@ python -m py_compile FDMX_v6_50.py ubuntu.py
 python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
 ```
 
-Older numbered scripts remain in the repository for development history; they are not the current application entry point.
+The maintained application entry point is `FDMX_v6_50.py`; `ubuntu.py` starts the Linux desktop build. Historical 6.x source snapshots may remain in the repository, but they are not the supported launch target.
 
 Review [LICENSE-NOTICE.md](LICENSE-NOTICE.md) before redistributing source or binaries.
