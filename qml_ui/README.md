@@ -19,7 +19,8 @@ python -m qml_ui.main
 
 Instantiate `FDMXDownloadAdapter(existing_fdmx_window)` on the controller's
 GUI thread. It exposes sanitized task snapshots, bounded read-only history,
-aggregate active/queued/completed counts and total speed. It provides task-ID
+aggregate active/queued/completed/scheduled counts, total speed, and read-only
+snapshots of the existing download settings. It provides task-ID
 pause/resume/cancel/retry slots. URLs, tokens and credentials are not exposed.
 Worker signals remain connected to the existing controller, and all controller
 state access stays on its owning GUI thread.
