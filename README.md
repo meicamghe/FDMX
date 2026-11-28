@@ -98,26 +98,26 @@ The download engine preserves each task's original byte-range map across pause/r
 
 ## Windows downloads
 
-The official v6.53 release is published. Download the files:
+The v6.53 GitHub Release is published. The current release page contains GitHub's source archives; the compiled packages are available as workflow artifacts:
 
-- **[Portable ZIP — v6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
-- **[Ubuntu/Debian DEB — v6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb)** — AMD64 package.
+- **[Windows build artifacts](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — download `GNS-Downloader-Setup-v6.53` or `GNS-Downloader-Portable-v6.53` from the Artifacts section.
+- **[Ubuntu/Debian DEB artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — download `GNS-Downloader-Linux-DEB-v6.53` from the Artifacts section.
+- **[Browser extension artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — download `GNS-Downloader-browser-extensions-1.3.0`.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Publish GNS Downloader v6.53](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). The published release is [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.53), with Windows installer, portable ZIP and Linux DEB assets.
+Release workflow: [Publish GNS Downloader v6.53](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). The published release is [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53), with Windows installer, portable ZIP and Linux DEB assets.
 
 
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** for version 6.53 has been built, smoke-tested, and attached to the public GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** for version 6.53 has been built and smoke-tested. It is currently available from the [Linux Actions artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137); it has not yet been attached as a permanent asset to the GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
-The v6.53 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
+The v6.53 Linux build provides a ready-to-install **AMD64 `.deb` package** as a GitHub Actions artifact. Download the `GNS-Downloader-Linux-DEB-v6.53` artifact from the [successful Linux build](https://github.com/meicamghe/FDMX/actions/runs/46109571137), extract the ZIP, then install the `.deb` file. This does not require Git, Python, a virtual environment, or Wine.
 
 Check the system architecture (it should print `amd64`):
 
@@ -128,8 +128,7 @@ dpkg --print-architecture
 Download and install the package (APT will resolve its declared system dependencies):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb" -o /tmp/GNS-Downloader-6.53-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.53-amd64.deb
+sudo apt install ./GNS-Downloader-6.53-amd64.deb
 ```
 
 Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
