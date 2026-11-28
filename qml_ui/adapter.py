@@ -95,6 +95,26 @@ class FDMXDownloadAdapter(QObject):
     @Property("QVariantList", notify=changed)
     def history(self): return list(self._history[-200:])
 
+    @Property("QVariantMap", notify=changed)
+    def settings(self):
+        self._assert_gui_thread()
+        c = self._controller
+        def widget_value(name, method):
+            widget = getattr(c, name, None)
+            getter = getattr(widget, method, None)
+            try:
+                return getter() if callable(getter) else None
+            except RuntimeError:
+                return None
+        return {
+            "maxDownloads": widget_value("max_downloads", "value"),
+            "connectionsPerDownload": widget_value("parts_count", "value"),
+            "speedLimitKbps": widget_value("speed_limit", "value"),
+            "torrentUploadLimitKbps": widget_value("torrent_upload_limit", "value"),
+            "proxyEnabled": widget_value("proxy_enabled", "isChecked"),
+            "downloadFolder": widget_value("folder", "text"),
+        }
+
     @Property(int, notify=changed)
     def activeDownloads(self): return sum(row["status"] in _ACTIVE for row in self._rows)
 
@@ -103,6 +123,9 @@ class FDMXDownloadAdapter(QObject):
 
     @Property(int, notify=changed)
     def completedDownloads(self): return sum(row["status"] == "Completed" for row in self._rows)
+
+    @Property(int, notify=changed)
+    def scheduledDownloads(self): return sum(bool(row["scheduled_at"]) for row in self._rows)
 
     @Property(str, notify=changed)
     def totalSpeed(self):
