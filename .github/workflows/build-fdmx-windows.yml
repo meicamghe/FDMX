@@ -74,6 +74,7 @@ jobs:
           python -m unittest discover -s tests -p "test_browser_media_handoff.py" -v
           python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
           python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
+          python -m unittest discover -s tests -p "test_ui_usability_fixes.py" -v
 
       - name: Verify generated icon
         shell: pwsh
