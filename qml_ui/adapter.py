@@ -146,16 +146,29 @@ class FDMXDownloadAdapter(QObject):
         self._assert_gui_thread()
         return getattr(self._controller, "tasks", {}).get(task_id)
 
-    @Slot(str)
-    def queueDownload(self, url):
+    @Slot(str, str)
+    def queueDownload(self, url, scheduled_at=""):
         """Submit a URL through the existing controller's real intake pipeline."""
         self._assert_gui_thread()
         value = str(url or "").strip()
         parsed = urllib.parse.urlsplit(value)
         is_magnet = value.lower().startswith("magnet:?")
+        schedule_value = str(scheduled_at or "").strip()
         if not is_magnet and (parsed.scheme.lower() not in ("http", "https") or not parsed.netloc):
             self.actionRejected.emit("Enter a valid HTTP, HTTPS, YouTube, or magnet link.")
             return
+        if is_magnet and schedule_value:
+            self.actionRejected.emit("Scheduling magnet links is not supported by this intake yet.")
+            return
+        if schedule_value:
+            try:
+                selected = datetime.datetime.fromisoformat(schedule_value)
+                if selected.timestamp() <= datetime.datetime.now().timestamp():
+                    raise ValueError("time is not in the future")
+                schedule_value = selected.isoformat()
+            except (TypeError, ValueError, OverflowError):
+                self.actionRejected.emit("Enter a valid future schedule time in ISO format.")
+                return
         url_widget = getattr(self._controller, "url", None)
         folder_widget = getattr(self._controller, "folder", None)
         submit = getattr(self._controller, "add_download", None)
@@ -172,6 +185,7 @@ class FDMXDownloadAdapter(QObject):
         previous_text = str(url_widget.text() or "") if callable(getattr(url_widget, "text", None)) else ""
         try:
             self._controller._pending_qml_handoff = True
+            self._controller._pending_qml_schedule_at = schedule_value
             url_widget.setText(value)
             submit()
         except Exception:
@@ -186,6 +200,7 @@ class FDMXDownloadAdapter(QObject):
                 pass
             try:
                 self._controller._pending_qml_handoff = False
+                self._controller._pending_qml_schedule_at = ""
             except Exception:
                 pass
         after = set(getattr(self._controller, "tasks", {}).keys())
