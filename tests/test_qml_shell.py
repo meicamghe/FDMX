@@ -24,3 +24,23 @@ def test_preview_does_not_claim_live_download_telemetry():
     readme = (QML_DIR / "README.md").read_text(encoding="utf-8")
     assert "not connected to the download engine yet" in qml
     assert "placeholders" in readme
+
+
+def test_qml_engine_loads_preview_window():
+    import pytest
+
+    pytest.importorskip("PySide6")
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtQml import QQmlApplicationEngine
+
+    from qml_ui.main import AppBridge
+
+    app = QGuiApplication.instance() or QGuiApplication([])
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("appBridge", AppBridge())
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    assert engine.rootObjects(), "Qt Quick failed to load Main.qml"
+    engine.clearComponentCache()
+    del engine
+    app.quit()
