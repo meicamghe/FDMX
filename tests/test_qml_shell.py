@@ -225,6 +225,8 @@ def test_legacy_controller_suppresses_widgets_detail_windows_for_qml_handoff():
     assert 'qml_handoff = bool(getattr(self, "_pending_qml_handoff", False))' in source
     assert 'not task.get("qml_handoff")' in source
     assert '"qml_handoff": qml_handoff' in source
+    assert '"qml_handoff"' in source[source.index("def save_tasks(self):"):source.index("def load_history(self):")]
+    assert 'bool(entry.get("qml_handoff", False))' in source
     adapter = (QML_DIR / "adapter.py").read_text(encoding="utf-8")
     assert 'self._controller._pending_qml_handoff = True' in adapter
 
