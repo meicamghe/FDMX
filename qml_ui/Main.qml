@@ -140,7 +140,6 @@ ApplicationWindow {
                         MouseArea { anchors.fill: parent; onClicked: selectedSection = modelData.label }
                         }
                     }
-                }
 
                 Item { Layout.fillHeight: true }
 
