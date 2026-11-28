@@ -153,3 +153,15 @@ print("production QApplication host smoke passed")
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "production QApplication host smoke passed" in result.stdout
+
+
+def test_qml_exposes_history_and_scheduler_actions():
+    source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
+    for marker in (
+        'id: historyList',
+        'appBridge.setSchedule(',
+        'appBridge.clearSchedule(',
+        'appBridge.startNow(',
+        'appBridge.actionRejected',
+    ):
+        assert marker in source
