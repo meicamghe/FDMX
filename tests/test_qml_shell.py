@@ -217,7 +217,7 @@ def test_qml_exposes_real_download_intake():
     source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
     assert 'placeholderText: "Paste a file URL, YouTube link or magnet link…"' in source
     assert "appBridge.queueDownload(value, scheduleInput.text.trim())" in source
-    assert 'placeholderText: "Optional start: YYYY-MM-DDTHH:MM"' in source
+    assert 'placeholderText: "YYYY-MM-DDTHH:MM"' in source
 
 
 def test_legacy_controller_suppresses_widgets_detail_windows_for_qml_handoff():
