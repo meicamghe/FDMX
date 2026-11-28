@@ -247,6 +247,40 @@ ApplicationWindow {
                 }
             }
 
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 58
+                radius: 15
+                color: "#a51a2943"
+                border.color: "#35ffffff"
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 9
+                    spacing: 10
+                    Label { text: "↧"; color: "#70ddc8"; font.pixelSize: 20 }
+                    TextField {
+                        id: downloadUrlField
+                        Layout.fillWidth: true
+                        placeholderText: "Paste a download link or magnet URL…"
+                        color: "#e5edf8"
+                        selectByMouse: true
+                        onAccepted: addDownloadButton.clicked()
+                        background: Rectangle { radius: 9; color: "#24101b30"; border.color: "#263f5678" }
+                    }
+                    Button {
+                        id: addDownloadButton
+                        text: "Add download"
+                        highlighted: true
+                        onClicked: {
+                            if (downloadUrlField.text.trim().length) {
+                                appBridge.queueDownload(downloadUrlField.text)
+                                downloadUrlField.selectAll()
+                            }
+                        }
+                    }
+                }
+            }
+
             GridLayout {
                 Layout.fillWidth: true
                 columns: 3
