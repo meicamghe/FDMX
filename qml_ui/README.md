@@ -36,11 +36,12 @@ path still does not call it: Widgets remains the default and fallback until
 real-download lifecycle, UI parity, packaging and Windows rendering are accepted.
 
 The QML shell now has working sidebar filtering (overview, all, active,
-completed, scheduled, queued and failed), filename search, visible rejection
-feedback for unavailable task actions, a read-only settings snapshot dialog,
+completed, scheduled, queued, failed and history), filename search across both
+downloads and history, visible rejection feedback for unavailable task actions,
+a read-only settings snapshot dialog,
 and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
-and categories are included in task snapshots. History remains a read-only adapter
-property and is not yet a dedicated history screen. Scheduler edits, settings changes, history management/export,
+and categories are included in task snapshots. History is available as a dedicated read-only screen with timestamp, size and
+failure details; URLs and local paths are intentionally not exposed. Scheduler edits, settings changes, history management/export,
 torrent-specific operations and analytics drill-down need additional explicit
 typed slots before those screens can claim parity.
 
