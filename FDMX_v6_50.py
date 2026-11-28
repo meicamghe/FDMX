@@ -4107,7 +4107,55 @@ class FDMX(QWidget):
         self.theme_combo.currentIndexChanged.connect(self.apply_selected_theme)
         settings_grid.addWidget(QLabel("Appearance theme:"), 8, 0)
         settings_grid.addWidget(self.theme_combo, 8, 1)
-        self.theme_preview = QLabel()
+
+        # A real Qt widget sample, not a decorative label: these controls inherit
+        # the exact application stylesheet and palette currently being previewed.
+        self.theme_preview = QFrame()
+        self.theme_preview.setObjectName("themePreviewCard")
+        preview_layout = QVBoxLayout(self.theme_preview)
+        preview_layout.setContentsMargins(14, 12, 14, 12)
+        preview_layout.setSpacing(9)
+        preview_heading = QHBoxLayout()
+        preview_title = QLabel("Appearance preview")
+        preview_title.setStyleSheet("font-size:12pt;font-weight:700;")
+        preview_hint = QLabel("Live sample of the actual interface controls")
+        preview_hint.setObjectName("previewMuted")
+        preview_heading.addWidget(preview_title)
+        preview_heading.addStretch(1)
+        preview_heading.addWidget(preview_hint)
+        preview_layout.addLayout(preview_heading)
+        preview_controls = QHBoxLayout()
+        self.theme_preview_url = QLineEdit()
+        self.theme_preview_url.setPlaceholderText("https://example.com/file.zip")
+        self.theme_preview_url.setReadOnly(True)
+        self.theme_preview_format = QComboBox()
+        self.theme_preview_format.addItems(["Automatic", "Video", "Document"])
+        self.theme_preview_primary = QPushButton("Add download")
+        self.theme_preview_primary.setProperty("previewPrimary", True)
+        preview_controls.addWidget(self.theme_preview_url, 1)
+        preview_controls.addWidget(self.theme_preview_format)
+        preview_controls.addWidget(self.theme_preview_primary)
+        preview_layout.addLayout(preview_controls)
+        self.theme_preview_progress = QProgressBar()
+        self.theme_preview_progress.setRange(0, 100)
+        self.theme_preview_progress.setValue(68)
+        self.theme_preview_progress.setFormat("  Downloading sample.zip — 68%")
+        preview_layout.addWidget(self.theme_preview_progress)
+        self.theme_preview_table = QTableWidget(2, 3)
+        self.theme_preview_table.setHorizontalHeaderLabels(["File", "Status", "Progress"])
+        self.theme_preview_table.verticalHeader().setVisible(False)
+        self.theme_preview_table.horizontalHeader().setStretchLastSection(True)
+        self.theme_preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.theme_preview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.theme_preview_table.setFixedHeight(104)
+        for row, values in enumerate((
+            ("sample.zip", "Downloading", "68%"),
+            ("manual.pdf", "Completed", "100%"),
+        )):
+            for col, value in enumerate(values):
+                self.theme_preview_table.setItem(row, col, QTableWidgetItem(value))
+        preview_layout.addWidget(self.theme_preview_table)
+        settings_layout.addWidget(self.theme_preview)
 
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -4412,7 +4460,7 @@ class FDMX(QWidget):
         theme = self.theme_combo.currentData()
         palettes = {
             "dark": ("#171a21", "#202631", "#293241", "#e8edf5", "#aab6c8", "#e34b5b", "#ffffff", "#343e4e"),
-            "midnight": ("#0b1220", "#111c30", "#192840", "#edf4ff", "#9eb2ce", "#38bdf8", "#07111f", "#2b4566"),
+            "midnight": ("#0a0f1e", "#111a2e", "#18243b", "#edf3ff", "#93a4c2", "#7c9cff", "#081225", "#2a3a57"),
             "violet": ("#171329", "#211a3b", "#302650", "#f4efff", "#b9acd8", "#a78bfa", "#171329", "#514176"),
             "ubuntu": ("#2c001e", "#3d1834", "#51263f", "#fff4fb", "#d9b9ce", "#e95420", "#ffffff", "#772953"),
             "light": ("#f3f6fb", "#ffffff", "#e9eef6", "#202938", "#65738a", "#2878d0", "#ffffff", "#d5e0ee"),
@@ -4422,7 +4470,7 @@ class FDMX(QWidget):
             "dracula": ("#282a36", "#343746", "#44475a", "#f8f8f2", "#bdc0d0", "#bd93f9", "#282a36", "#6272a4"),
             "cyber": ("#0b1020", "#111a30", "#1b2945", "#e6f7ff", "#8ba6c9", "#00e5ff", "#07111d", "#31516f"),
             "sonoma": ("#20232b", "#292e38", "#343b48", "#f5f6fa", "#b6bfce", "#8b9cff", "#ffffff", "#4a5262"),
-            "fluent": ("#f3f5f9", "#ffffff", "#e8edf5", "#1d2635", "#66758b", "#536fcb", "#ffffff", "#d5ddeb"),
+            "fluent": ("#f3f6fb", "#ffffff", "#eaf0f8", "#1b2430", "#64748b", "#0067c0", "#ffffff", "#d7e0ec"),
             "ubuntu_yaru": ("#f6f5f4", "#ffffff", "#e8e6e3", "#241f31", "#5e5c64", "#e95420", "#ffffff", "#d5d3cf"),
             "solarized": ("#002b36", "#073642", "#164752", "#eee8d5", "#93a1a1", "#2aa198", "#002b36", "#586e75"),
             "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86"),
@@ -4529,6 +4577,25 @@ class FDMX(QWidget):
             QToolButton {{ background: {raised}; color: {fg}; border: 1px solid {border}; border-radius: 7px; padding: 6px; }}
             QToolButton:hover {{ background: {accent}; color: {accent_text}; }}
         """
+        if theme == "fluent":
+            qss += """
+                QTabBar::tab { padding: 10px 18px; border-radius: 6px; }
+                QTabBar::tab:selected { border-bottom: 3px solid #0067c0; }
+                QPushButton { border-radius: 6px; padding: 8px 16px; }
+                QLineEdit, QComboBox, QTableWidget { border-radius: 6px; }
+                QProgressBar { border-radius: 4px; }
+                QProgressBar::chunk { border-radius: 3px; }
+            """
+        elif theme == "midnight":
+            qss += """
+                QTabWidget::pane { border-radius: 12px; }
+                QTabBar::tab { border-radius: 8px; padding: 10px 18px; }
+                QPushButton { border-radius: 9px; padding: 9px 16px; }
+                QLineEdit, QComboBox, QTableWidget { border-radius: 9px; }
+                QProgressBar { border-radius: 7px; }
+                QProgressBar::chunk { border-radius: 6px; }
+                QHeaderView::section { background: #18243b; }
+            """
         # Aero Glass presets use layered gradients, translucent-looking surfaces,
         # bright inner highlights and bevel-like borders. Qt stylesheets do not
         # provide true desktop backdrop blur; this is a lightweight glass visual.
@@ -4676,20 +4743,25 @@ class FDMX(QWidget):
         if hasattr(self, "settings"):
             self.settings.setValue("theme", theme)
             self.settings.sync()
-        if hasattr(self, "theme_preview"):
-            self.theme_preview.setText(
-                f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
-                "Live palette preview — actual controls update with this theme"
+        self.update_theme_preview_palette(theme, panel, raised, fg, muted, accent, border)
+
+    def update_theme_preview_palette(self, theme, panel, raised, fg, muted, accent, border):
+        """Keep the real preview controls synchronized with the active theme."""
+        if not hasattr(self, "theme_preview"):
+            return
+        self.theme_preview.setStyleSheet(
+            f"QFrame#themePreviewCard {{ background:{panel}; color:{fg}; "
+            f"border:1px solid {border}; border-top:3px solid {accent}; border-radius:12px; }}"
+            f"QLabel#previewMuted {{ color:{muted}; background:transparent; font-size:9pt; }}"
+        )
+        if hasattr(self, "theme_preview_primary"):
+            self.theme_preview_primary.setStyleSheet(
+                f"QPushButton[previewPrimary=\"true\"] {{ background:{accent}; color:"
+                f"{'#ffffff' if theme in ('fluent', 'midnight') else fg}; "
+                f"border:1px solid {accent}; border-radius:8px; padding:8px 16px; font-weight:700; }}"
+                f"QPushButton[previewPrimary=\"true\"]:hover {{ background:{raised}; color:{fg}; }}"
             )
-            preview_background = (
-                f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
-                if theme.startswith("aero_") or theme in ("crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass") else panel
-            )
-            self.theme_preview.setStyleSheet(
-                f"background:{preview_background}; color:{fg}; border:2px solid {accent}; "
-                "border-top:2px solid white; border-radius:16px; padding:22px; "
-                "font-size:12pt; font-weight:600;"
-            )
+
 
     def export_analytics_report(self):
         path, selected = QFileDialog.getSaveFileName(self, "Export download report", "GNS-Downloader-report.csv", "CSV files (*.csv);;JSON files (*.json)")
