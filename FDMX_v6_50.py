@@ -5541,6 +5541,8 @@ class FDMX(QWidget):
         self._pending_browser_resolved_url = ""
         browser_handoff = bool(getattr(self, "_pending_browser_handoff", False))
         self._pending_browser_handoff = False
+        qml_handoff = bool(getattr(self, "_pending_qml_handoff", False))
+        self._pending_qml_handoff = False
         folder = self.folder.text().strip()
         if url.lower().startswith("magnet:?"):
             self.add_torrent_source(url)
@@ -5595,7 +5597,7 @@ class FDMX(QWidget):
             "category": category_for_filename(name),
             "github_token": github_token,
             "browser_resolved_url": browser_resolved_url,
-            "browser_handoff": browser_handoff,
+            "browser_handoff": browser_handoff, "qml_handoff": qml_handoff,
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -5612,7 +5614,7 @@ class FDMX(QWidget):
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
         worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
         worker.start()
-        if not task.get("browser_handoff"):
+        if not task.get("browser_handoff") and not task.get("qml_handoff"):
             self.show_download_details(task_id)
         self.refresh_table()
 
@@ -5743,7 +5745,8 @@ class FDMX(QWidget):
         task["scheduled_at"] = ""
         self.save_tasks()
         self.refresh_table()
-        self.show_download_details(task_id)
+        if not task.get("qml_handoff"):
+            self.show_download_details(task_id)
         self.status.setText(
             f"File information ready: {task['name']} — "
             f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Starting download…"
