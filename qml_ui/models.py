@@ -59,10 +59,30 @@ class DownloadListModel(QAbstractListModel):
                 "scheduled_at": str(item.get("scheduled_at", "")),
                 "kind": str(item.get("kind", "http")),
             })
-        # Polling the legacy controller should not reset the view when no
-        # observable role changed; otherwise QML loses selection/scroll state.
-        if normalized == self._rows:
+        # Preserve persistent indexes and scroll position during normal
+        # progress polling. Reset only when task identity/order changes.
+        old_ids = [row["download_id"] for row in self._rows]
+        new_ids = [row["download_id"] for row in normalized]
+        if old_ids != new_ids:
+            self.beginResetModel()
+            self._rows = normalized
+            self.endResetModel()
             return
-        self.beginResetModel()
-        self._rows = normalized
-        self.endResetModel()
+
+        role_by_key = {
+            "download_id": self.IdRole, "file_name": self.FileNameRole,
+            "status": self.StatusRole, "progress": self.ProgressRole,
+            "speed": self.SpeedRole, "downloaded": self.DownloadedRole,
+            "total": self.TotalRole, "category": self.CategoryRole,
+            "scheduled_at": self.ScheduledAtRole, "kind": self.KindRole,
+        }
+        for row_index, new_row in enumerate(normalized):
+            old_row = self._rows[row_index]
+            changed_roles = [
+                role_by_key[key] for key in role_by_key
+                if old_row.get(key) != new_row.get(key)
+            ]
+            if changed_roles:
+                self._rows[row_index] = new_row
+                index = self.index(row_index, 0)
+                self.dataChanged.emit(index, index, changed_roles)
