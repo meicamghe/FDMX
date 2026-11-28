@@ -172,8 +172,8 @@ ApplicationWindow {
                 Repeater {
                     model: [
                         { title: "Active downloads", value: appBridge.activeDownloads.toString(), note: "Live engine data", tint: "#70ddc8" },
-                        { title: "Download speed", value: "—", note: "Waiting for backend", tint: "#81a9ff" },
-                        { title: "Completed today", value: "—", note: "Not connected yet", tint: "#c19cff" }
+                        { title: "Download speed", value: appBridge.totalSpeed, note: "Combined transfer speed", tint: "#81a9ff" },
+                        { title: "Completed today", value: appBridge.completedDownloads.toString(), note: "Completed downloads", tint: "#c19cff" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
