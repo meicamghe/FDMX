@@ -92,6 +92,16 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     adapter.retry("failed")
     assert controller.tasks["failed"]["status"] == "Queued"
     assert controller.scheduled == 1 and controller.saved == 3
+    adapter.setSchedule("queued", "2099-01-01T12:00:00")
+    assert controller.tasks["queued"]["scheduled_at"] == "2099-01-01T12:00:00"
+    adapter.clearSchedule("queued")
+    assert controller.tasks["queued"]["scheduled_at"] == ""
+    adapter.setSchedule("queued", "not-a-date")
+    assert "ISO format" in rejected[-1]
+    adapter.setSchedule("queued", "2099-01-01T12:00:00")
+    adapter.startNow("queued")
+    assert controller.tasks["queued"]["scheduled_at"] == ""
+    assert controller.scheduled == 2 and controller.saved == 7
     adapter._timer.stop()
 
 def test_qml_engine_loads_preview_window():
