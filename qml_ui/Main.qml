@@ -19,6 +19,8 @@ ApplicationWindow {
     property string selectedSection: "Overview"
     property string searchText: ""
     property string actionMessage: ""
+    property string scheduleTaskId: ""
+    property string scheduleDraft: ""
 
     Rectangle {
         anchors.fill: parent
@@ -69,6 +71,44 @@ ApplicationWindow {
                 }
             }
             Label { text: "Read-only snapshot from the existing Widgets engine."; color: "#91a0b8"; font.pixelSize: 10; wrapMode: Text.WordWrap }
+        }
+    }
+
+    Dialog {
+        id: scheduleDialog
+        title: "Schedule download"
+        modal: true
+        anchors.centerIn: parent
+        width: 440
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                text: "Enter a future local date and time (ISO format). Example: 2026-12-01T18:30:00"
+                color: "#91a0b8"
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            TextField {
+                Layout.fillWidth: true
+                text: window.scheduleDraft
+                placeholderText: "YYYY-MM-DDTHH:MM:SS"
+                onTextChanged: window.scheduleDraft = text
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Button {
+                    text: "Cancel"
+                    onClicked: scheduleDialog.close()
+                }
+                Button {
+                    text: "Save schedule"
+                    highlighted: true
+                    onClicked: {
+                        appBridge.setSchedule(window.scheduleTaskId, window.scheduleDraft)
+                        scheduleDialog.close()
+                    }
+                }
+            }
         }
     }
 
@@ -296,6 +336,25 @@ ApplicationWindow {
                                     text: "↻"
                                     enabled: status === "Failed" || status === "Canceled"
                                     onClicked: appBridge.retry(downloadId)
+                                }
+                                ToolButton {
+                                    text: "◷"
+                                    visible: status === "Queued"
+                                    onClicked: {
+                                        window.scheduleTaskId = downloadId
+                                        window.scheduleDraft = scheduledAt
+                                        scheduleDialog.open()
+                                    }
+                                }
+                                ToolButton {
+                                    text: "Clear"
+                                    visible: scheduledAt.length > 0
+                                    onClicked: appBridge.clearSchedule(downloadId)
+                                }
+                                ToolButton {
+                                    text: "Now"
+                                    visible: scheduledAt.length > 0 && status === "Queued"
+                                    onClicked: appBridge.startNow(downloadId)
                                 }
                             }
                         }
