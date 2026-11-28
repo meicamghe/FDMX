@@ -234,6 +234,21 @@ ApplicationWindow {
                                     Label { text: status + "  ·  " + speed; color: muted; font.pixelSize: 10 }
                                 }
                                 Label { text: progress + "%"; color: "#70ddc8"; font.pixelSize: 12; font.bold: true }
+                                ToolButton {
+                                    text: status === "Paused" ? "▶" : "Ⅱ"
+                                    enabled: status === "Paused" || status === "Downloading" || status === "Checking server" || status === "Retrying"
+                                    onClicked: status === "Paused" ? appBridge.resume(downloadId) : appBridge.pause(downloadId)
+                                }
+                                ToolButton {
+                                    text: "×"
+                                    enabled: status !== "Completed" && status !== "Canceled" && status !== "Failed"
+                                    onClicked: appBridge.cancel(downloadId)
+                                }
+                                ToolButton {
+                                    text: "↻"
+                                    enabled: status === "Failed" || status === "Canceled"
+                                    onClicked: appBridge.retry(downloadId)
+                                }
                             }
                         }
                         Label {
