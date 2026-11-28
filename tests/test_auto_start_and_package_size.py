@@ -37,6 +37,9 @@ class AutoStartAndPackageSizeTests(unittest.TestCase):
         self.assertIn("GNS-Downloader-Setup-6.54.exe", WINDOWS_WORKFLOW)
         self.assertIn("GNS-Downloader-Portable-v6.54-Windows-x64.zip", WINDOWS_WORKFLOW)
         self.assertIn("if ($file.Length -gt $limit)", WINDOWS_WORKFLOW)
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/v')", WINDOWS_WORKFLOW)
+        self.assertNotIn("if: github.ref == 'refs/heads/main' ||", WINDOWS_WORKFLOW)
+        self.assertIn("tag_name: ${{ github.ref_name }}", WINDOWS_WORKFLOW)
 
 
 if __name__ == "__main__":
