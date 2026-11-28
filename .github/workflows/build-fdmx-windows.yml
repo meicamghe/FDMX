@@ -143,7 +143,7 @@ jobs:
         run: |
           $qmlDir = python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).parent / 'Qt' / 'qml')"
           if (-not (Test-Path $qmlDir)) { throw "Qt QML runtime directory not found: $qmlDir" }
-          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6 --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6.QtQml --collect-all PySide6.QtQuick --collect-all PySide6.QtQuickControls2 --collect-all PySide6.QtOpenGL --collect-all PySide6.QtWidgets --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
           if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
           $qmlApp = "dist-qml/ADM QML/ADM QML.exe"
           if (-not (Test-Path $qmlApp)) { throw "ADM QML executable is missing." }
