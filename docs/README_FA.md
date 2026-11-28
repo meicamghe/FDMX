@@ -58,26 +58,26 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 ## دریافت نسخه ویندوز
 
-آخرین انتشار رسمی نسخه 6.53 است. فایل‌های قابل دریافت از لینک‌های زیر هستند:
+انتشار رسمی نسخه 6.53 ایجاد شده است؛ در حال حاضر صفحه Release فقط آرشیو سورس را دارد و بسته‌های اجرایی از بخش Artifacts اجرای موفق GitHub Actions دریافت می‌شوند:
 
-- **[نسخه Portable ZIP — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Portable-Windows-x64.zip)** — فایل را استخراج و `GNS Downloader.exe` را اجرا کنید.
-- **[نسخه Setup — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-Setup.exe)** — برای نصب برنامه و ساخت میانبرها اجرا کنید.
-- **[بسته لینوکس Ubuntu/Debian — نسخه 6.53](https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb)** — مخصوص AMD64.
+- **[بسته‌های Windows](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — Artifactهای `GNS-Downloader-Setup-v6.53` و `GNS-Downloader-Portable-v6.53` را از بخش Artifacts دریافت کنید.
+- **[بسته Linux DEB](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — Artifact با نام `GNS-Downloader-Linux-DEB-v6.53` را دریافت کنید.
+- **[افزونه‌های مرورگر](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — Artifact با نام `GNS-Downloader-browser-extensions-1.3.0`.
 - [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
 
 به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
 
-ساخت نسخه‌های جدید از طریق [Workflow ویندوز](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml) و [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-linux.yml) انجام می‌شود. انتشار رسمی فعلی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/v6.53) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
+ساخت نسخه‌های جدید از طریق [Workflow ویندوز](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml) و [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-linux.yml) انجام می‌شود. انتشار رسمی فعلی [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53) شامل نصب‌کننده ویندوز، نسخه Portable و بسته Linux DEB است.
 
 
 
 ## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 ساخته، تست نصب و اجرا شده و به انتشار عمومی GitHub پیوست شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
+بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 ساخته و تست نصب و اجرا شده است. فعلاً از [Artifact اجرای موفق لینوکس](https://github.com/meicamghe/FDMX/actions/runs/46109571137) دریافت می‌شود و هنوز به‌عنوان فایل دائمی به Release پیوست نشده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
 ### نصب سریع: بسته آماده لینوکس
 
-نسخه 6.53 شامل بسته نصب آماده **DEB برای معماری AMD64** است. برای استفاده معمول، این روش پیشنهاد می‌شود و به Git، Python، محیط مجازی یا Wine نیازی ندارد.
+بسته آماده **DEB برای معماری AMD64** در Artifact اجرای موفق [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/runs/46109571137) قرار دارد. فایل ZIP مربوط به Artifact را دریافت و استخراج کنید؛ سپس فایل DEB را نصب کنید. برای این روش به Git، Python، محیط مجازی یا Wine نیازی ندارید.
 
 معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
 
@@ -88,8 +88,7 @@ dpkg --print-architecture
 دانلود و نصب بسته (APT وابستگی‌های اعلام‌شده را خودکار نصب می‌کند):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.53/GNS-Downloader-6.53-amd64.deb" -o /tmp/GNS-Downloader-6.53-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.53-amd64.deb
+sudo apt install ./GNS-Downloader-6.53-amd64.deb
 ```
 
 پس از نصب، برنامه را از منوی برنامه‌های دسکتاپ اجرا کنید یا در ترمینال دستور `gns-downloader` را بزنید. بسته روی Ubuntu 22.04 با معماری AMD64 ساخته و تست نصب و اجرا شده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند.
