@@ -4408,8 +4408,8 @@ class FDMX(QWidget):
             self.url.setText(value)
             self.status.setText("Clipboard Monitor detected a web link and placed it in the URL field. Press Start Download when ready.")
 
-    def apply_native_glass_backdrop(self, enabled):
-        """Enable a real OS-level blurred desktop backdrop for the Crystal Aqua theme."""
+    def apply_native_glass_backdrop(self, enabled, tint=0xCCBFE9EF):
+        """Enable a native Windows acrylic backdrop with a theme-matched tint."""
         if sys.platform != "win32":
             if hasattr(self, "setAttribute"):
                 self.setAttribute(Qt.WA_TranslucentBackground, False)
@@ -4460,7 +4460,7 @@ class FDMX(QWidget):
                     wintypes.HWND, ctypes.POINTER(WINDOWCOMPOSITIONATTRIBDATA)
                 ]
                 set_composition.restype = wintypes.BOOL
-                policy = ACCENT_POLICY(4, 2, 0xCCBFE9EF, 0)  # Acrylic blur, aqua tint
+                policy = ACCENT_POLICY(4, 2, int(tint), 0)  # Acrylic blur with theme tint
                 data = WINDOWCOMPOSITIONATTRIBDATA(
                     19, ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p),
                     ctypes.sizeof(policy)
@@ -4631,9 +4631,17 @@ class FDMX(QWidget):
         # bright inner highlights and bevel-like borders. Qt stylesheets do not
         # provide true desktop backdrop blur; this is a lightweight glass visual.
         glass_qss = ""
-        native_glass = (theme == "crystal_aqua_glass")
-        self.apply_native_glass_backdrop(native_glass)
-        if theme.startswith("aero_") or theme in ("crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass"):
+        native_glass = (sys.platform == "win32" and theme in ("fluent", "midnight", "crystal_aqua_glass"))
+        native_tints = {
+            "fluent": 0xCCF3F6FB,
+            "midnight": 0xCC101A30,
+            "crystal_aqua_glass": 0xCCBFE9EF,
+        }
+        self.apply_native_glass_backdrop(native_glass, native_tints.get(theme, 0xCCBFE9EF))
+        if theme.startswith("aero_") or theme in (
+            "crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass",
+            "fluent", "midnight"
+        ):
             if theme == "aero_blue":
                 base_a, base_b = "#cceaff", "#f4fbff"
                 surface_a, surface_b = "rgba(255,255,255,0.88)", "rgba(220,242,255,0.78)"
