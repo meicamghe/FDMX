@@ -125,7 +125,8 @@ ApplicationWindow {
                         { label: "Completed", glyph: "✓" },
                         { label: "Scheduler", glyph: "◴" },
                         { label: "Queue", glyph: "☷" },
-                        { label: "Failed", glyph: "!" }
+                        { label: "Failed", glyph: "!" },
+                        { label: "History", glyph: "◷" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
@@ -251,6 +252,7 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         spacing: 8
+                        visible: selectedSection !== "History"
                         model: appBridge.downloadModel
                         delegate: Rectangle {
                             property bool sectionMatch: selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Connecting", "Starting", "Preparing", "Paused", "Canceling"].indexOf(status) >= 0) || (selectedSection === "Completed" && status === "Completed") || (selectedSection === "Scheduler" && scheduledAt.length > 0) || (selectedSection === "Queue" && status === "Queued") || (selectedSection === "Failed" && (status === "Failed" || status === "Canceled"))
@@ -291,11 +293,47 @@ ApplicationWindow {
                         }
                         Label {
                             anchors.centerIn: parent
-                            visible: appBridge.downloads.filter(function(row) { var section = selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Connecting", "Starting", "Preparing", "Paused", "Canceling"].indexOf(row.status) >= 0) || (selectedSection === "Completed" && row.status === "Completed") || (selectedSection === "Scheduler" && row.scheduled_at.length > 0) || (selectedSection === "Queue" && row.status === "Queued") || (selectedSection === "Failed" && (row.status === "Failed" || row.status === "Canceled")); return section && (searchText.length === 0 || row.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0); }).length === 0
+                            visible: selectedSection !== "History" && appBridge.downloads.filter(function(row) { var section = selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Connecting", "Starting", "Preparing", "Paused", "Canceling"].indexOf(row.status) >= 0) || (selectedSection === "Completed" && row.status === "Completed") || (selectedSection === "Scheduler" && row.scheduled_at.length > 0) || (selectedSection === "Queue" && row.status === "Queued") || (selectedSection === "Failed" && (row.status === "Failed" || row.status === "Canceled")); return section && (searchText.length === 0 || row.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0); }).length === 0
                             width: parent.width - 24
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
                             text: appBridge.downloads.length === 0 ? "No downloads are connected yet." : "No downloads match this view."
+                            color: muted
+                            font.pixelSize: 12
+                        }
+                    }
+                    ListView {
+                        id: historyList
+                        visible: selectedSection === "History"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: appBridge.history
+                        delegate: Rectangle {
+                            width: historyList.width
+                            height: modelData.error.length > 0 ? 78 : 64
+                            radius: 12
+                            color: "#1bffffff"
+                            border.color: "#20ffffff"
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+                                    Label { text: modelData.file_name; color: "#e5edf8"; font.pixelSize: 12; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    Label { text: modelData.status + (modelData.time.length ? "  ·  " + modelData.time : ""); color: muted; font.pixelSize: 10 }
+                                    Label { visible: modelData.error.length > 0; text: modelData.error; color: "#f0a4a4"; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                }
+                                Label { text: modelData.size.toLocaleString() + " bytes"; color: "#70ddc8"; font.pixelSize: 11 }
+                            }
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            visible: appBridge.history.length === 0
+                            text: "No download history yet."
                             color: muted
                             font.pixelSize: 12
                         }
