@@ -3,11 +3,9 @@
 The production QWidget application remains the default. This branch does not
 change its entry point, package configuration, or release artifacts.
 
-## Preview
-```bash
-python -m pip install PySide6
-python -m qml_ui.main
-```
+## Preview and Windows test build
+
+The standalone preview (`python -m qml_ui.main`) is intentionally disconnected. To run the experimental production QML interface with the real legacy download engine, use `python -m qml_ui.production_main`. The experimental Windows workflow builds a separate `ADM QML Preview` installer and portable package; the original Widgets package remains unchanged.
 
 ## Architecture
 - `models.py`: typed Qt list model for normalized download snapshots; progress
