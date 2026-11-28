@@ -5571,7 +5571,7 @@ class FDMX(QWidget):
                 "status": "Queued", "downloaded": 0, "total": 0,
                 "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
                 "history": False, "kind": "youtube", "media_type": media_type,
-                "scheduled_at": qml_schedule_at, "category": "Audio" if media_type == "audio" else "Video",
+                "qml_handoff": qml_handoff, "scheduled_at": qml_schedule_at, "category": "Audio" if media_type == "audio" else "Video",
                 "post_action_enabled": False, "post_action": "none", "post_action_done": False
             }
             self.save_tasks()
@@ -5863,7 +5863,8 @@ class FDMX(QWidget):
             worker.canceled.connect(self.on_canceled)
             worker.state.connect(lambda value, tid=task_id: self.on_state(tid, value))
             task["status"] = "Downloading"
-            self.show_download_details(task_id)
+            if not task.get("qml_handoff"):
+                self.show_download_details(task_id)
             worker.start()
             active += 1
         self.refresh_table()
@@ -6300,6 +6301,7 @@ class FDMX(QWidget):
                 "max_height": max(0, min(4320, _safe_int(entry.get("max_height"), 0))),
                 "max_abr": max(0, min(1000, _safe_int(entry.get("max_abr"), 0))),
                 "scheduled_at": entry.get("scheduled_at", ""),
+                "qml_handoff": bool(entry.get("qml_handoff", False)),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
                 "retry_attempts": _safe_int(entry.get("retry_attempts"), 0),
                 "post_action_enabled": bool(entry.get("post_action_enabled", False)),
@@ -6337,7 +6339,7 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "media_type", "max_height", "max_abr", "scheduled_at", "content_type", "retry_attempts",
+                "category", "kind", "media_type", "max_height", "max_abr", "scheduled_at", "qml_handoff", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
                 "parts_count"
             )})
