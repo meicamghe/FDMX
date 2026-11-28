@@ -34,6 +34,12 @@ def test_download_model_normalizes_backend_fields():
     model.modelReset.connect(lambda: resets.append(True))
     model.replace_downloads([{"download_id":"task-1","file_name":"sample.zip","status":"Downloading","progress":100,"speed_text":"2.4 MB/s","downloaded":135,"total":100,"category":"Archive"}])
     assert resets == []  # identical polling snapshots preserve view state
+    updates = []
+    model.dataChanged.connect(lambda first, last, roles: updates.append((first.row(), last.row(), roles)))
+    model.replace_downloads([{"download_id":"task-1","file_name":"sample.zip","status":"Downloading","progress":50,"speed_text":"1.2 MB/s","downloaded":50,"total":100,"category":"Archive"}])
+    assert resets == []
+    assert len(updates) == 1 and updates[0][0:2] == (0, 0)
+    assert model.data(model.index(0, 0), model.ProgressRole) == 50
 
 def test_adapter_snapshots_stats_and_task_id_actions():
     _qt()
