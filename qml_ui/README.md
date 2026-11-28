@@ -43,7 +43,7 @@ a read-only settings snapshot dialog and a typed scheduler editor for queued tas
 (with clear-schedule and start-now actions),
 and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
 and categories are included in task snapshots. History is available as a dedicated read-only screen with timestamp, size and
-failure details; URLs and local paths are intentionally not exposed. Bulk schedule management, adding new scheduled URLs, settings changes, history management/export,
+a safe failure notice; raw error text, URLs and local paths are not exposed. Bulk schedule management, adding new scheduled URLs, settings changes, history management/export,
 torrent-specific operations and analytics drill-down need additional explicit
 typed slots before those screens can claim parity.
 
