@@ -52,9 +52,7 @@ failed start-now operation restores and persists the previous schedule. History
 is a read-only screen with timestamp, size and a safe failure notice; raw error
 text, URLs and local paths are not exposed. Settings editing, bulk schedule
 management, history deletion/export, torrent-specific controls and analytics
-drill-down remain unfinished. The bridge is covered by mocked intake and
-scheduler tests; a controlled real-network transfer through the QML UI has not
-yet been accepted.
+drill-down remain unfinished. The bridge is covered by mocked intake and scheduler tests plus a real local-HTTP integration test. That test opens the production QML host with the existing QWidget controller, submits a URL through the QML bridge, exercises the real metadata probe, queue and legacy DownloadWorker, verifies the exact downloaded bytes, and confirms that no legacy detail dialog is opened. This is a controlled local-network test, not acceptance of public-internet transfers. Live external HTTP sources, GitHub authentication, YouTube, torrent transfers, and real-world proxy configurations still require separate validation.
 
 ## Remaining acceptance gates
 1. Run controlled real-download lifecycle and queue-scheduling comparisons against the Widgets UI.
