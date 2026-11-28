@@ -675,8 +675,6 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=test"
             self_owner.folder = folder
             self_owner.media_type = "audio"
-           self_owner.max_height = 0
-           self_owner.max_abr = 0
             self_owner.max_height = 0
             self_owner.max_abr = 0
             self_owner.proxy_url = ""
