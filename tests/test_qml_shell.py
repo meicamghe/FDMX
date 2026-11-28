@@ -57,6 +57,7 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     assert adapter.completedDownloads == 1
     assert adapter.totalSpeed == "2.0 KB/s"
     assert adapter.downloads[0]["download_id"] == "active"
+    assert adapter.downloadModel.rowCount() == 3
     adapter.pause("active")
     adapter.resume("active")
     assert controller.worker.calls == ["pause","resume"]
