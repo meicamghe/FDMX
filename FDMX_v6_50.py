@@ -5179,6 +5179,7 @@ class FDMX(QWidget):
     def add_download_from_browser(self, url, resolved_url=""):
         """Queue a browser-submitted URL while keeping its temporary signed URL in memory only."""
         self._pending_browser_resolved_url = resolved_url or ""
+        self._pending_browser_handoff = True
         self.url.setText(url)
         self.add_download()
         self.showNormal()
@@ -5295,6 +5296,8 @@ class FDMX(QWidget):
         url = self.url.text().strip()
         browser_resolved_url = getattr(self, "_pending_browser_resolved_url", "")
         self._pending_browser_resolved_url = ""
+        browser_handoff = bool(getattr(self, "_pending_browser_handoff", False))
+        self._pending_browser_handoff = False
         folder = self.folder.text().strip()
         if url.lower().startswith("magnet:?"):
             self.add_torrent_source(url)
@@ -5349,6 +5352,7 @@ class FDMX(QWidget):
             "category": category_for_filename(name),
             "github_token": github_token,
             "browser_resolved_url": browser_resolved_url,
+            "browser_handoff": browser_handoff,
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -5365,7 +5369,8 @@ class FDMX(QWidget):
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
         worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
         worker.start()
-        self.show_download_details(task_id)
+        if not task.get("browser_handoff"):
+            self.show_download_details(task_id)
         self.refresh_table()
 
     def _metadata_worker_finished(self, task_id, worker):
@@ -5439,7 +5444,7 @@ class FDMX(QWidget):
         task["category"] = category_for_filename(task["name"])
         # Browser hand-offs require explicit user confirmation after metadata is known.
         # Direct downloads entered inside the desktop app keep their existing flow.
-        if task.get("browser_resolved_url"):
+        if task.get("browser_handoff"):
             confirm = QMessageBox(self)
             confirm.setWindowTitle("Confirm browser download")
             confirm.setIcon(QMessageBox.Information)
