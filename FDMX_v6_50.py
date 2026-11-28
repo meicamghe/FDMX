@@ -3871,7 +3871,8 @@ class FDMX(QWidget):
 
         self.settings_dialog = QDialog(self)
         self.settings_dialog.setWindowTitle(f"{APP_NAME} Preferences")
-        self.settings_dialog.setMinimumWidth(430)
+        self.settings_dialog.setMinimumWidth(760)
+        self.settings_dialog.resize(820, 620)
         settings_layout = QVBoxLayout(self.settings_dialog)
         settings_grid = QGridLayout()
         settings_grid.addWidget(QLabel("Maximum simultaneous downloads:"), 0, 0)
@@ -4112,6 +4113,7 @@ class FDMX(QWidget):
         # the exact application stylesheet and palette currently being previewed.
         self.theme_preview = QFrame()
         self.theme_preview.setObjectName("themePreviewCard")
+        self.theme_preview.setMinimumWidth(700)
         preview_layout = QVBoxLayout(self.theme_preview)
         preview_layout.setContentsMargins(14, 12, 14, 12)
         preview_layout.setSpacing(9)
