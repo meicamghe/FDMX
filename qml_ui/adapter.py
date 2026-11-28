@@ -148,9 +148,16 @@ class FDMXDownloadAdapter(QObject):
         if not task or worker is None or task.get("status") not in _ACTIVE:
             self.actionRejected.emit("This download cannot be paused.")
             return
-        worker.pause()
+        try:
+            worker.pause()
+        except Exception:
+            self.actionRejected.emit("The download worker could not be paused.")
+            return
         task["status"] = "Paused"
-        self._controller.save_tasks()
+        try:
+            self._controller.save_tasks()
+        except Exception:
+            self.actionRejected.emit("Download paused, but its state could not be saved.")
         self.refresh()
 
     @Slot(str)
@@ -160,9 +167,16 @@ class FDMXDownloadAdapter(QObject):
         if not task or worker is None or task.get("status") != "Paused":
             self.actionRejected.emit("This download cannot be resumed.")
             return
-        worker.resume()
+        try:
+            worker.resume()
+        except Exception:
+            self.actionRejected.emit("The download worker could not be resumed.")
+            return
         task["status"] = "Downloading"
-        self._controller.save_tasks()
+        try:
+            self._controller.save_tasks()
+        except Exception:
+            self.actionRejected.emit("Download resumed, but its state could not be saved.")
         self.refresh()
 
     @Slot(str)
@@ -170,7 +184,11 @@ class FDMXDownloadAdapter(QObject):
         if self._task(task_id) is None:
             self.actionRejected.emit("Download not found.")
             return
-        self._controller.cancel_task(task_id)
+        try:
+            self._controller.cancel_task(task_id)
+        except Exception:
+            self.actionRejected.emit("The download could not be canceled.")
+            return
         self.refresh()
 
     @Slot(str)
@@ -180,6 +198,9 @@ class FDMXDownloadAdapter(QObject):
             self.actionRejected.emit("Only failed or canceled downloads can be retried.")
             return
         task.update({"status": "Queued", "downloaded": 0, "total": 0, "speed": 0.0, "eta": -1.0, "path": "", "worker": None})
-        self._controller.save_tasks()
-        self._controller.schedule_downloads()
+        try:
+            self._controller.save_tasks()
+            self._controller.schedule_downloads()
+        except Exception:
+            self.actionRejected.emit("Retry was queued, but the download scheduler failed.")
         self.refresh()
