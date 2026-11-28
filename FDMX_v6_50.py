@@ -5436,6 +5436,33 @@ class FDMX(QWidget):
         task["accept_ranges"] = bool(info.get("accept_ranges"))
         task["status"] = "Ready"
         task["category"] = category_for_filename(task["name"])
+        # Browser hand-offs require explicit user confirmation after metadata is known.
+        # Direct downloads entered inside the desktop app keep their existing flow.
+        if task.get("browser_resolved_url"):
+            confirm = QMessageBox(self)
+            confirm.setWindowTitle("Confirm browser download")
+            confirm.setIcon(QMessageBox.Information)
+            confirm.setText(task["name"])
+            confirm.setInformativeText(
+                f"File size: {format_bytes(task['total']) if task['total'] else 'Unknown'}\\n"
+                f"File type: {task['content_type']}\\n"
+                f"Source: {task.get('url', '')}\\n\\n"
+                "Start this download now?"
+            )
+            start_button = confirm.addButton("Start Download", QMessageBox.AcceptRole)
+            confirm.addButton("Cancel", QMessageBox.RejectRole)
+            confirm.setDefaultButton(start_button)
+            confirm.exec()
+            if confirm.clickedButton() is not start_button:
+                detail = self.detail_windows.get(task_id)
+                if detail is not None:
+                    detail.close()
+                self.tasks.pop(task_id, None)
+                self.save_tasks()
+                self.refresh_table()
+                self.status.setText("Browser download canceled before transfer started.")
+                return
+
         existing_path = os.path.join(task["folder"], task["name"])
         if os.path.isfile(existing_path):
             choice = self.ask_existing_file_action(existing_path)
