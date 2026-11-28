@@ -18,6 +18,7 @@ ApplicationWindow {
     property color accent: "#65d6c4"
     property string selectedSection: "Overview"
     property string searchText: ""
+    property string actionMessage: ""
 
     Rectangle {
         anchors.fill: parent
@@ -122,7 +123,9 @@ ApplicationWindow {
                         { label: "All downloads", glyph: "↓" },
                         { label: "In progress", glyph: "◷" },
                         { label: "Completed", glyph: "✓" },
-                        { label: "Scheduler", glyph: "◴" }
+                        { label: "Scheduler", glyph: "◴" },
+                        { label: "Queue", glyph: "☷" },
+                        { label: "Failed", glyph: "!" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
@@ -205,7 +208,7 @@ ApplicationWindow {
                     model: [
                         { title: "Active downloads", value: appBridge.activeDownloads.toString(), note: "Live engine data", tint: "#70ddc8" },
                         { title: "Download speed", value: appBridge.totalSpeed, note: "Combined transfer speed", tint: "#81a9ff" },
-                        { title: "Completed today", value: appBridge.completedDownloads.toString(), note: "Completed downloads", tint: "#c19cff" }
+                        { title: "Completed", value: appBridge.completedDownloads.toString(), note: "Completed downloads", tint: "#c19cff" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
@@ -239,7 +242,7 @@ ApplicationWindow {
                     RowLayout {
                         Label { text: "Recent activity"; color: "white"; font.pixelSize: 17; font.bold: true }
                         Item { Layout.fillWidth: true }
-                        Label { text: "PREVIEW"; color: "#70ddc8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.3 }
+                        Label { text: "LIVE ENGINE"; color: "#70ddc8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.3 }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#22ffffff" }
                     ListView {
@@ -250,7 +253,7 @@ ApplicationWindow {
                         spacing: 8
                         model: appBridge.downloadModel
                         delegate: Rectangle {
-                            property bool sectionMatch: selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Connecting", "Starting", "Preparing", "Paused"].indexOf(status) >= 0) || (selectedSection === "Completed" && status === "Completed") || (selectedSection === "Scheduler" && scheduledAt.length > 0)
+                            property bool sectionMatch: selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Connecting", "Starting", "Preparing", "Paused", "Canceling"].indexOf(status) >= 0) || (selectedSection === "Completed" && status === "Completed") || (selectedSection === "Scheduler" && scheduledAt.length > 0) || (selectedSection === "Queue" && status === "Queued") || (selectedSection === "Failed" && (status === "Failed" || status === "Canceled"))
                             property bool searchMatch: searchText.length === 0 || fileName.toLowerCase().indexOf(searchText.toLowerCase()) >= 0
                             visible: sectionMatch && searchMatch
                             width: downloadList.width
@@ -288,7 +291,7 @@ ApplicationWindow {
                         }
                         Label {
                             anchors.centerIn: parent
-                            visible: appBridge.downloads.filter(function(row) { var section = selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Connecting", "Starting", "Preparing", "Paused"].indexOf(row.status) >= 0) || (selectedSection === "Completed" && row.status === "Completed") || (selectedSection === "Scheduler" && row.scheduled_at.length > 0); return section && (searchText.length === 0 || row.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0); }).length === 0
+                            visible: appBridge.downloads.filter(function(row) { var section = selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Checking metadata", "Seeding", "Connecting", "Starting", "Preparing", "Paused", "Canceling"].indexOf(row.status) >= 0) || (selectedSection === "Completed" && row.status === "Completed") || (selectedSection === "Scheduler" && row.scheduled_at.length > 0) || (selectedSection === "Queue" && row.status === "Queued") || (selectedSection === "Failed" && (row.status === "Failed" || row.status === "Canceled")); return section && (searchText.length === 0 || row.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0); }).length === 0
                             width: parent.width - 24
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
@@ -299,6 +302,43 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    Connections {
+        target: appBridge
+        function onActionRejected(message) {
+            window.actionMessage = message
+            actionToast.restart()
+        }
+    }
+
+    Timer {
+        id: actionToast
+        interval: 3500
+        repeat: false
+        onTriggered: window.actionMessage = ""
+    }
+
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        z: 20
+        visible: window.actionMessage.length > 0
+        radius: 12
+        color: "#e52a3548"
+        border.color: "#70ddc8"
+        width: Math.min(parent.width - 48, toastLabel.implicitWidth + 36)
+        height: toastLabel.implicitHeight + 22
+        Label {
+            id: toastLabel
+            anchors.centerIn: parent
+            width: parent.width - 24
+            text: window.actionMessage
+            color: "#f5f7fb"
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 }
