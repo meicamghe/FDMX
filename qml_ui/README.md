@@ -36,16 +36,25 @@ path and is covered by a dedicated offscreen smoke test. The production startup
 path still does not call it: Widgets remains the default and fallback until
 real-download lifecycle, UI parity, packaging and Windows rendering are accepted.
 
-The QML shell now has working sidebar filtering (overview, all, active,
-completed, scheduled, queued, failed and history), filename search across both
-downloads and history, visible rejection feedback for unavailable task actions,
-a read-only settings snapshot dialog and a typed scheduler editor for queued tasks
-(with clear-schedule and start-now actions),
-and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
-and categories are included in task snapshots. History is available as a dedicated read-only screen with timestamp, size and
-a safe failure notice; raw error text, URLs and local paths are not exposed. Bulk schedule management, adding new scheduled URLs, settings changes, history management/export,
-torrent-specific operations and analytics drill-down need additional explicit
-typed slots before those screens can claim parity.
+The QML shell now includes a URL intake field that submits HTTP/HTTPS, YouTube
+and magnet links through the existing controller pipeline. An optional future
+ISO date/time can be supplied for HTTP/HTTPS and YouTube tasks; the timestamp is
+preserved across metadata probing and the existing scheduler holds the task until
+its due time. Magnet-link scheduling is intentionally rejected. QML-originated
+HTTP tasks suppress the legacy detail popups so the QML list remains the primary
+view; existing-file conflict and private GitHub authentication prompts still use
+the legacy controller dialogs. The shell also has sidebar filtering (overview,
+all, active, completed, scheduled, queued, failed and history), filename search
+across downloads and history, visible rejection feedback, read-only settings,
+queued-task schedule/clear/start-now actions, and pause/resume/cancel/retry
+controls on eligible rows. Scheduler persistence failures are surfaced, and a
+failed start-now operation restores and persists the previous schedule. History
+is a read-only screen with timestamp, size and a safe failure notice; raw error
+text, URLs and local paths are not exposed. Settings editing, bulk schedule
+management, history deletion/export, torrent-specific controls and analytics
+drill-down remain unfinished. The bridge is covered by mocked intake and
+scheduler tests; a controlled real-network transfer through the QML UI has not
+yet been accepted.
 
 ## Remaining acceptance gates
 1. Run controlled real-download lifecycle and queue-scheduling comparisons against the Widgets UI.
