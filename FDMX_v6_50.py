@@ -4759,29 +4759,45 @@ class FDMX(QWidget):
                 }}
             """
             if native_glass:
-                # Let the real DWM acrylic material show through the entire top-level
-                # window. Interactive controls retain their own translucent surfaces.
+                # Native DWM acrylic remains visible behind theme-tinted glass layers.
+                if theme == "midnight":
+                    root_surface = "rgba(8,14,27,0.30)"
+                    panel_surface = "rgba(17,29,49,0.56)"
+                    control_surface = "rgba(27,42,66,0.76)"
+                    header_surface = "rgba(36,54,82,0.72)"
+                    glass_edge = "rgba(159,184,230,0.34)"
+                else:
+                    root_surface = "rgba(239,246,255,0.24)"
+                    panel_surface = "rgba(255,255,255,0.42)"
+                    control_surface = "rgba(255,255,255,0.66)"
+                    header_surface = "rgba(226,237,249,0.64)"
+                    glass_edge = "rgba(255,255,255,0.86)"
                 glass_qss += f"""
                     QWidget {{ background: transparent; }}
-                    QMainWindow, QDialog {{ background: transparent; }}
+                    QMainWindow, QDialog {{ background: {root_surface}; }}
                     QTabWidget::pane, QGroupBox {{
-                        background: rgba(225,250,250,0.34);
-                        border: 1px solid rgba(255,255,255,0.82);
+                        background: {panel_surface};
+                        border: 1px solid {glass_edge};
+                        border-top: 1px solid rgba(255,255,255,0.92);
                     }}
                     QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QComboBox,
-                    QTextEdit, QTableWidget, QListWidget {{
-                        background: rgba(245,255,255,0.42);
-                        border: 1px solid rgba(255,255,255,0.78);
+                    QTextEdit, QPlainTextEdit, QTableWidget, QTableView, QListWidget,
+                    QTreeWidget, QTreeView {{
+                        background: {control_surface};
+                        border: 1px solid {glass_edge};
                     }}
                     QPushButton, QToolButton {{
-                        background: rgba(255,255,255,0.48);
-                        border: 1px solid rgba(255,255,255,0.9);
+                        background: {header_surface};
+                        border: 1px solid {glass_edge};
+                        border-top: 1px solid rgba(255,255,255,0.96);
                     }}
                     QHeaderView::section {{
-                        background: rgba(205,241,242,0.48);
+                        background: {header_surface};
+                        border-bottom: 1px solid {glass_edge};
                     }}
                     QMenuBar, QMenu, QStatusBar {{
-                        background: rgba(225,250,250,0.38);
+                        background: {panel_surface};
+                        border-color: {glass_edge};
                     }}
                     QTableWidget::item {{ background: transparent; }}
                 """
