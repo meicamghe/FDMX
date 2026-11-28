@@ -79,7 +79,7 @@ ApplicationWindow {
     }
 
     component GlassPanel: Rectangle {
-        color: surface
+        color: "#b817263c"
         radius: 20
         border.width: 1
         border.color: line
