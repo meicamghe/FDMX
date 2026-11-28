@@ -167,3 +167,53 @@ def test_qml_exposes_history_and_scheduler_actions():
         'function onActionRejected(message)',
     ):
         assert marker in source
+
+
+def test_adapter_submits_links_through_legacy_intake_without_clobbering_input():
+    _qt()
+    from PySide6.QtCore import QObject
+    from qml_ui.adapter import FDMXDownloadAdapter
+
+    class Field:
+        def __init__(self, value=""):
+            self.value = value
+        def text(self):
+            return self.value
+        def setText(self, value):
+            self.value = value
+
+    class Controller(QObject):
+        def __init__(self):
+            super().__init__()
+            self.url = Field("user is editing")
+            self.folder = Field("/tmp/adm-downloads")
+            self.tasks = {}
+            self.history = []
+            self.submitted = []
+        def add_download(self):
+            value = self.url.text()
+            self.submitted.append(value)
+            task_id = f"task-{len(self.submitted)}"
+            self.tasks[task_id] = {
+                "name": "sample.bin", "status": "Checking metadata",
+                "url": value, "folder": self.folder.text(),
+            }
+
+    controller = Controller()
+    adapter = FDMXDownloadAdapter(controller, interval_ms=100000)
+    rejected = []
+    adapter.actionRejected.connect(rejected.append)
+    adapter.queueDownload("https://example.test/sample.bin")
+    assert controller.submitted == ["https://example.test/sample.bin"]
+    assert controller.url.text() == "user is editing"
+    assert adapter.downloadModel.rowCount() == 1
+    adapter.queueDownload("file:///etc/passwd")
+    assert rejected and "valid HTTP" in rejected[-1]
+    assert len(controller.submitted) == 1
+    adapter._timer.stop()
+
+
+def test_qml_exposes_real_download_intake():
+    source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
+    assert 'placeholderText: "Paste a download link or magnet URL…"' in source
+    assert "appBridge.queueDownload(downloadUrlField.text)" in source
