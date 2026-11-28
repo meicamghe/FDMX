@@ -60,7 +60,7 @@ def test_adapter_snapshots_stats_and_task_id_actions():
                 "queued":{"name":"queued.zip","status":"Queued","worker":None},
                 "done":{"name":"done.pdf","status":"Completed","downloaded":10,"total":10},
             }
-            self.history=[{"name":"done.pdf","status":"Completed","completed_at":1,"time":"2026-11-28 09:00:00","size":4096}]
+            self.history=[{"name":"done.pdf","status":"Completed","completed_at":1,"time":"2026-11-28 09:00:00","size":4096,"error":"Request failed at https://secret.example/private/file"}]
             self.saved=0; self.scheduled=0; self.canceled=[]
         def save_tasks(self): self.saved+=1
         def schedule_downloads(self): self.scheduled+=1
@@ -74,6 +74,8 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     assert adapter.history[0]["size"] == 4096
     assert adapter.history[0]["time"] == "2026-11-28 09:00:00"
     assert "url" not in adapter.history[0] and "path" not in adapter.history[0]
+    assert adapter.history[0]["error"] == "See the application log for details."
+    assert "secret.example" not in str(adapter.history[0])
     assert adapter.scheduledDownloads == 0
     assert adapter.settings["maxDownloads"] is None
     assert adapter.totalSpeed == "2.0 KB/s"
