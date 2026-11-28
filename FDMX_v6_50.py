@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.53"
+APP_VERSION = "6.54"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -1463,8 +1463,7 @@ class DownloadDetailsDialog(QDialog):
         content_type = task.get("content_type", "Unknown") or "Unknown"
         self.summary_label.setText(
             f"Status: {status}    |    File size: {metadata_size}\n"
-            f"Progress: {percent}%    |    Downloaded: {size_text}\n"
-            f"Type: {content_type}    |    Speed: {speed_text}    |    ETA: {eta_text}"
+            f"Speed: {speed_text}    |    ETA: {eta_text}"
         )
         self.url_label.setText("URL: " + str(task.get("url", "")))
         self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
@@ -1472,15 +1471,6 @@ class DownloadDetailsDialog(QDialog):
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
         if completed:
             self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
-        elif task.get("kind") != "torrent":
-            selected_parts = int(task.get("parts_count") or 0)
-            if selected_parts:
-                self.summary_label.setText(
-                    self.summary_label.text()
-                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
-                )
-            elif status in ("Downloading", "Checking server", "Retrying"):
-                self.summary_label.setText(self.summary_label.text() + "\nFixed connection mode: waiting to start configured parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
@@ -3750,6 +3740,9 @@ class FDMX(QWidget):
         self.setStyleSheet("""
             QWidget { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; }
             QLineEdit, QSpinBox, QDateTimeEdit, QComboBox { padding: 7px 9px; min-height: 30px; font-size: 11pt; }
+            QComboBox { padding-right: 28px; }
+            QComboBox::drop-down { width: 25px; border-left: 1px solid #aebbd0; }
+            QComboBox::down-arrow { width: 9px; height: 9px; }
             QPushButton { padding: 7px 13px; min-height: 32px; font-size: 10.5pt; font-weight: 600; }
             QPushButton:hover { background: #dff4e7; }
             QTableWidget { gridline-color: #d9d9d9; }
@@ -3762,15 +3755,6 @@ class FDMX(QWidget):
         file_menu.addAction("Add download", lambda: self.url.setFocus())
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
-
-        download_menu = self.menu_bar.addMenu("Download")
-        for label, callback in (
-            ("Start queue", self.start_queue), ("Pause selected", self.pause_selected),
-            ("Resume selected", self.resume_selected), ("Cancel selected", self.cancel_selected),
-            ("Retry selected", self.retry_selected), ("Remove from list", self.remove_selected),
-            ("Delete file from disk", self.delete_file_selected),
-        ):
-            download_menu.addAction(label, callback)
 
         view_menu = self.menu_bar.addMenu("View")
         filter_menu = view_menu.addMenu("Show")
@@ -3792,6 +3776,7 @@ class FDMX(QWidget):
         settings_menu = self.menu_bar.addMenu("Settings")
         settings_menu.addAction("Preferences…", self.open_settings_dialog)
         help_menu = self.menu_bar.addMenu("Help")
+        help_menu.addAction("GitHub project", lambda: QDesktopServices.openUrl(QUrl("https://github.com/meicamghe/FDMX")))
         help_menu.addAction("Check for updates…", self.check_for_updates)
         help_menu.addAction(f"About {APP_NAME}", self.show_about)
         root.setMenuBar(self.menu_bar)
@@ -3970,6 +3955,9 @@ class FDMX(QWidget):
         clear_schedule = QPushButton("Clear schedule")
         clear_schedule.clicked.connect(self.clear_selected_schedule)
         schedule_controls.addWidget(clear_schedule)
+        clear_all_schedules = QPushButton("Clear All")
+        clear_all_schedules.clicked.connect(self.clear_all_schedules)
+        schedule_controls.addWidget(clear_all_schedules)
         start_now = QPushButton("Start now")
         start_now.clicked.connect(self.start_selected_now)
         schedule_controls.addWidget(start_now)
@@ -4089,10 +4077,14 @@ class FDMX(QWidget):
         # Select the visual preset automatically for the current desktop OS.
         # No theme-selection tab is exposed in the product UI.
         self.theme_combo = QComboBox()
-        if sys.platform.startswith("linux"):
-            self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")
-        else:
-            self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_combo.addItem("Light", "light")
+        self.theme_combo.addItem("Dark", "dark")
+        self.theme_combo.addItem("Midnight", "midnight")
+        self.theme_combo.addItem("Violet", "violet")
+        self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_combo.currentIndexChanged.connect(self.apply_selected_theme)
+        settings_grid.addWidget(QLabel("Appearance theme:"), 8, 0)
+        settings_grid.addWidget(self.theme_combo, 8, 1)
         self.theme_preview = QLabel()
 
         self.status = QLabel("Ready — add a URL to begin.")
@@ -4227,6 +4219,25 @@ class FDMX(QWidget):
         self.save_tasks()
         self.refresh_schedule_table()
         self.status.setText(f"Schedule cleared for {task.get('name', 'download')}.")
+
+    def clear_all_schedules(self):
+        scheduled = [task for task in self.tasks.values() if task.get("scheduled_at")]
+        if not scheduled:
+            self.status.setText("There are no scheduled downloads to clear.")
+            return
+        answer = QMessageBox.question(
+            self, "Clear all schedules",
+            f"Remove the scheduled start time from {len(scheduled)} download(s)?\n"
+            "The downloads will remain in your list and will not be deleted.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        for task in scheduled:
+            task["scheduled_at"] = ""
+        self.save_tasks()
+        self.refresh_schedule_table()
+        self.status.setText(f"Cleared {len(scheduled)} download schedule(s).")
 
     def start_selected_now(self):
         task_id = self.selected_schedule_task()
@@ -4379,6 +4390,8 @@ class FDMX(QWidget):
         theme = self.theme_combo.currentData()
         palettes = {
             "dark": ("#171a21", "#202631", "#293241", "#e8edf5", "#aab6c8", "#e34b5b", "#ffffff", "#343e4e"),
+            "midnight": ("#0b1220", "#111c30", "#192840", "#edf4ff", "#9eb2ce", "#38bdf8", "#07111f", "#2b4566"),
+            "violet": ("#171329", "#211a3b", "#302650", "#f4efff", "#b9acd8", "#a78bfa", "#171329", "#514176"),
             "ubuntu": ("#2c001e", "#3d1834", "#51263f", "#fff4fb", "#d9b9ce", "#e95420", "#ffffff", "#772953"),
             "light": ("#f3f6fb", "#ffffff", "#e9eef6", "#202938", "#65738a", "#2878d0", "#ffffff", "#d5e0ee"),
             "blue": ("#0e1a2b", "#14263c", "#1c3550", "#e8f2ff", "#9fb8d2", "#2997e8", "#ffffff", "#294d70"),
@@ -6116,9 +6129,10 @@ class FDMX(QWidget):
         self.torrent_upload_limit.valueChanged.connect(self.save_preferences)
         self.folder.editingFinished.connect(self.save_preferences)
         self.clipboard_monitor.setChecked(self.settings.value("clipboard_monitor", False, type=bool))
-        default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"
-        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(default_theme)))
-        self.settings.setValue("theme", default_theme)
+        default_theme = "fluent"
+        saved_theme = self.settings.value("theme", default_theme, type=str)
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(saved_theme)))
+        self.settings.setValue("theme", saved_theme if self.theme_combo.currentData() else default_theme)
         self.apply_selected_theme()
         self.proxy_enabled.setChecked(self.settings.value("proxy_enabled", False, type=bool))
         self.proxy_url.setText(self.settings.value("proxy_url", "", type=str))
