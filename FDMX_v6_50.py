@@ -4683,6 +4683,16 @@ class FDMX(QWidget):
                 base_a, base_b = "#bfe9ef", "#eaffff"
                 surface_a, surface_b = "rgba(255,255,255,0.66)", "rgba(202,242,240,0.48)"
                 edge, glow = "#ffffff", "#18a9b8"
+            elif theme == "fluent":
+                # Windows 11 Mica/Acrylic-inspired cool glass.
+                base_a, base_b = "#c8d9ed", "#edf4fc"
+                surface_a, surface_b = "rgba(255,255,255,0.76)", "rgba(226,237,249,0.60)"
+                edge, glow = "rgba(255,255,255,0.94)", "#4b9de0"
+            elif theme == "midnight":
+                # Deep navy smoked glass with restrained blue edge lighting.
+                base_a, base_b = "#080e1b", "#1b2c49"
+                surface_a, surface_b = "rgba(35,52,79,0.78)", "rgba(13,23,41,0.68)"
+                edge, glow = "rgba(159,184,230,0.42)", "#7c9cff"
             else:
                 base_a, base_b = "#102338", "#294a65"
                 surface_a, surface_b = "rgba(91,133,164,0.42)", "rgba(25,49,70,0.88)"
