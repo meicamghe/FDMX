@@ -3903,39 +3903,45 @@ class FDMX(QWidget):
         self.settings_dialog.resize(820, 620)
         settings_layout = QVBoxLayout(self.settings_dialog)
         settings_grid = QGridLayout()
+        settings_grid.addWidget(QLabel("Language:"), 0, 0)
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("English", "en")
+        self.language_combo.addItem("فارسی", "fa")
+        self.language_combo.currentIndexChanged.connect(self.apply_language)
+        settings_grid.addWidget(self.language_combo, 0, 1)
         settings_grid.addWidget(QLabel("Maximum simultaneous downloads:"), 0, 0)
         self.max_downloads = QSpinBox()
         self.max_downloads.setRange(1, 16)
         self.max_downloads.setValue(8)
         settings_grid.addWidget(self.max_downloads, 0, 1)
-        settings_grid.addWidget(QLabel("Download parts per file (1–16):"), 1, 0)
+        settings_grid.addWidget(QLabel("Download parts per file (1–16):"), 2, 0)
         self.parts_count = QSpinBox()
         self.parts_count.setRange(1, MAX_PARTS)
         self.parts_count.setValue(CONNECTIONS)
         self.parts_count.setToolTip("Fixed number of parallel connections for each file; default is 8.")
-        settings_grid.addWidget(self.parts_count, 1, 1)
-        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 2, 0)
+        settings_grid.addWidget(self.parts_count, 2, 1)
+        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 3, 0)
         self.speed_limit = QSpinBox()
         self.speed_limit.setRange(0, 10_000_000)
         self.speed_limit.setValue(0)
-        settings_grid.addWidget(self.speed_limit, 2, 1)
-        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 3, 0)
+        settings_grid.addWidget(self.speed_limit, 3, 1)
+        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 4, 0)
         self.torrent_upload_limit = QSpinBox()
         self.torrent_upload_limit.setRange(0, 10_000_000)
         self.torrent_upload_limit.setValue(1)
         self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
         self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
-        settings_grid.addWidget(self.torrent_upload_limit, 3, 1)
+        settings_grid.addWidget(self.torrent_upload_limit, 4, 1)
         self.proxy_enabled = QCheckBox("Use proxy")
-        settings_grid.addWidget(self.proxy_enabled, 4, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_enabled, 6, 0, 1, 2)
         self.proxy_url = QLineEdit()
         self.proxy_url.setPlaceholderText("http://127.0.0.1:8080 | socks5h://127.0.0.1:1080")
         self.proxy_url.setToolTip("HTTP/HTTPS proxies work for standard downloads. YouTube also supports SOCKS4/4a/5/5h. Telegram MTProto requires a local MTProto-to-SOCKS bridge.")
-        settings_grid.addWidget(self.proxy_url, 5, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_url, 7, 0, 1, 2)
         proxy_help = QLabel("Supported: HTTP, HTTPS, SOCKS4/4a/5/5h. Telegram MTProto needs a local MTProto-to-SOCKS bridge.")
         proxy_help.setWordWrap(True)
         proxy_help.setStyleSheet("color:#64748b;font-size:11px;")
-        settings_grid.addWidget(proxy_help, 6, 0, 1, 2)
+        settings_grid.addWidget(proxy_help, 8, 0, 1, 2)
         github_help = QLabel(
             "GitHub Actions artifacts require repository access. GNS Downloader uses an existing "
             "GH_TOKEN/GITHUB_TOKEN or GitHub CLI login; otherwise it asks for a temporary token "
@@ -3943,7 +3949,7 @@ class FDMX(QWidget):
         )
         github_help.setWordWrap(True)
         github_help.setStyleSheet("color:#64748b;font-size:11px;")
-        settings_grid.addWidget(github_help, 7, 0, 1, 2)
+        settings_grid.addWidget(github_help, 8, 0, 1, 2)
         settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
@@ -4881,6 +4887,81 @@ class FDMX(QWidget):
         for row, (category, count) in enumerate(sorted(counts.items(), key=lambda item: (-item[1], item[0]))):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
+
+    def apply_language(self, *_):
+        """Apply the selected interface language to the main window and its settings."""
+        if not hasattr(self, "language_combo"):
+            return
+        language = self.language_combo.currentData() or "en"
+        fa = {
+            "File": "فایل", "Add download": "افزودن دانلود", "Exit": "خروج",
+            "View": "نمایش", "Show": "نمایش", "All downloads": "همه دانلودها",
+            "In progress": "در حال دانلود", "Queue": "صف دانلود", "Completed": "تکمیل‌شده", "Failed": "ناموفق",
+            "File category": "دسته‌بندی فایل", "Video": "ویدئو", "Audio": "صوت", "Documents": "اسناد",
+            "Compressed": "فشرده", "Python": "پایتون", "Programs": "برنامه‌ها", "Images": "تصاویر",
+            "Spreadsheets": "صفحه‌گسترده", "Code": "کد", "Other": "سایر", "Tools": "ابزارها",
+            "Add torrent file…": "افزودن فایل تورنت…", "Website Downloader…": "دریافت وب‌سایت…",
+            "Install browser extensions…": "نصب افزونه مرورگر…", "Read URL from clipboard": "خواندن نشانی از کلیپ‌بورد",
+            "Export report (CSV / JSON)…": "خروجی گزارش (CSV / JSON)…", "Verify SHA-256…": "بررسی SHA-256…",
+            "Settings": "تنظیمات", "Preferences…": "ترجیحات…", "Help": "راهنما", "GitHub project": "پروژه در گیت‌هاب",
+            "Check for updates…": "بررسی به‌روزرسانی…", "Downloads": "دانلودها", "Search downloads…": "جستجوی دانلودها…",
+            "Add URL": "افزودن نشانی", "Start": "شروع", "Pause": "مکث", "Resume": "ادامه", "Cancel": "لغو",
+            "Remove": "حذف", "Delete from disk": "حذف از دیسک", "Open folder": "بازکردن پوشه",
+            "Clipboard Monitor": "پایش کلیپ‌بورد", "URL:": "نشانی:", "Save to:": "ذخیره در:",
+            "Browse…": "مرور…", "Start Download": "شروع دانلود", "Clipboard": "کلیپ‌بورد", "Torrent…": "تورنت…",
+            "Language:": "زبان:", "English": "انگلیسی", "Maximum simultaneous downloads:": "حداکثر دانلود هم‌زمان:",
+            "Download parts per file (1–16):": "تعداد بخش‌های هر فایل (۱ تا ۱۶):",
+            "Speed limit per file (KB/s, 0 = unlimited):": "محدودیت سرعت هر فایل (KB/s، صفر = نامحدود):",
+            "Torrent upload limit (KB/s, 0 = unlimited):": "محدودیت آپلود تورنت (KB/s، صفر = نامحدود):",
+            "Use proxy": "استفاده از پراکسی", "Save": "ذخیره", "Close": "بستن",
+            "File / Progress": "فایل / پیشرفت", "Status": "وضعیت", "Downloaded / Size": "دریافت‌شده / حجم",
+            "Speed": "سرعت", "Time left": "زمان باقی‌مانده", "Select a queued file, choose its start date and time, then apply the schedule.": "یک فایل از صف انتخاب کنید، زمان شروع را تعیین و برنامه‌ریزی را اعمال کنید.",
+            "File": "فایل", "Scheduled start": "زمان شروع برنامه‌ریزی‌شده", "Start date and time:": "تاریخ و زمان شروع:",
+            "Apply to selected file": "اعمال برای فایل انتخاب‌شده", "Clear schedule": "پاک‌کردن زمان‌بندی",
+            "Clear All": "پاک‌کردن همه", "Start now": "شروع اکنون", "Download URL:": "نشانی دانلود:",
+            "Paste a direct HTTP or HTTPS download link": "پیوند مستقیم دانلود HTTP یا HTTPS را وارد کنید",
+            "Add link to schedule": "افزودن پیوند به زمان‌بندی",
+            "Choose a start date/time, paste a direct link, then click Add link to schedule.": "زمان شروع را انتخاب و پیوند مستقیم را وارد کنید؛ سپس افزودن پیوند به زمان‌بندی را بزنید.",
+            "Schedule": "زمان‌بندی", "Website scan": "بررسی وب‌سایت",
+            "Paste HTTP, HTTPS, YouTube, or magnet link here…": "پیوند HTTP، HTTPS، یوتیوب یا مگنت را اینجا وارد کنید…",
+            "YouTube video": "ویدئوی یوتیوب", "YouTube audio": "صدای یوتیوب"
+        }
+        mapping = fa if language == "fa" else {v: k for k, v in fa.items()}
+        self.setLayoutDirection(Qt.RightToLeft if language == "fa" else Qt.LeftToRight)
+        for widget in self.findChildren(QWidget):
+            if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+                old = widget.text()
+                if old in mapping:
+                    widget.setText(mapping[old])
+            if isinstance(widget, QLineEdit):
+                old = widget.placeholderText()
+                if old in mapping:
+                    widget.setPlaceholderText(mapping[old])
+            if isinstance(widget, QComboBox):
+                for index in range(widget.count()):
+                    old = widget.itemText(index)
+                    if old in mapping:
+                        widget.setItemText(index, mapping[old])
+        for menu in self.menu_bar.findChildren(QMenu):
+            for action in menu.actions():
+                old = action.text()
+                if old in mapping:
+                    action.setText(mapping[old])
+        for index in range(self.tabs.count()):
+            old = self.tabs.tabText(index)
+            if old in mapping:
+                self.tabs.setTabText(index, mapping[old])
+        if hasattr(self, "table"):
+            headers = ["File / Progress", "Status", "Downloaded / Size", "Speed", "Time left"]
+            self.table.setHorizontalHeaderLabels([mapping.get(x, x) for x in headers])
+        if hasattr(self, "schedule_table"):
+            headers = ["File", "Status", "Scheduled start"]
+            self.schedule_table.setHorizontalHeaderLabels([mapping.get(x, x) for x in headers])
+        if hasattr(self, "settings_dialog"):
+            self.settings_dialog.setWindowTitle(("تنظیمات " if language == "fa" else "") + APP_NAME + (" — ترجیحات" if language == "fa" else " Preferences"))
+        if hasattr(self, "settings"):
+            self.settings.setValue("language", language)
+            self.settings.sync()
 
     def open_settings_dialog(self):
         self.settings_dialog.exec()
@@ -6325,6 +6406,9 @@ class FDMX(QWidget):
         self.folder.editingFinished.connect(self.save_preferences)
         self.clipboard_monitor.setChecked(self.settings.value("clipboard_monitor", False, type=bool))
         default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"
+        saved_language = self.settings.value("language", "en", type=str)
+        self.language_combo.setCurrentIndex(max(0, self.language_combo.findData(saved_language)))
+        self.apply_language()
         saved_theme = self.settings.value("theme", default_theme, type=str)
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(saved_theme)))
         self.settings.setValue("theme", saved_theme if self.theme_combo.currentData() else default_theme)
@@ -6344,6 +6428,7 @@ class FDMX(QWidget):
         self.settings.setValue("speed_limit", self.speed_limit.value())
         self.settings.setValue("torrent_upload_limit", self.torrent_upload_limit.value())
         self.settings.setValue("download_folder", self.folder.text().strip())
+        self.settings.setValue("language", self.language_combo.currentData() or "en")
         self.settings.setValue("clipboard_monitor", self.clipboard_monitor.isChecked())
         self.settings.setValue("proxy_enabled", self.proxy_enabled.isChecked())
         self.settings.setValue("proxy_url", self.proxy_url.text().strip())
