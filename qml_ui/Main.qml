@@ -22,6 +22,14 @@ ApplicationWindow {
     property string scheduleTaskId: ""
     property string scheduleDraft: ""
 
+    function submitDownload() {
+        if (downloadUrlField.text.trim().length) {
+            appBridge.queueDownload(downloadUrlField.text, scheduleInput.text)
+            downloadUrlField.selectAll()
+            scheduleInput.clear()
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
@@ -264,7 +272,7 @@ ApplicationWindow {
                         placeholderText: "Paste a download link or magnet URL…"
                         color: "#e5edf8"
                         selectByMouse: true
-                        onAccepted: addDownloadButton.clicked()
+                        onAccepted: window.submitDownload()
                         background: Rectangle { radius: 9; color: "#24101b30"; border.color: "#263f5678" }
                     }
                     TextField {
@@ -280,13 +288,7 @@ ApplicationWindow {
                         id: addDownloadButton
                         text: "Add download"
                         highlighted: true
-                        onClicked: {
-                            if (downloadUrlField.text.trim().length) {
-                                appBridge.queueDownload(downloadUrlField.text, scheduleInput.text)
-                                downloadUrlField.selectAll()
-                                scheduleInput.clear()
-                            }
-                        }
+                        onClicked: window.submitDownload()
                     }
                 }
             }
