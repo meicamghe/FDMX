@@ -56,7 +56,7 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks pytest
+          python -m pip install PySide6 cryptography certifi pyinstaller Pillow yt-dlp PySocks pytest
 
       - name: Install UPX binary compressor
         run: |
@@ -141,7 +141,7 @@ jobs:
       - name: Build experimental ADM QML application
         shell: pwsh
         run: |
-          $qmlDir = python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).parent / 'Qt' / 'qml')"
+          $qmlDir = python -c "from PySide6.QtCore import QLibraryInfo; print(QLibraryInfo.path(QLibraryInfo.LibraryPath.QmlImportsPath))"
           if (-not (Test-Path $qmlDir)) { throw "Qt QML runtime directory not found: $qmlDir" }
           pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6.QtQml --collect-all PySide6.QtQuick --collect-all PySide6.QtQuickControls2 --collect-all PySide6.QtOpenGL --collect-all PySide6.QtWidgets --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
           if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
