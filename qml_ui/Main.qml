@@ -227,7 +227,7 @@ ApplicationWindow {
                     }
                     ColumnLayout {
                         spacing: 0
-                        Label { text: "ADM"; color: ink; font.pixelSize: 21; font.bold: true; letterSpacing: 1.1 }
+                        Label { text: "ADM"; color: ink; font.pixelSize: 21; font.bold: true; font.letterSpacing: 1.1 }
                         Label { text: "ALL DOWNLOAD MANAGER"; color: "#8c9db7"; font.pixelSize: 8; font.letterSpacing: 1.2 }
                     }
                 }
