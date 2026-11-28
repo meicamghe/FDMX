@@ -312,7 +312,8 @@ ApplicationWindow {
                         model: appBridge.history
                         delegate: Rectangle {
                             width: historyList.width
-                            height: modelData.error.length > 0 ? 78 : 64
+                            visible: searchText.length === 0 || modelData.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0
+                            height: visible ? (modelData.error.length > 0 ? 78 : 64) : 0
                             radius: 12
                             color: "#1bffffff"
                             border.color: "#20ffffff"
@@ -332,8 +333,8 @@ ApplicationWindow {
                         }
                         Label {
                             anchors.centerIn: parent
-                            visible: appBridge.history.length === 0
-                            text: "No download history yet."
+                            visible: appBridge.history.filter(function(item) { return searchText.length === 0 || item.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0; }).length === 0
+                            text: appBridge.history.length === 0 ? "No download history yet." : "No history items match your search."
                             color: muted
                             font.pixelSize: 12
                         }
