@@ -33,6 +33,7 @@ from PySide6.QtCore import QThread, Signal, Slot, Qt, QSettings, QSize, QDateTim
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QFontMetrics,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
     QMessageBox, QTableWidget, QTableWidgetItem, QMenu, QSpinBox,
     QDoubleSpinBox, QHeaderView, QAbstractItemView, QGroupBox, QFrame, QDialog,
@@ -1306,15 +1307,35 @@ class DownloadDetailsDialog(QDialog):
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
 
+        # Long source URLs and paths must never expand the details window.
+        # Show a compact single-line preview; the adjacent buttons copy the full value.
+        url_row = QHBoxLayout()
         self.url_label = QLabel()
-        self.url_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.url_label.setWordWrap(True)
-        layout.addWidget(self.url_label)
+        self.url_label.setMinimumWidth(0)
+        self.url_label.setFixedHeight(28)
+        self.url_label.setToolTip("Full source URL")
+        url_row.addWidget(self.url_label, 1)
+        self.copy_url_btn = QPushButton("Copy URL")
+        self.copy_url_btn.setFixedHeight(28)
+        self.copy_url_btn.clicked.connect(
+            lambda: QApplication.clipboard().setText(str(self.task.get("url", "")))
+        )
+        url_row.addWidget(self.copy_url_btn)
+        layout.addLayout(url_row)
 
+        folder_row = QHBoxLayout()
         self.folder_label = QLabel()
-        self.folder_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.folder_label.setWordWrap(True)
-        layout.addWidget(self.folder_label)
+        self.folder_label.setMinimumWidth(0)
+        self.folder_label.setFixedHeight(28)
+        self.folder_label.setToolTip("Full save folder")
+        folder_row.addWidget(self.folder_label, 1)
+        self.copy_folder_btn = QPushButton("Copy path")
+        self.copy_folder_btn.setFixedHeight(28)
+        self.copy_folder_btn.clicked.connect(
+            lambda: QApplication.clipboard().setText(str(self.task.get("folder", "")))
+        )
+        folder_row.addWidget(self.copy_folder_btn)
+        layout.addLayout(folder_row)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimumHeight(22)
@@ -1484,8 +1505,16 @@ class DownloadDetailsDialog(QDialog):
             f"Status: {status}    |    File size: {metadata_size}\n"
             f"Speed: {speed_text}    |    ETA: {eta_text}"
         )
-        self.url_label.setText("URL: " + str(task.get("url", "")))
-        self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
+        full_url = "URL: " + str(task.get("url", ""))
+        full_folder = "Save folder: " + str(task.get("folder", ""))
+        self.url_label.setToolTip(full_url)
+        self.folder_label.setToolTip(full_folder)
+        self.url_label.setText(QFontMetrics(self.url_label.font()).elidedText(
+            full_url, Qt.ElideMiddle, max(80, self.url_label.width())
+        ))
+        self.folder_label.setText(QFontMetrics(self.folder_label.font()).elidedText(
+            full_folder, Qt.ElideMiddle, max(80, self.folder_label.width())
+        ))
         self.progress_bar.setValue(percent)
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
         if completed:
