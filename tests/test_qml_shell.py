@@ -40,6 +40,8 @@ def test_download_model_normalizes_backend_fields():
     assert resets == []
     assert len(updates) == 1 and updates[0][0:2] == (0, 0)
     assert model.data(model.index(0, 0), model.ProgressRole) == 50
+    model.replace_downloads([{"download_id":"task-1","file_name":"sample.zip"}, {"download_id":"task-2","file_name":"other.zip"}])
+    assert resets == [True] and model.rowCount() == 2  # identity changes reset once
 
 def test_adapter_snapshots_stats_and_task_id_actions():
     _qt()
@@ -71,6 +73,7 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     assert adapter.history[0]["file_name"] == "done.pdf"
     assert adapter.history[0]["size"] == 4096
     assert adapter.history[0]["time"] == "2026-11-28 09:00:00"
+    assert "url" not in adapter.history[0] and "path" not in adapter.history[0]
     assert adapter.scheduledDownloads == 0
     assert adapter.settings["maxDownloads"] is None
     assert adapter.totalSpeed == "2.0 KB/s"
