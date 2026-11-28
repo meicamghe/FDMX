@@ -340,7 +340,7 @@ ApplicationWindow {
                     }
                     ColumnLayout {
                         spacing: 3
-                        Label { text: "START LATER (OPTIONAL)"; color: dim; font.pixelSize: 8; font.bold: true; letterSpacing: 0.7 }
+                        Label { text: "START LATER (OPTIONAL)"; color: dim; font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.7 }
                         TextField {
                             id: scheduleInput
                             Layout.preferredWidth: 190
