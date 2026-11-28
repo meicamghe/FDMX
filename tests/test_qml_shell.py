@@ -267,3 +267,35 @@ def test_adapter_passes_future_schedule_to_legacy_download_intake():
     adapter.queueDownload("https://example.test/invalid.zip", "yesterday")
     assert rejected and "future schedule" in rejected[-1]
     adapter._timer.stop()
+
+
+def test_start_now_persists_schedule_rollback_when_scheduler_fails():
+    _qt()
+    from PySide6.QtCore import QObject
+    from qml_ui.adapter import FDMXDownloadAdapter
+
+    class Controller(QObject):
+        def __init__(self):
+            super().__init__()
+            self.tasks = {
+                "scheduled": {
+                    "name": "later.zip", "status": "Queued",
+                    "scheduled_at": "2099-01-01T12:00:00",
+                }
+            }
+            self.history = []
+            self.persisted = []
+        def save_tasks(self):
+            self.persisted.append(self.tasks["scheduled"]["scheduled_at"])
+        def schedule_downloads(self):
+            raise RuntimeError("simulated scheduler failure")
+
+    controller = Controller()
+    adapter = FDMXDownloadAdapter(controller, interval_ms=100000)
+    rejected = []
+    adapter.actionRejected.connect(rejected.append)
+    adapter.startNow("scheduled")
+    assert controller.tasks["scheduled"]["scheduled_at"] == "2099-01-01T12:00:00"
+    assert controller.persisted == ["", "2099-01-01T12:00:00"]
+    assert rejected and "previous schedule was restored" in rejected[-1]
+    adapter._timer.stop()
