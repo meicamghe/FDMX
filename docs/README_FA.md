@@ -12,7 +12,7 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 - توکن در فایل‌های وظایف و تاریخچه ذخیره نمی‌شود و هنگام انتقال به دامنه دیگر در هدر درخواست ارسال نخواهد شد.
 - دانلودهای تکمیل‌شده بر اساس جدیدترین زمان پایان در بالای فهرست قرار می‌گیرند و با اولین کلیک Start دانلود آغاز می‌شود.
 
-نسخه **6.53 منتشر شده و آخرین نسخه رسمی برنامه است**. تغییرات این نسخه در شاخه main ادغام شده است. صفحه Release فعلاً آرشیو سورس را دارد و بسته‌های اجرایی Windows و Linux به‌صورت Artifact موقت GitHub Actions (با مهلت نگهداری ۱۴ روزه) قابل دریافت‌اند. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
+نسخه **6.53 منتشر شده و آخرین نسخه رسمی برنامه است**. فایل‌های اجرایی Windows Setup، Windows Portable و بسته Ubuntu/Debian اکنون مستقیماً در صفحه Release رسمی قرار دارند. فایل اصلی و مرجع برنامه `FDMX_v6_50.py` است.
 
 - دانلود ویدئو و صدا از YouTube با کتابخانه `yt-dlp` انجام می‌شود. برای ادغام بهترین کیفیت تصویر و صدا به FFmpeg نیاز است؛ دانلود فقط صوت به FFmpeg نیاز ندارد.
 - انواع پروکسی HTTP، HTTPS، SOCKS4، SOCKS4a، SOCKS5 و SOCKS5h پشتیبانی می‌شوند. در بسته‌های آماده، پشتیبانی SOCKS با PySocks همراه برنامه بسته‌بندی می‌شود. آدرس پروکسی باید میزبان و پورت معتبر داشته باشد؛ مسیر، Query و Fragment در آدرس پذیرفته نمی‌شوند تا اشتباهاً نادیده گرفته نشوند.
@@ -56,28 +56,33 @@ GNS Downloader یک دانلودمنیجر دسکتاپ مبتنی بر Python �
 
 تعداد پارت‌ها در شروع دانلود ثابت می‌شود و نقشه بازه‌های هر دانلود برای Resume حفظ می‌شود.
 
-## دریافت نسخه ویندوز
+## دریافت نسخه 6.53
 
-انتشار رسمی نسخه 6.53 ایجاد شده است؛ در حال حاضر صفحه Release فقط آرشیو سورس را دارد و بسته‌های اجرایی از بخش Artifacts اجرای موفق GitHub Actions دریافت می‌شوند:
+انتشار رسمی [GNS Downloader 6.53 در GitHub Releases](https://github.com/meicamghe/FDMX/releases/tag/6.53) شامل فایل‌های اجرایی دائمی است:
 
-- **[بسته‌های Windows](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — Artifactهای `GNS-Downloader-Setup-v6.53` و `GNS-Downloader-Portable-v6.53` را از بخش Artifacts دریافت کنید.
-- **[بسته Linux DEB](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — Artifact با نام `GNS-Downloader-Linux-DEB-v6.53` را دریافت کنید.
-- **[افزونه‌های مرورگر](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — Artifact با نام `GNS-Downloader-browser-extensions-1.3.0`.
-- [مشاهده همه انتشارها در GitHub](https://github.com/meicamghe/FDMX/releases)
+- **[نصب‌کننده ویندوز (Setup)](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-Setup.exe)** — برای Windows 10/11 نسخه ۶۴ بیتی.
+- **[نسخه قابل‌حمل ویندوز (Portable)](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-Portable-Windows-x64.zip)** — پس از استخراج قابل اجراست و نیاز به نصب ندارد.
+- **[بسته Ubuntu/Debian با فرمت DEB](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-6.53-amd64.deb)** — بسته بومی معماری AMD64 و بدون نیاز به Wine.
 
-به‌روزرسانی درون‌برنامه‌ای برای نسخه نصب‌شده ویندوز، فایل Setup را دریافت می‌کند. نسخه Portable و اجرای مستقیم از سورس، صفحه انتشارها را باز می‌کنند تا ZIP جدید را دریافت و پوشه قبلی را جایگزین کنید.
+### هش SHA-256 فایل‌های انتشار
 
-ساخت نسخه‌های جدید از طریق [Workflow ویندوز](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-windows.yml) و [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/workflows/build-fdmx-linux.yml) انجام می‌شود. انتشار رسمی [GNS Downloader 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53) ایجاد شده است؛ بسته‌های اجرایی هنوز به‌عنوان فایل دائمی به Release پیوست نشده‌اند.
+| فایل | SHA-256 |
+|---|---|
+| Windows Setup | `91dfc2f37114f1438febc164456cf2efcd7b1b7ef7db6eeb8e67e65e451b19a6` |
+| Windows Portable | `18e4690f1a7c273b17e2edad8e128cf96b502d15473c3423550a9581ba510d07` |
+| Ubuntu/Debian DEB | `7a0973db989ab2888028282491ad9c12bd0002f470a3ffe26569821b0c2ef94f` |
 
+افزونه مرورگر جداگانه از [Artifact ساخت افزونه‌ها](https://github.com/meicamghe/FDMX/actions/runs/46109571140) دریافت می‌شود. کاربران Firefox می‌توانند از [فهرست رسمی Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/) نیز نصب یا به‌روزرسانی کنند.
 
+آپدیتر داخل برنامه برای نسخه نصب‌شده ویندوز طراحی شده است. نسخه Portable و اجرای مستقیم از سورس، صفحه Release را باز می‌کنند تا بتوانید پوشه نسخه Portable را جایگزین کنید.
 
 ## نصب و اجرای لینوکس (Ubuntu و Debian)
 
-بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 ساخته و تست نصب و اجرا شده است. فعلاً از [Artifact اجرای موفق لینوکس](https://github.com/meicamghe/FDMX/actions/runs/46109571137) دریافت می‌شود و هنوز به‌عنوان فایل دائمی به Release پیوست نشده است. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
+بسته نصب بومی **`.deb` مخصوص Ubuntu و Debian** برای نسخه 6.53 به‌صورت فایل دائمی در [انتشار رسمی 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53) قرار دارد. برای دریافت مستقیم از [لینک DEB](https://github.com/meicamghe/FDMX/releases/download/6.53/GNS-Downloader-6.53-amd64.deb) استفاده کنید. فعلاً AppImage و Flatpak ارائه نمی‌شوند. برای اجرای برنامه به Wine نیاز ندارید؛ نسخه لینوکس از همان سورس اصلی ساخته می‌شود و تم Ubuntu Yaru را خودکار انتخاب می‌کند.
 
 ### نصب سریع: بسته آماده لینوکس
 
-بسته آماده **DEB برای معماری AMD64** در Artifact اجرای موفق [Workflow لینوکس](https://github.com/meicamghe/FDMX/actions/runs/46109571137) قرار دارد. فایل ZIP مربوط به Artifact را دریافت و استخراج کنید؛ سپس فایل DEB را نصب کنید. برای این روش به Git، Python، محیط مجازی یا Wine نیازی ندارید.
+بسته آماده **DEB برای معماری AMD64** مستقیماً از [انتشار رسمی 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53) قابل دریافت است. فایل را دانلود و با APT نصب کنید؛ برای این روش به Git، Python، محیط مجازی یا Wine نیازی ندارید.
 
 معماری سیستم را بررسی کنید؛ خروجی باید `amd64` باشد:
 
