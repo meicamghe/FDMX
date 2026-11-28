@@ -1,3 +1,4 @@
+// CI validation branch marker: keep this interface buildable as a standalone Windows preview.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
