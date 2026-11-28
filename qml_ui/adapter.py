@@ -87,7 +87,7 @@ class FDMXDownloadAdapter(QObject):
     def appName(self): return "ADM"
 
     @Property(str, constant=True)
-    def versionLabel(self): return "6.54 · QML Migration Preview"
+    def versionLabel(self): return "6.53 · Experimental QML"
 
     @Property("QVariantList", notify=changed)
     def downloads(self): return list(self._rows)
