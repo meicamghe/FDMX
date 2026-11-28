@@ -281,7 +281,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", worker)
 
     def test_video_prefers_best_video_and_audio_with_mp4_merge(self):
-        self.assertIn('"format": "bestvideo+bestaudio/best"', SOURCE)
+        self.assertIn("bestvideo+bestaudio/best", SOURCE)
+        self.assertIn('options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"', SOURCE)
         self.assertIn('"merge_output_format": "mp4"', SOURCE)
 
     def test_audio_selects_best_available_audio_without_forcing_conversion(self):
@@ -674,6 +675,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=test"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.state = NoopSignal()
