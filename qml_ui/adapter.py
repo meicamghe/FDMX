@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 from PySide6.QtCore import QObject, Property, QThread, QTimer, Signal, Slot
+from .models import DownloadListModel
 
 _ACTIVE = {"Downloading", "Paused", "Checking server", "Retrying", "Checking metadata", "Seeding", "Canceling"}
 
@@ -51,6 +52,7 @@ class FDMXDownloadAdapter(QObject):
             raise RuntimeError("Adapter must be created on the controller's GUI thread")
         self._controller = controller
         self._rows: list[dict[str, Any]] = []
+        self._model = DownloadListModel(self)
         self._history: list[dict[str, Any]] = []
         self._timer = QTimer(self)
         self._timer.setInterval(max(100, int(interval_ms)))
@@ -67,6 +69,7 @@ class FDMXDownloadAdapter(QObject):
         self._assert_gui_thread()
         tasks = getattr(self._controller, "tasks", {})
         self._rows = [_task_snapshot(tid, task) for tid, task in tasks.items() if isinstance(task, dict)]
+        self._model.replace_downloads(self._rows)
         history = getattr(self._controller, "history", [])
         self._history = [{
             "file_name": str(item.get("name") or "Download"),
@@ -76,6 +79,9 @@ class FDMXDownloadAdapter(QObject):
             "category": str(item.get("category") or ""),
         } for item in history if isinstance(item, dict)]
         self.changed.emit()
+
+    @Property(QObject, constant=True)
+    def downloadModel(self): return self._model
 
     @Property("QVariantList", notify=changed)
     def downloads(self): return list(self._rows)
