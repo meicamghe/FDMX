@@ -5543,6 +5543,8 @@ class FDMX(QWidget):
         self._pending_browser_handoff = False
         qml_handoff = bool(getattr(self, "_pending_qml_handoff", False))
         self._pending_qml_handoff = False
+        qml_schedule_at = str(getattr(self, "_pending_qml_schedule_at", "") or "")
+        self._pending_qml_schedule_at = ""
         folder = self.folder.text().strip()
         if url.lower().startswith("magnet:?"):
             self.add_torrent_source(url)
@@ -5569,7 +5571,7 @@ class FDMX(QWidget):
                 "status": "Queued", "downloaded": 0, "total": 0,
                 "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
                 "history": False, "kind": "youtube", "media_type": media_type,
-                "scheduled_at": "", "category": "Audio" if media_type == "audio" else "Video",
+                "scheduled_at": qml_schedule_at, "category": "Audio" if media_type == "audio" else "Video",
                 "post_action_enabled": False, "post_action": "none", "post_action_done": False
             }
             self.save_tasks()
@@ -5593,7 +5595,7 @@ class FDMX(QWidget):
             "status": "Checking metadata", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "metadata_worker": None,
-            "scheduled_at": "", "total_known": False,
+            "scheduled_at": qml_schedule_at, "total_known": False,
             "category": category_for_filename(name),
             "github_token": github_token,
             "browser_resolved_url": browser_resolved_url,
@@ -5742,7 +5744,10 @@ class FDMX(QWidget):
         # Metadata is ready: enqueue and start automatically. The details window
         # mirrors this task; it must not require a second Start click.
         task["status"] = "Queued"
-        task["scheduled_at"] = ""
+        # Preserve a QML-supplied future start time; ordinary direct downloads
+        # retain the legacy immediate-start behavior.
+        if not task.get("qml_handoff"):
+            task["scheduled_at"] = ""
         self.save_tasks()
         self.refresh_table()
         if not task.get("qml_handoff"):
