@@ -98,7 +98,7 @@ The download engine preserves each task's original byte-range map across pause/r
 
 ## Windows downloads
 
-The v6.53 GitHub Release is published. The current release page contains GitHub's source archives; the compiled packages are available as workflow artifacts:
+The v6.53 GitHub Release is published. The release page contains GitHub's source archives. Compiled packages are available as temporary workflow artifacts (14-day retention):
 
 - **[Windows build artifacts](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — download `GNS-Downloader-Setup-v6.53` or `GNS-Downloader-Portable-v6.53` from the Artifacts section.
 - **[Ubuntu/Debian DEB artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — download `GNS-Downloader-Linux-DEB-v6.53` from the Artifacts section.
@@ -107,7 +107,7 @@ The v6.53 GitHub Release is published. The current release page contains GitHub'
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Publish GNS Downloader v6.53](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). The published release is [GNS Downloader v6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53), with Windows installer, portable ZIP and Linux DEB assets.
+The published release is [GNS Downloader 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53). Its compiled packages are currently available as temporary GitHub Actions artifacts (14-day retention), not as permanent Release assets.
 
 
 
