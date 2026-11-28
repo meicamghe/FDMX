@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import datetime
 from PySide6.QtCore import QObject, Property, QThread, QTimer, Signal, Slot
 from .models import DownloadListModel
 
@@ -192,6 +193,78 @@ class FDMXDownloadAdapter(QObject):
         except Exception:
             self.actionRejected.emit("The download could not be canceled.")
             return
+        self.refresh()
+
+    def _refresh_schedule_view(self):
+        refresh = getattr(self._controller, "refresh_schedule_table", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception:
+                pass
+
+    @Slot(str, str)
+    def setSchedule(self, task_id, scheduled_at):
+        task = self._task(task_id)
+        if not task:
+            self.actionRejected.emit("Download not found.")
+            return
+        if task.get("status") != "Queued":
+            self.actionRejected.emit("Only queued downloads can be scheduled.")
+            return
+        try:
+            selected = datetime.datetime.fromisoformat(str(scheduled_at).strip())
+            if selected.timestamp() <= datetime.datetime.now().timestamp():
+                raise ValueError("time is not in the future")
+        except (TypeError, ValueError, OverflowError):
+            self.actionRejected.emit("Enter a valid future date and time in ISO format.")
+            return
+        previous = task.get("scheduled_at", "")
+        task["scheduled_at"] = selected.isoformat()
+        try:
+            self._controller.save_tasks()
+        except Exception:
+            task["scheduled_at"] = previous
+            self.actionRejected.emit("The schedule could not be saved.")
+            return
+        self._refresh_schedule_view()
+        self.refresh()
+
+    @Slot(str)
+    def clearSchedule(self, task_id):
+        task = self._task(task_id)
+        if not task:
+            self.actionRejected.emit("Download not found.")
+            return
+        previous = task.get("scheduled_at", "")
+        task["scheduled_at"] = ""
+        try:
+            self._controller.save_tasks()
+        except Exception:
+            task["scheduled_at"] = previous
+            self.actionRejected.emit("The schedule could not be cleared.")
+            return
+        self._refresh_schedule_view()
+        self.refresh()
+
+    @Slot(str)
+    def startNow(self, task_id):
+        task = self._task(task_id)
+        if not task:
+            self.actionRejected.emit("Download not found.")
+            return
+        if task.get("status") != "Queued":
+            self.actionRejected.emit("Only queued downloads can be started now.")
+            return
+        previous = task.get("scheduled_at", "")
+        task["scheduled_at"] = ""
+        try:
+            self._controller.save_tasks()
+            self._controller.schedule_downloads()
+        except Exception:
+            task["scheduled_at"] = previous
+            self.actionRejected.emit("The download could not be started now.")
+        self._refresh_schedule_view()
         self.refresh()
 
     @Slot(str)
