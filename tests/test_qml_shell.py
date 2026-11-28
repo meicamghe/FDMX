@@ -465,3 +465,11 @@ print("real local HTTP transfer through QML bridge and legacy engine passed")
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "real local HTTP transfer through QML bridge and legacy engine passed" in result.stdout
+
+
+def test_production_qml_launcher_is_separate_and_preserves_legacy_close_flow():
+    source = (QML_DIR / "production_main.py").read_text(encoding="utf-8")
+    assert "create_qml_window(controller)" in source
+    assert "controller.close()" in source
+    assert "controller.show()" in source
+    assert "parse_gns_protocol_request" in source
