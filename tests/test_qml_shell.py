@@ -192,7 +192,7 @@ def test_adapter_submits_links_through_legacy_intake_without_clobbering_input():
             self.submitted = []
         def add_download(self):
             value = self.url.text()
-            self.submitted.append(value)
+            self.submitted.append((value, self._pending_qml_handoff, self._pending_qml_schedule_at))
             task_id = f"task-{len(self.submitted)}"
             self.tasks[task_id] = {
                 "name": "sample.bin", "status": "Checking metadata",
@@ -204,7 +204,7 @@ def test_adapter_submits_links_through_legacy_intake_without_clobbering_input():
     rejected = []
     adapter.actionRejected.connect(rejected.append)
     adapter.queueDownload("https://example.test/sample.bin")
-    assert controller.submitted == ["https://example.test/sample.bin"]
+    assert controller.submitted == [("https://example.test/sample.bin", True, "")]
     assert controller.url.text() == "user is editing"
     assert adapter.downloadModel.rowCount() == 1
     adapter.queueDownload("file:///etc/passwd")
@@ -216,7 +216,8 @@ def test_adapter_submits_links_through_legacy_intake_without_clobbering_input():
 def test_qml_exposes_real_download_intake():
     source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
     assert 'placeholderText: "Paste a download link or magnet URL…"' in source
-    assert "appBridge.queueDownload(downloadUrlField.text)" in source
+    assert "appBridge.queueDownload(downloadUrlField.text, scheduleInput.text)" in source
+    assert 'placeholderText: "Optional start: YYYY-MM-DDTHH:MM"' in source
 
 
 def test_legacy_controller_suppresses_widgets_detail_windows_for_qml_handoff():
@@ -226,3 +227,43 @@ def test_legacy_controller_suppresses_widgets_detail_windows_for_qml_handoff():
     assert '"qml_handoff": qml_handoff' in source
     adapter = (QML_DIR / "adapter.py").read_text(encoding="utf-8")
     assert 'self._controller._pending_qml_handoff = True' in adapter
+
+
+def test_adapter_passes_future_schedule_to_legacy_download_intake():
+    _qt()
+    from PySide6.QtCore import QObject
+    from qml_ui.adapter import FDMXDownloadAdapter
+
+    class Field:
+        def __init__(self, value=""):
+            self.value = value
+        def text(self):
+            return self.value
+        def setText(self, value):
+            self.value = value
+
+    class Controller(QObject):
+        def __init__(self):
+            super().__init__()
+            self.url = Field()
+            self.folder = Field("/tmp/adm-downloads")
+            self.tasks = {}
+            self.history = []
+            self.received_schedule = ""
+        def add_download(self):
+            self.received_schedule = self._pending_qml_schedule_at
+            self.tasks["scheduled-task"] = {
+                "name": "later.zip", "status": "Queued",
+                "scheduled_at": self.received_schedule,
+            }
+
+    controller = Controller()
+    adapter = FDMXDownloadAdapter(controller, interval_ms=100000)
+    adapter.queueDownload("https://example.test/later.zip", "2099-01-01T12:00:00")
+    assert controller.received_schedule == "2099-01-01T12:00:00"
+    assert adapter.scheduledDownloads == 1
+    rejected = []
+    adapter.actionRejected.connect(rejected.append)
+    adapter.queueDownload("https://example.test/invalid.zip", "yesterday")
+    assert rejected and "future schedule" in rejected[-1]
+    adapter._timer.stop()
