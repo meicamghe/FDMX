@@ -61,7 +61,8 @@ def test_qml_engine_loads_preview_window():
     from qml_ui.main import AppBridge
 
     engine = QQmlApplicationEngine()
-    engine.rootContext().setContextProperty("appBridge", AppBridge())
+    bridge = AppBridge()
+    engine.rootContext().setContextProperty("appBridge", bridge)
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
     assert engine.rootObjects(), "Qt Quick failed to load Main.qml"
     engine.clearComponentCache()
