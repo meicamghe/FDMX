@@ -289,7 +289,7 @@ ApplicationWindow {
                     anchors.margins: 20
                     spacing: 13
                     RowLayout {
-                        Label { text: "Recent activity"; color: "white"; font.pixelSize: 17; font.bold: true }
+                        Label { text: selectedSection === "History" ? "Download history" : selectedSection === "Scheduler" ? "Scheduled downloads" : "Recent activity"; color: "white"; font.pixelSize: 17; font.bold: true }
                         Item { Layout.fillWidth: true }
                         Label { text: "LIVE ENGINE"; color: "#70ddc8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.3 }
                     }
