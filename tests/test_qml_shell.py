@@ -317,3 +317,31 @@ def test_standalone_preview_bridge_matches_qml_contract():
     bridge.queueDownload("https://example.test/file.zip", "")
     bridge.setSchedule("task", "2099-01-01T12:00:00")
     assert len(rejected) == 2
+
+
+def test_resume_requeues_interrupted_task_without_live_worker():
+    _qt()
+    from PySide6.QtCore import QObject
+    from qml_ui.adapter import FDMXDownloadAdapter
+
+    class Controller(QObject):
+        def __init__(self):
+            super().__init__()
+            self.tasks = {
+                "restored": {"name": "partial.zip", "status": "Paused", "worker": None}
+            }
+            self.history = []
+            self.saved = 0
+            self.scheduled = 0
+        def save_tasks(self):
+            self.saved += 1
+        def schedule_downloads(self):
+            self.scheduled += 1
+
+    controller = Controller()
+    adapter = FDMXDownloadAdapter(controller, interval_ms=100000)
+    adapter.resume("restored")
+    assert controller.tasks["restored"]["status"] == "Queued"
+    assert controller.saved == 1
+    assert controller.scheduled == 1
+    adapter._timer.stop()
