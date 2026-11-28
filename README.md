@@ -12,11 +12,11 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 The browser companion package is available from the successful GitHub Actions build:
 
-- **[Download browser extensions 1.3.0 (ZIP)](https://github.com/meicamghe/FDMX/actions/runs/45807544405)** — open the run and download the `GNS-Downloader-browser-extensions-1.3.0` artifact.
-- **[Firefox Add-ons submission portal](https://addons.mozilla.org/developers/)** — upload `GNS-Downloader-Firefox-1.3.0.xpi` as an update to the existing [GNS Download Manager listing](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/). Keep the existing add-on listing/ID; do not submit it as a new add-on.
+- **[Download browser extensions 1.3.0 (ZIP)](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — open the run and download the `GNS-Downloader-browser-extensions-1.3.0` artifact.
+- **[Install the approved Firefox add-on](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/)** — version 1.3.0 is published on the existing listing; keep using this listing for future updates.
 - **[Chrome installation guide](https://github.com/meicamghe/FDMX#browser-extensions-and-privacy)** — extract the Chrome ZIP, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked**.
 
-Firefox public installation/update becomes available after Mozilla review and signing. Until then, test the XPI using `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
+Firefox users can install or update directly from the AMO listing. For local development builds, use `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
 
 </details>
 
@@ -54,7 +54,7 @@ Version 6.53 includes browser companion extension 1.3.0 and the matching desktop
 
 Version 6.53 is published as the official GitHub Release. The 1.3.0 browser package is built by the [browser-extension CI workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
 
-### Install Chrome extension (development build)
+### Install Chrome extension
 
 1. Open the [browser-extension Actions workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml) and download the latest successful `GNS-Downloader-browser-extensions-1.3.0` artifact.
 2. Extract the artifact ZIP, then extract `GNS-Downloader-Chrome-1.3.0.zip`.
