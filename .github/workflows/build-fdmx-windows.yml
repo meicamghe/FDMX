@@ -150,16 +150,18 @@ jobs:
             $source = Join-Path $qmlDir $module
             if (Test-Path $source) { Copy-Item $source -Destination $qmlStage -Recurse -Force }
           }
-          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlStage;PySide6/Qt/qml" --add-data "qml_ui/Main.qml;qml_ui" qml_ui/production_main.py
+          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --paths . --hidden-import FDMX_v6_50 --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --add-data "$qmlStage;PySide6/Qt/qml" --add-data "qml_ui/Main.qml;qml_ui" qml_ui/production_main.py
           if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
           # Qt's built-in English strings need no translation catalogs. Drop optional
           # language catalogs and development-only metadata from the preview bundle.
-          $translations = "dist-qml/ADM QML/_internal/PySide6/Qt/translations"
-          if (Test-Path $translations) { Remove-Item $translations -Recurse -Force }
+          foreach ($translations in @("dist-qml/ADM QML/_internal/PySide6/translations", "dist-qml/ADM QML/_internal/PySide6/Qt/translations")) {
+            if (Test-Path $translations) { Remove-Item $translations -Recurse -Force }
+          }
           $qmlApp = "dist-qml/ADM QML/ADM QML.exe"
           if (-not (Test-Path $qmlApp)) { throw "ADM QML executable is missing." }
           & $qmlApp --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "ADM QML startup smoke test failed with exit code $LASTEXITCODE" }
+          $smokeExit = $LASTEXITCODE
+          if ($smokeExit -ne 0) { throw "ADM QML startup smoke test failed with exit code $smokeExit" }
           $bundleBytes = (Get-ChildItem "dist-qml/ADM QML" -File -Recurse | Measure-Object -Property Length -Sum).Sum
           Write-Host "ADM QML optimized onedir size: $([math]::Round($bundleBytes / 1MB, 2)) MiB"
           Get-ChildItem "dist-qml/ADM QML" -File -Recurse | Sort-Object Length -Descending | Select-Object -First 20 FullName, Length
