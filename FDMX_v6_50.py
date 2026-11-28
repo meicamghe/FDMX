@@ -5752,10 +5752,16 @@ class FDMX(QWidget):
         self.refresh_table()
         if not task.get("qml_handoff"):
             self.show_download_details(task_id)
-        self.status.setText(
-            f"File information ready: {task['name']} — "
-            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Starting download…"
-        )
+        size_label = format_bytes(task["total"]) if task["total"] else "Size unknown"
+        if task.get("scheduled_at"):
+            self.status.setText(
+                f"File information ready: {task['name']} — {size_label}. "
+                f"Scheduled for {task['scheduled_at']}."
+            )
+        else:
+            self.status.setText(
+                f"File information ready: {task['name']} — {size_label}. Starting download…"
+            )
         self.start_queue()
 
     def add_torrent_file(self):
