@@ -44,7 +44,7 @@ def test_download_details_are_less_redundant_without_removing_progress_bar():
 
 
 def test_windows_theme_presets_and_saved_selection_are_available():
-    for theme in ('("Light", "light")', '("Dark", "dark")', '("Midnight", "midnight")', '("Violet", "violet")'):
+    for theme in ('addItem("Light", "light")', 'addItem("Dark", "dark")', 'addItem("Midnight", "midnight")', 'addItem("Violet", "violet")'):
         assert theme in SOURCE
     assert 'self.settings.value("theme", default_theme, type=str)' in SOURCE
 
