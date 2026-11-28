@@ -23,7 +23,8 @@ Instantiate `FDMXDownloadAdapter(existing_fdmx_window)` on the controller's
 GUI thread. It exposes sanitized task snapshots, bounded read-only history,
 aggregate active/queued/completed/scheduled counts, total speed, and read-only
 snapshots of the existing download settings. It provides task-ID
-pause/resume/cancel/retry slots. URLs, tokens and credentials are not exposed.
+pause/resume/cancel/retry and queued-task schedule/clear/start-now slots. URLs,
+tokens and credentials are not exposed.
 Worker signals remain connected to the existing controller, and all controller
 state access stays on its owning GUI thread.
 
@@ -38,10 +39,11 @@ real-download lifecycle, UI parity, packaging and Windows rendering are accepted
 The QML shell now has working sidebar filtering (overview, all, active,
 completed, scheduled, queued, failed and history), filename search across both
 downloads and history, visible rejection feedback for unavailable task actions,
-a read-only settings snapshot dialog,
+a read-only settings snapshot dialog and a typed scheduler editor for queued tasks
+(with clear-schedule and start-now actions),
 and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
 and categories are included in task snapshots. History is available as a dedicated read-only screen with timestamp, size and
-failure details; URLs and local paths are intentionally not exposed. Scheduler edits, settings changes, history management/export,
+failure details; URLs and local paths are intentionally not exposed. Bulk schedule management, adding new scheduled URLs, settings changes, history management/export,
 torrent-specific operations and analytics drill-down need additional explicit
 typed slots before those screens can claim parity.
 
