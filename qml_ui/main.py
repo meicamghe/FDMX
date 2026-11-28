@@ -1,7 +1,7 @@
 """Experimental Qt Quick shell for ADM/GNS Downloader.
 
-This entry point is deliberately isolated from the production QWidget app.
-It proves the QML runtime and Python bridge without changing download behavior.
+This entry point remains isolated from the production QWidget app. It exposes
+an empty, typed download model as the future QML/backend integration boundary.
 """
 from __future__ import annotations
 
@@ -13,16 +13,18 @@ from PySide6.QtCore import QObject, Property, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
+from .models import DownloadListModel
+
 
 class AppBridge(QObject):
-    """Small, read-only bridge; real download services will be connected later."""
+    """Narrow QObject facade exposed to QML."""
 
     def __init__(self) -> None:
         super().__init__()
         self._app_name = "ADM"
         self._version = "6.54 · QML Preview"
-        self._connection_state = "Backend not connected"
-        self._active_downloads = 0
+        self._connection_state = "Download backend not connected"
+        self._download_model = DownloadListModel(self)
 
     @Property(str, constant=True)
     def appName(self) -> str:
@@ -36,9 +38,9 @@ class AppBridge(QObject):
     def connectionState(self) -> str:
         return self._connection_state
 
-    @Property(int, constant=True)
-    def activeDownloads(self) -> int:
-        return self._active_downloads
+    @Property(QObject, constant=True)
+    def downloadModel(self) -> QObject:
+        return self._download_model
 
 
 def main() -> int:
