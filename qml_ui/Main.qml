@@ -274,12 +274,12 @@ ApplicationWindow {
                                 Label { text: progress + "%"; color: "#70ddc8"; font.pixelSize: 12; font.bold: true }
                                 ToolButton {
                                     text: status === "Paused" ? "▶" : "Ⅱ"
-                                    enabled: status === "Paused" || status === "Downloading" || status === "Checking server" || status === "Retrying"
+                                    enabled: status === "Paused" || status === "Downloading" || status === "Checking server" || status === "Retrying" || status === "Checking metadata" || status === "Seeding"
                                     onClicked: status === "Paused" ? appBridge.resume(downloadId) : appBridge.pause(downloadId)
                                 }
                                 ToolButton {
                                     text: "×"
-                                    enabled: status !== "Completed" && status !== "Canceled" && status !== "Failed"
+                                    enabled: status !== "Completed" && status !== "Canceled" && status !== "Failed" && status !== "Canceling"
                                     onClicked: appBridge.cancel(downloadId)
                                 }
                                 ToolButton {
