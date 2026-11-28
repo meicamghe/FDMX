@@ -215,8 +215,8 @@ def test_adapter_submits_links_through_legacy_intake_without_clobbering_input():
 
 def test_qml_exposes_real_download_intake():
     source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
-    assert 'placeholderText: "Paste a download link or magnet URL…"' in source
-    assert "appBridge.queueDownload(downloadUrlField.text, scheduleInput.text)" in source
+    assert 'placeholderText: "Paste a file URL, YouTube link or magnet link…"' in source
+    assert "appBridge.queueDownload(value, scheduleInput.text.trim())" in source
     assert 'placeholderText: "Optional start: YYYY-MM-DDTHH:MM"' in source
 
 
