@@ -210,17 +210,41 @@ ApplicationWindow {
                         Label { text: "PREVIEW"; color: "#70ddc8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.3 }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#22ffffff" }
-                    Item { Layout.fillHeight: true; Layout.fillWidth: true
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 10
-                            Label { anchors.horizontalCenter: parent.horizontalCenter; text: "✧"; color: "#70ddc8"; font.pixelSize: 38 }
-                            Label { anchors.horizontalCenter: parent.horizontalCenter; text: "The new interface is taking shape"; color: "#e5edf8"; font.pixelSize: 15; font.bold: true }
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "This isolated QML preview is not connected to the download engine yet."
-                                color: muted; font.pixelSize: 11
+                    ListView {
+                        id: downloadList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: appBridge.downloadModel
+                        delegate: Rectangle {
+                            width: downloadList.width
+                            height: 66
+                            radius: 12
+                            color: "#1bffffff"
+                            border.color: "#20ffffff"
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+                                    Label { text: fileName; color: "#e5edf8"; font.pixelSize: 12; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    Label { text: status + "  ·  " + speed; color: muted; font.pixelSize: 10 }
+                                }
+                                Label { text: progress + "%"; color: "#70ddc8"; font.pixelSize: 12; font.bold: true }
                             }
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            visible: downloadList.count === 0
+                            width: parent.width - 24
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            text: "The QML download list is ready for the backend adapter.\nNo live downloads are connected in this preview."
+                            color: muted
+                            font.pixelSize: 12
                         }
                     }
                 }
