@@ -4774,7 +4774,8 @@ class FDMX(QWidget):
                     glass_edge = "rgba(255,255,255,0.86)"
                 glass_qss += f"""
                     QWidget {{ background: transparent; }}
-                    QMainWindow, QDialog {{ background: {root_surface}; }}
+                    QMainWindow {{ background: {root_surface}; }}
+                    QDialog {{ background: {panel_surface}; }}
                     QTabWidget::pane, QGroupBox {{
                         background: {panel_surface};
                         border: 1px solid {glass_edge};
