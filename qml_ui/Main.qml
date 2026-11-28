@@ -267,14 +267,24 @@ ApplicationWindow {
                         onAccepted: addDownloadButton.clicked()
                         background: Rectangle { radius: 9; color: "#24101b30"; border.color: "#263f5678" }
                     }
+                    TextField {
+                        id: scheduleInput
+                        Layout.preferredWidth: 205
+                        placeholderText: "Optional start: YYYY-MM-DDTHH:MM"
+                        color: "#e5edf8"
+                        font.pixelSize: 10
+                        selectByMouse: true
+                        background: Rectangle { radius: 9; color: "#24101b30"; border.color: "#263f5678" }
+                    }
                     Button {
                         id: addDownloadButton
                         text: "Add download"
                         highlighted: true
                         onClicked: {
                             if (downloadUrlField.text.trim().length) {
-                                appBridge.queueDownload(downloadUrlField.text)
+                                appBridge.queueDownload(downloadUrlField.text, scheduleInput.text)
                                 downloadUrlField.selectAll()
+                                scheduleInput.clear()
                             }
                         }
                     }
