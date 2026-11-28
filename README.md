@@ -1,4 +1,4 @@
-# GNS Downloader 6.52
+# GNS Downloader 6.53
 
 GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
@@ -12,18 +12,18 @@ GNS Downloader is a cross-platform Python desktop download manager built with Py
 
 The browser companion package is available from the successful GitHub Actions build:
 
-- **[Download browser extensions 1.3.0 (ZIP)](https://github.com/meicamghe/FDMX/actions/runs/45807544405)** — open the run and download the `GNS-Downloader-browser-extensions-1.3.0` artifact.
-- **[Firefox Add-ons submission portal](https://addons.mozilla.org/developers/)** — upload `GNS-Downloader-Firefox-1.3.0.xpi` as an update to the existing [GNS Download Manager listing](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/). Keep the existing add-on listing/ID; do not submit it as a new add-on.
+- **[Download browser extensions 1.3.0 (ZIP)](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — open the run and download the `GNS-Downloader-browser-extensions-1.3.0` artifact.
+- **[Install the approved Firefox add-on](https://addons.mozilla.org/en-US/firefox/addon/gns-download-manager/)** — version 1.3.0 is published on the existing listing; keep using this listing for future updates.
 - **[Chrome installation guide](https://github.com/meicamghe/FDMX#browser-extensions-and-privacy)** — extract the Chrome ZIP, open `chrome://extensions`, enable Developer mode, then choose **Load unpacked**.
 
-Firefox public installation/update becomes available after Mozilla review and signing. Until then, test the XPI using `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
+Firefox users can install or update directly from the AMO listing. For local development builds, use `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on**.
 
 </details>
 
 
 ## Current version
 
-- Application version: **6.52**
+- Application version: **6.53**
 - Main source: `FDMX_v6_50.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
@@ -31,17 +31,20 @@ Firefox public installation/update becomes available after Mozilla review and si
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
 
-## What's new in 6.52
+## What's new in 6.53
 
-- GitHub Actions artifact downloads now try anonymous access first; a token is requested only after GitHub denies access.
-- GitHub credentials are not written to task or history files, and authorization is removed on cross-origin redirects.
-- Completed downloads are sorted newest-first, and the first Start action launches the transfer automatically.
+- Added automatic browser-to-desktop download handoff through the `gnsdownloader://` protocol; the installed app can launch when a browser sends a download while it is closed.
+- Added Chrome and Firefox companion extension 1.3.0 with context-menu handoff, direct-media detection and YouTube quality/audio-only selection through the desktop `yt-dlp` engine.
+- Added **Tools → Install browser extensions…** guidance in the desktop application.
+- Improved YouTube format selection and fallback behavior, and fixed the offline regression tests covering media selection.
+- Preserved authenticated GitHub artifact handoff without exporting browser cookies or persisting short-lived signed URLs.
+- Kept Windows Setup, Windows Portable and Ubuntu/Debian DEB packages below the 50 MiB limit; CI builds and smoke-tests all three.
 
-GNS Downloader **v6.52** is the latest official public release. The maintained application source is `FDMX_v6_50.py`.
+GNS Downloader **v6.53** is the latest official release. The maintained application source is `FDMX_v6_50.py`.
 
-## Browser integration — 6.53 development
+## Browser integration — 6.53
 
-The current development branch adds a browser companion extension update (1.3.0) and the matching desktop bridge (6.53):
+Version 6.53 includes browser companion extension 1.3.0 and the matching desktop bridge:
 
 - Direct file links and browser downloads are automatically handed to GNS Downloader. If the desktop app is closed, the registered `gnsdownloader://` protocol launches it and queues the URL.
 - Right-click links in Chrome or Firefox and choose **Download with GDM**; the extension icon is included.
@@ -49,9 +52,9 @@ The current development branch adds a browser companion extension update (1.3.0)
 - **Tools → Install browser extensions…** in the desktop app explains Firefox AMO installation and Chrome Developer mode / Load unpacked installation.
 - The existing Firefox AMO listing and Gecko ID (`fdmx-browser@gns.local`) are retained for an in-place update.
 
-The 6.53 work is under review in [PR #33](https://github.com/meicamghe/FDMX/pull/33); it is not the public release yet. The latest public desktop release remains 6.52. The 1.3.0 browser package is produced by the [browser-extension CI workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
+Version 6.53 is published as the official GitHub Release. The 1.3.0 browser package is built by the [browser-extension CI workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml).
 
-### Install Chrome extension (development build)
+### Install Chrome extension
 
 1. Open the [browser-extension Actions workflow](https://github.com/meicamghe/FDMX/actions/workflows/build-browser-extensions.yml) and download the latest successful `GNS-Downloader-browser-extensions-1.3.0` artifact.
 2. Extract the artifact ZIP, then extract `GNS-Downloader-Chrome-1.3.0.zip`.
@@ -67,7 +70,7 @@ Use the [GNS Download Manager AMO listing](https://addons.mozilla.org/en-US/fire
 - The updater checks published stable releases, selects the highest valid numeric version tag, verifies installer size and a GitHub SHA-256 digest when available, and supports canceling an in-progress installer download.
 - Portable/source builds open the release page; automatic Setup installation is intended for the installed Windows build.
 
-The v6.52 Windows installer, portable ZIP and Ubuntu/Debian package are built and smoke-tested by CI. Offline regression tests do not replace live YouTube/proxy network tests or manual GUI testing.
+The v6.53 Windows installer, portable ZIP and Ubuntu/Debian package are built and smoke-tested by CI. Offline regression tests do not replace live YouTube/proxy network tests or manual GUI testing.
 
 ## What's new in 6.42
 
@@ -95,26 +98,26 @@ The download engine preserves each task's original byte-range map across pause/r
 
 ## Windows downloads
 
-The official v6.52 release is published. Download the files:
+The v6.53 GitHub Release is published. The release page contains GitHub's source archives. Compiled packages are available as temporary workflow artifacts (14-day retention):
 
-- **[Portable ZIP — v6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Portable-Windows-x64.zip)** — extract and run `GNS Downloader.exe`.
-- **[Setup installer — v6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-Setup.exe)** — installs the application and shortcuts.
-- **[Ubuntu/Debian DEB — v6.52](https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb)** — AMD64 package.
+- **[Windows build artifacts](https://github.com/meicamghe/FDMX/actions/runs/46109571148)** — download `GNS-Downloader-Setup-v6.53` or `GNS-Downloader-Portable-v6.53` from the Artifacts section.
+- **[Ubuntu/Debian DEB artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137)** — download `GNS-Downloader-Linux-DEB-v6.53` from the Artifacts section.
+- **[Browser extension artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571140)** — download `GNS-Downloader-browser-extensions-1.3.0`.
 - [All GitHub Releases](https://github.com/meicamghe/FDMX/releases)
 
 The in-app installer update is for the installed Windows build. Portable and source-based copies open the release page so you can replace the folder with the new Portable ZIP.
 
-Release workflow: [Publish GNS Downloader v6.52](https://github.com/meicamghe/FDMX/actions/workflows/publish-release-v6-50.yml). The published release is [GNS Downloader v6.52](https://github.com/meicamghe/FDMX/releases/tag/v6.52), with Windows installer, portable ZIP and Linux DEB assets.
+The published release is [GNS Downloader 6.53](https://github.com/meicamghe/FDMX/releases/tag/6.53). Its compiled packages are currently available as temporary GitHub Actions artifacts (14-day retention), not as permanent Release assets.
 
 
 
 ## Linux installation (Ubuntu and Debian)
 
-A native **Ubuntu/Debian `.deb` package** for version 6.52 has been built, smoke-tested, and attached to the public GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
+A native **Ubuntu/Debian `.deb` package** for version 6.53 has been built and smoke-tested. It is currently available from the [Linux Actions artifact](https://github.com/meicamghe/FDMX/actions/runs/46109571137); it has not yet been attached as a permanent asset to the GitHub Release. An AppImage or Flatpak is not provided yet. You do **not** need Wine. The Linux build uses the same maintained application source and selects the Ubuntu Yaru appearance automatically.
 
 ### Quick install: official Linux package
 
-The v6.52 release includes a ready-to-install **AMD64 `.deb` package**. This is the recommended route for normal use; it does not require Git, Python, a virtual environment, or Wine.
+The v6.53 Linux build provides a ready-to-install **AMD64 `.deb` package** as a GitHub Actions artifact. Download the `GNS-Downloader-Linux-DEB-v6.53` artifact from the [successful Linux build](https://github.com/meicamghe/FDMX/actions/runs/46109571137), extract the ZIP, then install the `.deb` file. This does not require Git, Python, a virtual environment, or Wine.
 
 Check the system architecture (it should print `amd64`):
 
@@ -125,8 +128,7 @@ dpkg --print-architecture
 Download and install the package (APT will resolve its declared system dependencies):
 
 ```bash
-curl -fL "https://github.com/meicamghe/FDMX/releases/download/v6.52/GNS-Downloader-6.52-amd64.deb" -o /tmp/GNS-Downloader-6.52-amd64.deb
-sudo apt install /tmp/GNS-Downloader-6.52-amd64.deb
+sudo apt install ./GNS-Downloader-6.53-amd64.deb
 ```
 
 Launch **GNS Downloader** from the desktop application menu, or run `gns-downloader` in a terminal. The package is built and smoke-tested on Ubuntu 22.04 AMD64. AppImage and Flatpak are not provided yet.
