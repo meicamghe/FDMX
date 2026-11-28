@@ -26,7 +26,7 @@ def load_protocol_parser():
 class BrowserMediaHandoffTests(unittest.TestCase):
     def test_application_source_compiles_and_version_is_bumped(self):
         compile(SOURCE, "FDMX_v6_50.py", "exec")
-        self.assertIn('APP_VERSION = "6.53"', SOURCE)
+        self.assertIn('APP_VERSION = "6.54"', SOURCE)
 
     def test_protocol_parser_accepts_valid_direct_download(self):
         parse = load_protocol_parser()
