@@ -43,6 +43,34 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: settingsDialog
+        title: "Current download settings"
+        modal: true
+        anchors.centerIn: parent
+        width: 420
+        standardButtons: Dialog.Ok
+        contentItem: ColumnLayout {
+            spacing: 10
+            Repeater {
+                model: [
+                    { label: "Maximum downloads", value: appBridge.settings.maxDownloads },
+                    { label: "Connections per download", value: appBridge.settings.connectionsPerDownload },
+                    { label: "Speed limit (KB/s)", value: appBridge.settings.speedLimitKbps },
+                    { label: "Torrent upload limit (KB/s)", value: appBridge.settings.torrentUploadLimitKbps },
+                    { label: "Proxy enabled", value: appBridge.settings.proxyEnabled },
+                    { label: "Download folder", value: appBridge.settings.downloadFolder }
+                ]
+                delegate: RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: modelData.label; color: "#91a0b8"; Layout.fillWidth: true }
+                    Label { text: modelData.value === null || modelData.value === undefined ? "Unavailable" : String(modelData.value); color: "#e5edf8"; wrapMode: Text.Wrap; Layout.maximumWidth: 180 }
+                }
+            }
+            Label { text: "Read-only snapshot from the existing Widgets engine."; color: "#91a0b8"; font.pixelSize: 10; wrapMode: Text.WordWrap }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.margins: 18
