@@ -1,5 +1,3 @@
-// CI validation branch marker: keep this interface buildable as a standalone Windows preview.
-// Windows CI also verifies the production adapter and the packaged QML runtime.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -81,7 +79,7 @@ ApplicationWindow {
     }
 
     component GlassPanel: Rectangle {
-        color: surface
+        color: "#b817263c"
         radius: 20
         border.width: 1
         border.color: line
