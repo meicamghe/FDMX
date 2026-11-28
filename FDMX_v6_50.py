@@ -4082,6 +4082,7 @@ class FDMX(QWidget):
         self.theme_combo.addItem("Midnight", "midnight")
         self.theme_combo.addItem("Violet", "violet")
         self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")
         self.theme_combo.currentIndexChanged.connect(self.apply_selected_theme)
         settings_grid.addWidget(QLabel("Appearance theme:"), 8, 0)
         settings_grid.addWidget(self.theme_combo, 8, 1)
@@ -6156,7 +6157,7 @@ class FDMX(QWidget):
         self.torrent_upload_limit.valueChanged.connect(self.save_preferences)
         self.folder.editingFinished.connect(self.save_preferences)
         self.clipboard_monitor.setChecked(self.settings.value("clipboard_monitor", False, type=bool))
-        default_theme = "fluent"
+        default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"
         saved_theme = self.settings.value("theme", default_theme, type=str)
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(saved_theme)))
         self.settings.setValue("theme", saved_theme if self.theme_combo.currentData() else default_theme)
