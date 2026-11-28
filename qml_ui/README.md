@@ -33,9 +33,11 @@ path and is covered by a dedicated offscreen smoke test. The production startup
 path still does not call it: Widgets remains the default and fallback until
 real-download lifecycle, UI parity, packaging and Windows rendering are accepted.
 
-The QML download rows expose pause, resume, cancel and retry controls. History
-is currently read-only, while scheduled timestamps and category are included in
-task snapshots. Scheduler edits, settings changes, history management/export,
+The QML shell now has working sidebar filtering (overview, all, active,
+completed and scheduled), filename search, a read-only settings snapshot dialog,
+and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
+and categories are included in task snapshots. History remains a read-only adapter
+property and is not yet a dedicated history screen. Scheduler edits, settings changes, history management/export,
 torrent-specific operations and analytics drill-down need additional explicit
 typed slots before those screens can claim parity.
 
