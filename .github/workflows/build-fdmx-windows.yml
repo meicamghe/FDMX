@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - release/6.53-finalization
+      - release/6.54-finalization
       - feature/fdmx-6.22-advanced-fingerprinting
       - feature/fdmx-6.40-github-updater-ubuntu-theme
       - fix/http-download-compatibility
@@ -12,6 +12,7 @@ on:
       - "v*"
     paths:
       - "FDMX_v6_50.py"
+      - "qml_ui/**"
       - "tests/test_youtube_integration_regressions.py"
       - "ubuntu.py"
       - "README.md"
@@ -23,8 +24,10 @@ on:
   pull_request:
     branches:
       - main
+      - experiment/qml-ui-shell
     paths:
       - "FDMX_v6_50.py"
+      - "qml_ui/**"
       - "ubuntu.py"
       - "README.md"
       - "docs/README_FA.md"
@@ -53,7 +56,7 @@ jobs:
       - name: Install minimal build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks
+          python -m pip install PySide6-Essentials cryptography certifi pyinstaller Pillow yt-dlp PySocks pytest
 
       - name: Install UPX binary compressor
         run: |
@@ -74,6 +77,7 @@ jobs:
           python -m unittest discover -s tests -p "test_browser_media_handoff.py" -v
           python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
           python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
+          python -m pytest -q tests/test_ui_usability_fixes.py
 
       - name: Verify generated icon
         shell: pwsh
@@ -111,7 +115,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.53.exe").Path
+          $setup = (Resolve-Path "dist/installer/GNS-Downloader-Setup-6.54.exe").Path
           $installDir = Join-Path $env:ProgramFiles "GNS Downloader"
           $installer = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Silent installer failed with exit code $($installer.ExitCode)" }
@@ -134,24 +138,72 @@ jobs:
           Write-Host "Installed GNS Downloader window ready in $([math]::Round(((Get-Date)-$started).TotalSeconds,1)) seconds."
           Stop-Process -Id $process.Id -Force
 
+      - name: Build experimental ADM QML application
+        shell: pwsh
+        run: |
+          $qmlDir = python -c "import pathlib, PySide6; print(pathlib.Path(PySide6.__file__).parent / 'Qt' / 'qml')"
+          if (-not (Test-Path $qmlDir)) { throw "Qt QML runtime directory not found: $qmlDir" }
+          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6.QtQml --collect-all PySide6.QtQuick --collect-all PySide6.QtQuickControls2 --collect-all PySide6.QtOpenGL --collect-all PySide6.QtWidgets --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
+          $qmlApp = "dist-qml/ADM QML/ADM QML.exe"
+          if (-not (Test-Path $qmlApp)) { throw "ADM QML executable is missing." }
+          & $qmlApp --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML startup smoke test failed with exit code $LASTEXITCODE" }
+      - name: Create experimental ADM QML portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist-qml/ADM QML/*" -DestinationPath "dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip" -Force
+      - name: Compile experimental ADM QML installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
+          & $compiler "installer/FDMX-QML.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ADM QML installer compilation failed with exit code $LASTEXITCODE" }
+      - name: Enforce experimental QML package size
+        shell: pwsh
+        run: |
+          $limit = 50MB
+          $setup = Get-Item "dist/installer/ADM-QML-Preview-Setup-6.54.exe"
+          $portable = Get-Item "dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip"
+          foreach ($file in @($setup, $portable)) {
+            $sizeMB = [math]::Round($file.Length / 1MB, 2)
+            Write-Host "$($file.Name): $sizeMB MiB"
+            if ($file.Length -gt $limit) { throw "$($file.Name) exceeds the 50 MiB test-build limit." }
+          }
+      - name: Upload experimental ADM QML Setup
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADM-QML-Preview-Setup-v6.54
+          path: dist/installer/ADM-QML-Preview-Setup-6.54.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload experimental ADM QML Portable
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADM-QML-Preview-Portable-v6.54
+          path: dist-qml/ADM-QML-Preview-6.54-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.53-Windows-x64.zip" -Force
+          Compress-Archive -Path "dist/GNS Downloader/*" -DestinationPath "dist/GNS-Downloader-Portable-v6.54-Windows-x64.zip" -Force
 
       - name: Prepare stable GitHub Release asset names
         shell: pwsh
         run: |
-          Copy-Item "dist/installer/GNS-Downloader-Setup-6.53.exe" "dist/installer/GNS-Downloader-Setup.exe"
-          Copy-Item "dist/GNS-Downloader-Portable-v6.53-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
+          Copy-Item "dist/installer/GNS-Downloader-Setup-6.54.exe" "dist/installer/GNS-Downloader-Setup.exe"
+          Copy-Item "dist/GNS-Downloader-Portable-v6.54-Windows-x64.zip" "dist/GNS-Downloader-Portable-Windows-x64.zip"
 
       - name: Enforce the 50 MiB Windows package limit
         shell: pwsh
         run: |
           $limit = 50MB
           $packages = @(
-            "dist/installer/GNS-Downloader-Setup-6.53.exe",
-            "dist/GNS-Downloader-Portable-v6.53-Windows-x64.zip"
+            "dist/installer/GNS-Downloader-Setup-6.54.exe",
+            "dist/GNS-Downloader-Portable-v6.54-Windows-x64.zip"
           )
           foreach ($path in $packages) {
             if (-not (Test-Path $path)) { throw "Required package is missing: $path" }
@@ -166,25 +218,25 @@ jobs:
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Portable-v6.53
-          path: dist/GNS-Downloader-Portable-v6.53-Windows-x64.zip
+          name: GNS-Downloader-Portable-v6.54
+          path: dist/GNS-Downloader-Portable-v6.54-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload installer Setup
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Setup-v6.53
-          path: dist/installer/GNS-Downloader-Setup-6.53.exe
+          name: GNS-Downloader-Setup-v6.54
+          path: dist/installer/GNS-Downloader-Setup-6.54.exe
           if-no-files-found: error
           retention-days: 14
 
       - name: Publish permanent GitHub Release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref == 'refs/heads/main' && '6.53' || github.ref_name }}
-          name: GNS Downloader 6.53
+          tag_name: ${{ github.ref_name }}
+          name: GNS Downloader ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             dist/GNS-Downloader-Portable-Windows-x64.zip
