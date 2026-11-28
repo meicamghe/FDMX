@@ -143,12 +143,26 @@ jobs:
         run: |
           $qmlDir = python -c "from PySide6.QtCore import QLibraryInfo; print(QLibraryInfo.path(QLibraryInfo.LibraryPath.QmlImportsPath))"
           if (-not (Test-Path $qmlDir)) { throw "Qt QML runtime directory not found: $qmlDir" }
-          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --collect-all PySide6.QtQml --collect-all PySide6.QtQuick --collect-all PySide6.QtQuickControls2 --collect-all PySide6.QtOpenGL --collect-all PySide6.QtWidgets --collect-all shiboken6 --collect-all qml_ui --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlDir;PySide6/Qt/qml" qml_ui/production_main.py
+          # Ship only QML modules imported by Main.qml and their bundled dependencies.
+          $qmlStage = Join-Path $env:RUNNER_TEMP "adm-qml-imports"
+          New-Item -ItemType Directory -Force -Path $qmlStage | Out-Null
+          foreach ($module in @("QtQuick", "QtQml", "Qt")) {
+            $source = Join-Path $qmlDir $module
+            if (Test-Path $source) { Copy-Item $source -Destination $qmlStage -Recurse -Force }
+          }
+          pyinstaller --noconfirm --clean --onedir --windowed --name "ADM QML" --icon installer/gns-downloader.ico --distpath dist-qml --workpath build/qml --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 --hidden-import PySide6.QtOpenGL --hidden-import PySide6.QtWidgets --add-data "$qmlStage;PySide6/Qt/qml" --add-data "qml_ui/Main.qml;qml_ui" qml_ui/production_main.py
           if ($LASTEXITCODE -ne 0) { throw "ADM QML packaging failed with exit code $LASTEXITCODE" }
+          # Qt's built-in English strings need no translation catalogs. Drop optional
+          # language catalogs and development-only metadata from the preview bundle.
+          $translations = "dist-qml/ADM QML/_internal/PySide6/Qt/translations"
+          if (Test-Path $translations) { Remove-Item $translations -Recurse -Force }
           $qmlApp = "dist-qml/ADM QML/ADM QML.exe"
           if (-not (Test-Path $qmlApp)) { throw "ADM QML executable is missing." }
           & $qmlApp --smoke-test
           if ($LASTEXITCODE -ne 0) { throw "ADM QML startup smoke test failed with exit code $LASTEXITCODE" }
+          $bundleBytes = (Get-ChildItem "dist-qml/ADM QML" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          Write-Host "ADM QML optimized onedir size: $([math]::Round($bundleBytes / 1MB, 2)) MiB"
+          Get-ChildItem "dist-qml/ADM QML" -File -Recurse | Sort-Object Length -Descending | Select-Object -First 20 FullName, Length
       - name: Create experimental ADM QML portable ZIP
         shell: pwsh
         run: |
