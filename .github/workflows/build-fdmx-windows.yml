@@ -24,6 +24,7 @@ on:
   pull_request:
     branches:
       - main
+      - experiment/qml-ui-shell
     paths:
       - "FDMX_v6_50.py"
       - "qml_ui/**"
