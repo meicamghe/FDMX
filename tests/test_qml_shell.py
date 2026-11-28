@@ -9,12 +9,15 @@ def _qt():
     return QGuiApplication.instance() or QGuiApplication([])
 
 def test_qml_shell_files_exist():
-    for name in ("main.py", "Main.qml", "README.md", "models.py", "adapter.py"):
+    for name in ("main.py", "Main.qml", "README.md", "models.py", "adapter.py", "host.py"):
         assert (QML_DIR / name).is_file()
 
 def test_preview_remains_isolated():
     source = (QML_DIR / "main.py").read_text(encoding="utf-8")
     assert "FDMX_v6_50" not in source
+    host = (QML_DIR / "host.py").read_text(encoding="utf-8")
+    assert "QApplication.instance()" in host
+    assert "QApplication(" not in host
 
 def test_download_model_normalizes_backend_fields():
     _qt()
