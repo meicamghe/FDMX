@@ -231,7 +231,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     spacing: 3
                                     Label { text: fileName; color: "#e5edf8"; font.pixelSize: 12; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                                    Label { text: status + "  ·  " + speed; color: muted; font.pixelSize: 10 }
+                                    Label { text: status + "  ·  " + speed + (category.length ? "  ·  " + category : "") + (scheduledAt.length ? "  ·  Scheduled: " + scheduledAt : ""); color: muted; font.pixelSize: 10 }
                                 }
                                 Label { text: progress + "%"; color: "#70ddc8"; font.pixelSize: 12; font.bold: true }
                                 ToolButton {
