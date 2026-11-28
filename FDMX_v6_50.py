@@ -5820,8 +5820,12 @@ class FDMX(QWidget):
                     start_time = datetime.datetime.fromisoformat(scheduled_at)
                     if datetime.datetime.now().astimezone() < start_time.astimezone():
                         continue
+                    # A due task is no longer waiting in the scheduler.
+                    task["scheduled_at"] = ""
+                    self.save_tasks()
                 except (ValueError, TypeError):
                     task["scheduled_at"] = ""
+                    self.save_tasks()
             if task.get("kind") == "torrent":
                 worker = TorrentWorker(task_id, task["url"], task["folder"], self.torrent_upload_limit.value())
             elif task.get("kind") == "youtube":
