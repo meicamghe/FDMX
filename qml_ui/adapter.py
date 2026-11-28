@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 import datetime
+import urllib.parse
 from PySide6.QtCore import QObject, Property, QThread, QTimer, Signal, Slot
 from .models import DownloadListModel
 
@@ -150,7 +151,7 @@ class FDMXDownloadAdapter(QObject):
         """Submit a URL through the existing controller's real intake pipeline."""
         self._assert_gui_thread()
         value = str(url or "").strip()
-        parsed = __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(value)
+        parsed = urllib.parse.urlsplit(value)
         is_magnet = value.lower().startswith("magnet:?")
         if not is_magnet and (parsed.scheme.lower() not in ("http", "https") or not parsed.netloc):
             self.actionRejected.emit("Enter a valid HTTP, HTTPS, YouTube, or magnet link.")
@@ -170,6 +171,7 @@ class FDMXDownloadAdapter(QObject):
         before = set(getattr(self._controller, "tasks", {}).keys())
         previous_text = str(url_widget.text() or "") if callable(getattr(url_widget, "text", None)) else ""
         try:
+            self._controller._pending_qml_handoff = True
             url_widget.setText(value)
             submit()
         except Exception:
@@ -180,6 +182,10 @@ class FDMXDownloadAdapter(QObject):
             # QML submissions in it or overwrite text the user was editing.
             try:
                 url_widget.setText(previous_text)
+            except Exception:
+                pass
+            try:
+                self._controller._pending_qml_handoff = False
             except Exception:
                 pass
         after = set(getattr(self._controller, "tasks", {}).keys())
