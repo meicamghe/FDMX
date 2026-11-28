@@ -146,6 +146,49 @@ class FDMXDownloadAdapter(QObject):
         return getattr(self._controller, "tasks", {}).get(task_id)
 
     @Slot(str)
+    def queueDownload(self, url):
+        """Submit a URL through the existing controller's real intake pipeline."""
+        self._assert_gui_thread()
+        value = str(url or "").strip()
+        parsed = __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(value)
+        is_magnet = value.lower().startswith("magnet:?")
+        if not is_magnet and (parsed.scheme.lower() not in ("http", "https") or not parsed.netloc):
+            self.actionRejected.emit("Enter a valid HTTP, HTTPS, YouTube, or magnet link.")
+            return
+        url_widget = getattr(self._controller, "url", None)
+        folder_widget = getattr(self._controller, "folder", None)
+        submit = getattr(self._controller, "add_download", None)
+        if url_widget is None or not callable(getattr(url_widget, "setText", None)) or not callable(submit):
+            self.actionRejected.emit("The legacy download intake is unavailable.")
+            return
+        folder = ""
+        if folder_widget is not None and callable(getattr(folder_widget, "text", None)):
+            folder = str(folder_widget.text() or "").strip()
+        if not folder:
+            self.actionRejected.emit("Choose a download folder in the existing settings first.")
+            return
+        before = set(getattr(self._controller, "tasks", {}).keys())
+        previous_text = str(url_widget.text() or "") if callable(getattr(url_widget, "text", None)) else ""
+        try:
+            url_widget.setText(value)
+            submit()
+        except Exception:
+            self.actionRejected.emit("The download engine could not accept this link.")
+            return
+        finally:
+            # The Widgets entry field belongs to the legacy shell; do not leave
+            # QML submissions in it or overwrite text the user was editing.
+            try:
+                url_widget.setText(previous_text)
+            except Exception:
+                pass
+        after = set(getattr(self._controller, "tasks", {}).keys())
+        if after - before:
+            self.refresh()
+            return
+        self.actionRejected.emit("The link was not added. It may already be in the queue or require attention in the legacy window.")
+
+    @Slot(str)
     def pause(self, task_id):
         task = self._task(task_id)
         worker = task.get("worker") if task else None
