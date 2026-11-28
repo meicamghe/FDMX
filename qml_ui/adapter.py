@@ -142,6 +142,15 @@ class FDMXDownloadAdapter(QObject):
     @Property(str, constant=True)
     def connectionState(self): return "Connected to legacy download engine"
 
+    def _save_tasks(self):
+        save = getattr(self._controller, "save_tasks", None)
+        if not callable(save):
+            return False
+        try:
+            return save() is not False
+        except Exception:
+            return False
+
     def _task(self, task_id):
         self._assert_gui_thread()
         return getattr(self._controller, "tasks", {}).get(task_id)
@@ -286,9 +295,11 @@ class FDMXDownloadAdapter(QObject):
         previous = task.get("scheduled_at", "")
         task["scheduled_at"] = selected.isoformat()
         try:
-            self._controller.save_tasks()
+            if not self._save_tasks():
+                raise RuntimeError("persistence failed")
         except Exception:
             task["scheduled_at"] = previous
+            self._save_tasks()
             self.actionRejected.emit("The schedule could not be saved.")
             return
         self._refresh_schedule_view()
@@ -303,9 +314,11 @@ class FDMXDownloadAdapter(QObject):
         previous = task.get("scheduled_at", "")
         task["scheduled_at"] = ""
         try:
-            self._controller.save_tasks()
+            if not self._save_tasks():
+                raise RuntimeError("persistence failed")
         except Exception:
             task["scheduled_at"] = previous
+            self._save_tasks()
             self.actionRejected.emit("The schedule could not be cleared.")
             return
         self._refresh_schedule_view()
@@ -323,11 +336,21 @@ class FDMXDownloadAdapter(QObject):
         previous = task.get("scheduled_at", "")
         task["scheduled_at"] = ""
         try:
-            self._controller.save_tasks()
+            if not self._save_tasks():
+                raise RuntimeError("schedule persistence failed")
+        except Exception:
+            task["scheduled_at"] = previous
+            self._save_tasks()
+            self.actionRejected.emit("The schedule could not be cleared before starting.")
+            self._refresh_schedule_view()
+            self.refresh()
+            return
+        try:
             self._controller.schedule_downloads()
         except Exception:
             task["scheduled_at"] = previous
-            self.actionRejected.emit("The download could not be started now.")
+            self._save_tasks()  # persist the rollback, not only the in-memory value
+            self.actionRejected.emit("The download could not be started now; its previous schedule was restored.")
         self._refresh_schedule_view()
         self.refresh()
 
