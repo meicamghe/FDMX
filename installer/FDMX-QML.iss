@@ -4,7 +4,7 @@
 #define AppPublisher "ADM Project"
 
 [Setup]
-AppId={{9C6E51A8-3B29-4F13-8F9D-ADMQML6540001}
+AppId={{9C6E51A8-3B29-4F13-8F9D-AD6A16540001}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
