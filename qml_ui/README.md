@@ -14,6 +14,7 @@ python -m qml_ui.main
 - `adapter.py`: `FDMXDownloadAdapter`, a QObject facade over the legacy
   controller's task dictionary, history, workers and task-ID operations.
 - `main.py`: standalone QGuiApplication preview, deliberately disconnected.
+- `host.py`: optional embedding entry point for the existing production QApplication; returns the engine, adapter and QML root window.
 - `Main.qml`: presentation only; no downloader logic.
 
 Instantiate `FDMXDownloadAdapter(existing_fdmx_window)` on the controller's
@@ -29,9 +30,11 @@ run under the existing `QApplication`. Do not create a second Qt application.
 The next host integration step must load QML from the existing QApplication
 and inject the adapter while preserving the Widgets UI as the fallback.
 
-History is currently read-only. Scheduler edits, settings changes, history
-management/export, torrent-specific operations and analytics drill-down need
-additional explicit typed slots before those screens can claim parity.
+The QML download rows expose pause, resume, cancel and retry controls. History
+is currently read-only, while scheduled timestamps and category are included in
+task snapshots. Scheduler edits, settings changes, history management/export,
+torrent-specific operations and analytics drill-down need additional explicit
+typed slots before those screens can claim parity.
 
 ## Remaining acceptance gates
 1. Embed QML inside the existing QApplication without replacing the default UI.
