@@ -675,6 +675,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=test"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+           self_owner.max_height = 0
+           self_owner.max_abr = 0
             self_owner.max_height = 0
             self_owner.max_abr = 0
             self_owner.proxy_url = ""
@@ -775,6 +777,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=existing"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -885,6 +889,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                 self_owner.url = "https://www.youtube.com/watch?v=existing"
                 self_owner.folder = folder
                 self_owner.media_type = "audio"
+                self_owner.max_height = 0
+                self_owner.max_abr = 0
                 self_owner.proxy_url = ""
                 self_owner.cancel_event = threading.Event()
                 self_owner.pause_event = threading.Event()
@@ -1016,6 +1022,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=partial-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -1133,6 +1141,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=paused-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -1254,6 +1264,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=cancel-paused-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
