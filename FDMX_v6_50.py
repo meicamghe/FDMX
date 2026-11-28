@@ -235,8 +235,19 @@ def thread_proxy(proxy_url):
 
 
 def open_url_with_proxy(request, timeout=60, proxy_url=""):
-    with thread_proxy(proxy_url):
-        return urllib.request.urlopen(request, timeout=timeout)
+    """Open a URL through the explicitly selected proxy without global opener races."""
+    proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
+    if proxy_url:
+        scheme = urllib.parse.urlsplit(proxy_url).scheme.lower()
+        if scheme in ("http", "https"):
+            handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+            opener = build_url_opener(handler)
+            return opener.open(request, timeout=timeout)
+        if scheme.startswith("socks"):
+            with thread_proxy(proxy_url):
+                return urllib.request.urlopen(request, timeout=timeout)
+        raise ValueError(f"Unsupported proxy scheme: {scheme}")
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 class _CredentialSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -3150,9 +3161,10 @@ class GitHubUpdateWorker(QThread):
     failed = Signal(str)
     RELEASES_API = "https://api.github.com/repos/meicamghe/FDMX/releases"
 
-    def __init__(self, current_version):
+    def __init__(self, current_version, proxy_url=""):
         super().__init__()
         self.current_version = current_version
+        self.proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
 
     def _fetch_stable_releases(self):
         releases = []
@@ -3165,7 +3177,7 @@ class GitHubUpdateWorker(QThread):
                     "X-GitHub-Api-Version": "2022-11-28",
                 },
             )
-            with open_url(request, timeout=25) as response:
+            with open_url_with_proxy(request, timeout=25, proxy_url=self.proxy_url) as response:
                 batch = json.loads(response.read().decode("utf-8"))
             if not isinstance(batch, list):
                 raise RuntimeError("GitHub returned an invalid releases list.")
@@ -3469,9 +3481,10 @@ class GitHubUpdateDownloadWorker(QThread):
     failed = Signal(str)
     canceled = Signal()
 
-    def __init__(self, url, expected_size=0, expected_digest=""):
+    def __init__(self, url, expected_size=0, expected_digest="", proxy_url=""):
         super().__init__()
         self.url = url
+        self.proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
         self.expected_size = max(0, int(expected_size or 0))
         self.expected_digest = str(expected_digest or "")
         self.cancel_event = threading.Event()
@@ -3517,7 +3530,7 @@ class GitHubUpdateDownloadWorker(QThread):
             digest = hashlib.sha256()
             downloaded = 0
             started = time.monotonic()
-            with open_url(request, timeout=60) as response:
+            with open_url_with_proxy(request, timeout=60, proxy_url=self.proxy_url) as response:
                 with self._response_lock:
                     if self.cancel_event.is_set():
                         self._interrupt_response(response)
@@ -4746,7 +4759,8 @@ class FDMX(QWidget):
             QMessageBox.information(self, "Updates", "An update operation is already running.")
             return
         self.status.setText("Checking GitHub for updates…")
-        worker = GitHubUpdateWorker(APP_VERSION)
+        proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+        worker = GitHubUpdateWorker(APP_VERSION, proxy_url=proxy_url)
         self._update_worker = worker
         worker.update_available.connect(self.on_update_available)
         worker.up_to_date.connect(self.on_update_up_to_date)
@@ -4806,7 +4820,8 @@ class FDMX(QWidget):
         progress.setAutoClose(False)
         progress.setAutoReset(False)
         self._update_progress = progress
-        worker = GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest)
+        proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+        worker = GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest, proxy_url=proxy_url)
         self._update_download_worker = worker
         worker.progress.connect(self.on_update_download_progress)
         worker.downloaded.connect(self.on_update_downloaded)
