@@ -58,7 +58,7 @@ def test_adapter_snapshots_stats_and_task_id_actions():
                 "queued":{"name":"queued.zip","status":"Queued","worker":None},
                 "done":{"name":"done.pdf","status":"Completed","downloaded":10,"total":10},
             }
-            self.history=[{"name":"done.pdf","status":"Completed","completed_at":1}]
+            self.history=[{"name":"done.pdf","status":"Completed","completed_at":1,"time":"2026-11-28 09:00:00","size":4096}]
             self.saved=0; self.scheduled=0; self.canceled=[]
         def save_tasks(self): self.saved+=1
         def schedule_downloads(self): self.scheduled+=1
@@ -69,6 +69,8 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     assert adapter.queuedDownloads == 1
     assert adapter.completedDownloads == 1
     assert adapter.history[0]["file_name"] == "done.pdf"
+    assert adapter.history[0]["size"] == 4096
+    assert adapter.history[0]["time"] == "2026-11-28 09:00:00"
     assert adapter.scheduledDownloads == 0
     assert adapter.settings["maxDownloads"] is None
     assert adapter.totalSpeed == "2.0 KB/s"
