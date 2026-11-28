@@ -59,6 +59,10 @@ class DownloadListModel(QAbstractListModel):
                 "scheduled_at": str(item.get("scheduled_at", "")),
                 "kind": str(item.get("kind", "http")),
             })
+        # Polling the legacy controller should not reset the view when no
+        # observable role changed; otherwise QML loses selection/scroll state.
+        if normalized == self._rows:
+            return
         self.beginResetModel()
         self._rows = normalized
         self.endResetModel()
