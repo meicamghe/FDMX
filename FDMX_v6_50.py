@@ -30,7 +30,7 @@ from email.message import Message
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PySide6.QtCore import QThread, Signal, Slot, Qt, QSettings, QSize, QDateTime, QTimer, QUrl
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QLinearGradient, QDesktopServices
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QFontMetrics, QLinearGradient, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLineEdit, QPushButton, QLabel, QProgressBar, QFileDialog,
@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 
 APP_NAME = "GNS Downloader"
-APP_VERSION = "6.53"
+APP_VERSION = "6.54"
 CONNECTIONS = 8
 MAX_PARTS = 16
 CHUNK_SIZE = 64 * 1024
@@ -235,8 +235,19 @@ def thread_proxy(proxy_url):
 
 
 def open_url_with_proxy(request, timeout=60, proxy_url=""):
-    with thread_proxy(proxy_url):
-        return urllib.request.urlopen(request, timeout=timeout)
+    """Open a URL through the explicitly selected proxy without global opener races."""
+    proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
+    if proxy_url:
+        scheme = urllib.parse.urlsplit(proxy_url).scheme.lower()
+        if scheme in ("http", "https"):
+            handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+            opener = build_url_opener(handler)
+            return opener.open(request, timeout=timeout)
+        if scheme.startswith("socks"):
+            with thread_proxy(proxy_url):
+                return urllib.request.urlopen(request, timeout=timeout)
+        raise ValueError(f"Unsupported proxy scheme: {scheme}")
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 class _CredentialSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -681,6 +692,14 @@ class DownloadWorker(QThread):
                     except Exception:
                         pass
 
+        reason = getattr(last_error, "reason", last_error)
+        if isinstance(reason, socket.gaierror):
+            host = urllib.parse.urlsplit(self.url).hostname or "the download server"
+            raise RuntimeError(
+                f"Could not resolve the server hostname ({host}). "
+                "Check your internet connection and DNS settings, or enable a working proxy in Settings. "
+                f"Original network error: {reason}"
+            ) from last_error
         raise RuntimeError(
             f"Server rejected both Range and ordinary GET requests: {last_error}"
         ) from last_error
@@ -1287,15 +1306,35 @@ class DownloadDetailsDialog(QDialog):
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
 
+        # Long source URLs and paths must never expand the details window.
+        # Show a compact single-line preview; the adjacent buttons copy the full value.
+        url_row = QHBoxLayout()
         self.url_label = QLabel()
-        self.url_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.url_label.setWordWrap(True)
-        layout.addWidget(self.url_label)
+        self.url_label.setMinimumWidth(0)
+        self.url_label.setFixedHeight(28)
+        self.url_label.setToolTip("Full source URL")
+        url_row.addWidget(self.url_label, 1)
+        self.copy_url_btn = QPushButton("Copy URL")
+        self.copy_url_btn.setFixedHeight(28)
+        self.copy_url_btn.clicked.connect(
+            lambda: QApplication.clipboard().setText(str(self.task.get("url", "")))
+        )
+        url_row.addWidget(self.copy_url_btn)
+        layout.addLayout(url_row)
 
+        folder_row = QHBoxLayout()
         self.folder_label = QLabel()
-        self.folder_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.folder_label.setWordWrap(True)
-        layout.addWidget(self.folder_label)
+        self.folder_label.setMinimumWidth(0)
+        self.folder_label.setFixedHeight(28)
+        self.folder_label.setToolTip("Full save folder")
+        folder_row.addWidget(self.folder_label, 1)
+        self.copy_folder_btn = QPushButton("Copy path")
+        self.copy_folder_btn.setFixedHeight(28)
+        self.copy_folder_btn.clicked.connect(
+            lambda: QApplication.clipboard().setText(str(self.task.get("folder", "")))
+        )
+        folder_row.addWidget(self.copy_folder_btn)
+        layout.addLayout(folder_row)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimumHeight(22)
@@ -1463,24 +1502,22 @@ class DownloadDetailsDialog(QDialog):
         content_type = task.get("content_type", "Unknown") or "Unknown"
         self.summary_label.setText(
             f"Status: {status}    |    File size: {metadata_size}\n"
-            f"Progress: {percent}%    |    Downloaded: {size_text}\n"
-            f"Type: {content_type}    |    Speed: {speed_text}    |    ETA: {eta_text}"
+            f"Speed: {speed_text}    |    ETA: {eta_text}"
         )
-        self.url_label.setText("URL: " + str(task.get("url", "")))
-        self.folder_label.setText("Save folder: " + str(task.get("folder", "")))
+        full_url = "URL: " + str(task.get("url", ""))
+        full_folder = "Save folder: " + str(task.get("folder", ""))
+        self.url_label.setToolTip(full_url)
+        self.folder_label.setToolTip(full_folder)
+        self.url_label.setText(QFontMetrics(self.url_label.font()).elidedText(
+            full_url, Qt.ElideMiddle, max(80, self.url_label.width())
+        ))
+        self.folder_label.setText(QFontMetrics(self.folder_label.font()).elidedText(
+            full_folder, Qt.ElideMiddle, max(80, self.folder_label.width())
+        ))
         self.progress_bar.setValue(percent)
         self.progress_bar.setFormat(f"{percent}%  —  {size_text}")
         if completed:
             self.summary_label.setText(self.summary_label.text() + "\nDownload finished — Open the file or Close this window.")
-        elif task.get("kind") != "torrent":
-            selected_parts = int(task.get("parts_count") or 0)
-            if selected_parts:
-                self.summary_label.setText(
-                    self.summary_label.text()
-                    + f"\nFixed connection mode: {selected_parts} part(s) from user settings"
-                )
-            elif status in ("Downloading", "Checking server", "Retrying"):
-                self.summary_label.setText(self.summary_label.text() + "\nFixed connection mode: waiting to start configured parts…")
 
         if task.get("kind") == "torrent":
             self.parts_table.setRowCount(1)
@@ -3160,9 +3197,10 @@ class GitHubUpdateWorker(QThread):
     failed = Signal(str)
     RELEASES_API = "https://api.github.com/repos/meicamghe/FDMX/releases"
 
-    def __init__(self, current_version):
+    def __init__(self, current_version, proxy_url=""):
         super().__init__()
         self.current_version = current_version
+        self.proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
 
     def _fetch_stable_releases(self):
         releases = []
@@ -3175,7 +3213,7 @@ class GitHubUpdateWorker(QThread):
                     "X-GitHub-Api-Version": "2022-11-28",
                 },
             )
-            with open_url(request, timeout=25) as response:
+            with open_url_with_proxy(request, timeout=25, proxy_url=self.proxy_url) as response:
                 batch = json.loads(response.read().decode("utf-8"))
             if not isinstance(batch, list):
                 raise RuntimeError("GitHub returned an invalid releases list.")
@@ -3479,9 +3517,10 @@ class GitHubUpdateDownloadWorker(QThread):
     failed = Signal(str)
     canceled = Signal()
 
-    def __init__(self, url, expected_size=0, expected_digest=""):
+    def __init__(self, url, expected_size=0, expected_digest="", proxy_url=""):
         super().__init__()
         self.url = url
+        self.proxy_url = normalize_proxy_url(proxy_url) if proxy_url else ""
         self.expected_size = max(0, int(expected_size or 0))
         self.expected_digest = str(expected_digest or "")
         self.cancel_event = threading.Event()
@@ -3527,7 +3566,7 @@ class GitHubUpdateDownloadWorker(QThread):
             digest = hashlib.sha256()
             downloaded = 0
             started = time.monotonic()
-            with open_url(request, timeout=60) as response:
+            with open_url_with_proxy(request, timeout=60, proxy_url=self.proxy_url) as response:
                 with self._response_lock:
                     if self.cancel_event.is_set():
                         self._interrupt_response(response)
@@ -3750,6 +3789,9 @@ class FDMX(QWidget):
         self.setStyleSheet("""
             QWidget { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; }
             QLineEdit, QSpinBox, QDateTimeEdit, QComboBox { padding: 7px 9px; min-height: 30px; font-size: 11pt; }
+            QComboBox { padding-right: 28px; }
+            QComboBox::drop-down { width: 25px; border-left: 1px solid #aebbd0; }
+            QComboBox::down-arrow { width: 9px; height: 9px; }
             QPushButton { padding: 7px 13px; min-height: 32px; font-size: 10.5pt; font-weight: 600; }
             QPushButton:hover { background: #dff4e7; }
             QTableWidget { gridline-color: #d9d9d9; }
@@ -3762,15 +3804,6 @@ class FDMX(QWidget):
         file_menu.addAction("Add download", lambda: self.url.setFocus())
         file_menu.addSeparator()
         file_menu.addAction("Exit", self.close)
-
-        download_menu = self.menu_bar.addMenu("Download")
-        for label, callback in (
-            ("Start queue", self.start_queue), ("Pause selected", self.pause_selected),
-            ("Resume selected", self.resume_selected), ("Cancel selected", self.cancel_selected),
-            ("Retry selected", self.retry_selected), ("Remove from list", self.remove_selected),
-            ("Delete file from disk", self.delete_file_selected),
-        ):
-            download_menu.addAction(label, callback)
 
         view_menu = self.menu_bar.addMenu("View")
         filter_menu = view_menu.addMenu("Show")
@@ -3792,6 +3825,7 @@ class FDMX(QWidget):
         settings_menu = self.menu_bar.addMenu("Settings")
         settings_menu.addAction("Preferences…", self.open_settings_dialog)
         help_menu = self.menu_bar.addMenu("Help")
+        help_menu.addAction("GitHub project", lambda: QDesktopServices.openUrl(QUrl("https://github.com/meicamghe/FDMX")))
         help_menu.addAction("Check for updates…", self.check_for_updates)
         help_menu.addAction(f"About {APP_NAME}", self.show_about)
         root.setMenuBar(self.menu_bar)
@@ -3865,42 +3899,49 @@ class FDMX(QWidget):
 
         self.settings_dialog = QDialog(self)
         self.settings_dialog.setWindowTitle(f"{APP_NAME} Preferences")
-        self.settings_dialog.setMinimumWidth(430)
+        self.settings_dialog.setMinimumWidth(760)
+        self.settings_dialog.resize(820, 620)
         settings_layout = QVBoxLayout(self.settings_dialog)
         settings_grid = QGridLayout()
-        settings_grid.addWidget(QLabel("Maximum simultaneous downloads:"), 0, 0)
+        settings_grid.addWidget(QLabel("Language:"), 0, 0)
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("English", "en")
+        self.language_combo.addItem("فارسی", "fa")
+        self.language_combo.currentIndexChanged.connect(self.apply_language)
+        settings_grid.addWidget(self.language_combo, 0, 1)
+        settings_grid.addWidget(QLabel("Maximum simultaneous downloads:"), 1, 0)
         self.max_downloads = QSpinBox()
         self.max_downloads.setRange(1, 16)
         self.max_downloads.setValue(8)
-        settings_grid.addWidget(self.max_downloads, 0, 1)
-        settings_grid.addWidget(QLabel("Download parts per file (1–16):"), 1, 0)
+        settings_grid.addWidget(self.max_downloads, 1, 1)
+        settings_grid.addWidget(QLabel("Download parts per file (1–16):"), 2, 0)
         self.parts_count = QSpinBox()
         self.parts_count.setRange(1, MAX_PARTS)
         self.parts_count.setValue(CONNECTIONS)
         self.parts_count.setToolTip("Fixed number of parallel connections for each file; default is 8.")
-        settings_grid.addWidget(self.parts_count, 1, 1)
-        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 2, 0)
+        settings_grid.addWidget(self.parts_count, 2, 1)
+        settings_grid.addWidget(QLabel("Speed limit per file (KB/s, 0 = unlimited):"), 3, 0)
         self.speed_limit = QSpinBox()
         self.speed_limit.setRange(0, 10_000_000)
         self.speed_limit.setValue(0)
-        settings_grid.addWidget(self.speed_limit, 2, 1)
-        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 3, 0)
+        settings_grid.addWidget(self.speed_limit, 3, 1)
+        settings_grid.addWidget(QLabel("Torrent upload limit (KB/s, 0 = unlimited):"), 4, 0)
         self.torrent_upload_limit = QSpinBox()
         self.torrent_upload_limit.setRange(0, 10_000_000)
         self.torrent_upload_limit.setValue(1)
         self.torrent_upload_limit.setToolTip("Maximum upload rate while seeding torrents")
         self.torrent_upload_limit.valueChanged.connect(self.update_torrent_upload_limit)
-        settings_grid.addWidget(self.torrent_upload_limit, 3, 1)
+        settings_grid.addWidget(self.torrent_upload_limit, 4, 1)
         self.proxy_enabled = QCheckBox("Use proxy")
-        settings_grid.addWidget(self.proxy_enabled, 4, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_enabled, 5, 0, 1, 2)
         self.proxy_url = QLineEdit()
         self.proxy_url.setPlaceholderText("http://127.0.0.1:8080 | socks5h://127.0.0.1:1080")
         self.proxy_url.setToolTip("HTTP/HTTPS proxies work for standard downloads. YouTube also supports SOCKS4/4a/5/5h. Telegram MTProto requires a local MTProto-to-SOCKS bridge.")
-        settings_grid.addWidget(self.proxy_url, 5, 0, 1, 2)
+        settings_grid.addWidget(self.proxy_url, 6, 0, 1, 2)
         proxy_help = QLabel("Supported: HTTP, HTTPS, SOCKS4/4a/5/5h. Telegram MTProto needs a local MTProto-to-SOCKS bridge.")
         proxy_help.setWordWrap(True)
         proxy_help.setStyleSheet("color:#64748b;font-size:11px;")
-        settings_grid.addWidget(proxy_help, 6, 0, 1, 2)
+        settings_grid.addWidget(proxy_help, 7, 0, 1, 2)
         github_help = QLabel(
             "GitHub Actions artifacts require repository access. GNS Downloader uses an existing "
             "GH_TOKEN/GITHUB_TOKEN or GitHub CLI login; otherwise it asks for a temporary token "
@@ -3908,7 +3949,7 @@ class FDMX(QWidget):
         )
         github_help.setWordWrap(True)
         github_help.setStyleSheet("color:#64748b;font-size:11px;")
-        settings_grid.addWidget(github_help, 7, 0, 1, 2)
+        settings_grid.addWidget(github_help, 8, 0, 1, 2)
         settings_layout.addLayout(settings_grid)
         settings_buttons = QHBoxLayout()
         settings_buttons.addStretch(1)
@@ -3970,6 +4011,9 @@ class FDMX(QWidget):
         clear_schedule = QPushButton("Clear schedule")
         clear_schedule.clicked.connect(self.clear_selected_schedule)
         schedule_controls.addWidget(clear_schedule)
+        clear_all_schedules = QPushButton("Clear All")
+        clear_all_schedules.clicked.connect(self.clear_all_schedules)
+        schedule_controls.addWidget(clear_all_schedules)
         start_now = QPushButton("Start now")
         start_now.clicked.connect(self.start_selected_now)
         schedule_controls.addWidget(start_now)
@@ -4089,11 +4133,65 @@ class FDMX(QWidget):
         # Select the visual preset automatically for the current desktop OS.
         # No theme-selection tab is exposed in the product UI.
         self.theme_combo = QComboBox()
-        if sys.platform.startswith("linux"):
-            self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")
-        else:
-            self.theme_combo.addItem("Windows 11 Fluent", "fluent")
-        self.theme_preview = QLabel()
+        self.theme_combo.addItem("Light", "light")
+        self.theme_combo.addItem("Dark", "dark")
+        self.theme_combo.addItem("Midnight", "midnight")
+        self.theme_combo.addItem("Violet", "violet")
+        self.theme_combo.addItem("Windows 11 Fluent", "fluent")
+        self.theme_combo.addItem("Ubuntu Yaru", "ubuntu_yaru")
+        self.theme_combo.currentIndexChanged.connect(self.apply_selected_theme)
+        settings_grid.addWidget(QLabel("Appearance theme:"), 8, 0)
+        settings_grid.addWidget(self.theme_combo, 8, 1)
+
+        # A real Qt widget sample, not a decorative label: these controls inherit
+        # the exact application stylesheet and palette currently being previewed.
+        self.theme_preview = QFrame()
+        self.theme_preview.setObjectName("themePreviewCard")
+        self.theme_preview.setMinimumWidth(700)
+        preview_layout = QVBoxLayout(self.theme_preview)
+        preview_layout.setContentsMargins(14, 12, 14, 12)
+        preview_layout.setSpacing(9)
+        preview_heading = QHBoxLayout()
+        preview_title = QLabel("Appearance preview")
+        preview_title.setStyleSheet("font-size:12pt;font-weight:700;")
+        preview_hint = QLabel("Live sample of the actual interface controls")
+        preview_hint.setObjectName("previewMuted")
+        preview_heading.addWidget(preview_title)
+        preview_heading.addStretch(1)
+        preview_heading.addWidget(preview_hint)
+        preview_layout.addLayout(preview_heading)
+        preview_controls = QHBoxLayout()
+        self.theme_preview_url = QLineEdit()
+        self.theme_preview_url.setPlaceholderText("https://example.com/file.zip")
+        self.theme_preview_url.setReadOnly(True)
+        self.theme_preview_format = QComboBox()
+        self.theme_preview_format.addItems(["Automatic", "Video", "Document"])
+        self.theme_preview_primary = QPushButton("Add download")
+        self.theme_preview_primary.setProperty("previewPrimary", True)
+        preview_controls.addWidget(self.theme_preview_url, 1)
+        preview_controls.addWidget(self.theme_preview_format)
+        preview_controls.addWidget(self.theme_preview_primary)
+        preview_layout.addLayout(preview_controls)
+        self.theme_preview_progress = QProgressBar()
+        self.theme_preview_progress.setRange(0, 100)
+        self.theme_preview_progress.setValue(68)
+        self.theme_preview_progress.setFormat("  Downloading sample.zip — 68%")
+        preview_layout.addWidget(self.theme_preview_progress)
+        self.theme_preview_table = QTableWidget(2, 3)
+        self.theme_preview_table.setHorizontalHeaderLabels(["File", "Status", "Progress"])
+        self.theme_preview_table.verticalHeader().setVisible(False)
+        self.theme_preview_table.horizontalHeader().setStretchLastSection(True)
+        self.theme_preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.theme_preview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.theme_preview_table.setFixedHeight(104)
+        for row, values in enumerate((
+            ("sample.zip", "Downloading", "68%"),
+            ("manual.pdf", "Completed", "100%"),
+        )):
+            for col, value in enumerate(values):
+                self.theme_preview_table.setItem(row, col, QTableWidgetItem(value))
+        preview_layout.addWidget(self.theme_preview_table)
+        settings_layout.addWidget(self.theme_preview)
 
         self.status = QLabel("Ready — add a URL to begin.")
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -4228,6 +4326,25 @@ class FDMX(QWidget):
         self.refresh_schedule_table()
         self.status.setText(f"Schedule cleared for {task.get('name', 'download')}.")
 
+    def clear_all_schedules(self):
+        scheduled = [task for task in self.tasks.values() if task.get("scheduled_at")]
+        if not scheduled:
+            self.status.setText("There are no scheduled downloads to clear.")
+            return
+        answer = QMessageBox.question(
+            self, "Clear all schedules",
+            f"Remove the scheduled start time from {len(scheduled)} download(s)?\n"
+            "The downloads will remain in your list and will not be deleted.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        for task in scheduled:
+            task["scheduled_at"] = ""
+        self.save_tasks()
+        self.refresh_schedule_table()
+        self.status.setText(f"Cleared {len(scheduled)} download schedule(s).")
+
     def start_selected_now(self):
         task_id = self.selected_schedule_task()
         task = self.tasks.get(task_id) if task_id else None
@@ -4296,8 +4413,8 @@ class FDMX(QWidget):
             self.url.setText(value)
             self.status.setText("Clipboard Monitor detected a web link and placed it in the URL field. Press Start Download when ready.")
 
-    def apply_native_glass_backdrop(self, enabled):
-        """Enable a real OS-level blurred desktop backdrop for the Crystal Aqua theme."""
+    def apply_native_glass_backdrop(self, enabled, tint=0xCCBFE9EF):
+        """Enable a native Windows acrylic backdrop with a theme-matched tint."""
         if sys.platform != "win32":
             if hasattr(self, "setAttribute"):
                 self.setAttribute(Qt.WA_TranslucentBackground, False)
@@ -4348,7 +4465,7 @@ class FDMX(QWidget):
                     wintypes.HWND, ctypes.POINTER(WINDOWCOMPOSITIONATTRIBDATA)
                 ]
                 set_composition.restype = wintypes.BOOL
-                policy = ACCENT_POLICY(4, 2, 0xCCBFE9EF, 0)  # Acrylic blur, aqua tint
+                policy = ACCENT_POLICY(4, 2, int(tint), 0)  # Acrylic blur with theme tint
                 data = WINDOWCOMPOSITIONATTRIBDATA(
                     19, ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p),
                     ctypes.sizeof(policy)
@@ -4379,6 +4496,8 @@ class FDMX(QWidget):
         theme = self.theme_combo.currentData()
         palettes = {
             "dark": ("#171a21", "#202631", "#293241", "#e8edf5", "#aab6c8", "#e34b5b", "#ffffff", "#343e4e"),
+            "midnight": ("#0a0f1e", "#111a2e", "#18243b", "#edf3ff", "#93a4c2", "#7c9cff", "#081225", "#2a3a57"),
+            "violet": ("#171329", "#211a3b", "#302650", "#f4efff", "#b9acd8", "#a78bfa", "#171329", "#514176"),
             "ubuntu": ("#2c001e", "#3d1834", "#51263f", "#fff4fb", "#d9b9ce", "#e95420", "#ffffff", "#772953"),
             "light": ("#f3f6fb", "#ffffff", "#e9eef6", "#202938", "#65738a", "#2878d0", "#ffffff", "#d5e0ee"),
             "blue": ("#0e1a2b", "#14263c", "#1c3550", "#e8f2ff", "#9fb8d2", "#2997e8", "#ffffff", "#294d70"),
@@ -4387,7 +4506,7 @@ class FDMX(QWidget):
             "dracula": ("#282a36", "#343746", "#44475a", "#f8f8f2", "#bdc0d0", "#bd93f9", "#282a36", "#6272a4"),
             "cyber": ("#0b1020", "#111a30", "#1b2945", "#e6f7ff", "#8ba6c9", "#00e5ff", "#07111d", "#31516f"),
             "sonoma": ("#20232b", "#292e38", "#343b48", "#f5f6fa", "#b6bfce", "#8b9cff", "#ffffff", "#4a5262"),
-            "fluent": ("#f3f5f9", "#ffffff", "#e8edf5", "#1d2635", "#66758b", "#536fcb", "#ffffff", "#d5ddeb"),
+            "fluent": ("#f3f6fb", "#ffffff", "#eaf0f8", "#1b2430", "#64748b", "#0067c0", "#ffffff", "#d7e0ec"),
             "ubuntu_yaru": ("#f6f5f4", "#ffffff", "#e8e6e3", "#241f31", "#5e5c64", "#e95420", "#ffffff", "#d5d3cf"),
             "solarized": ("#002b36", "#073642", "#164752", "#eee8d5", "#93a1a1", "#2aa198", "#002b36", "#586e75"),
             "rose": ("#191724", "#26233a", "#393552", "#e0def4", "#908caa", "#eb6f92", "#191724", "#6e6a86"),
@@ -4454,16 +4573,18 @@ class FDMX(QWidget):
                 background: {raised}; color: {fg}; border: 1px solid {border};
                 border-radius: 8px; padding: 8px 15px; min-height: 20px;
             }}
-            QPushButton:enabled {{ color: #1d2635; background: {raised}; border: 1px solid #aebbd0; font-weight: 600; }}
+            QPushButton:enabled {{ color: {fg}; background: {raised}; border: 1px solid {border}; font-weight: 600; }}
             QPushButton:hover:enabled {{ background: {accent}; color: {accent_text}; border-color: {accent}; }}
-            QPushButton:pressed:enabled {{ background: {border}; }}
-            QPushButton:disabled {{ color: #778397; background: #e5e9f0; border: 1px dashed #aab4c2; font-weight: 400; }}
+            QPushButton:pressed:enabled {{ background: {border}; color: {fg}; }}
+            QPushButton:disabled {{ color: {muted}; background: {panel}; border: 1px dashed {border}; font-weight: 400; }}
             QHeaderView::section {{
                 background: {raised}; color: {fg}; border: 0;
                 border-bottom: 1px solid {border}; padding: 8px; font-weight: 700;
             }}
             QTableWidget {{ gridline-color: {border}; alternate-background-color: {raised}; }}
-            QTableWidget::item {{ padding: 5px; }}
+            QTableWidget::item {{ padding: 7px 6px; border-bottom: 1px solid {border}; }}
+            QTableWidget::item:selected {{ background: {selection}; color: {accent_text}; }}
+            QTableWidget::item:hover:!selected {{ background: {raised}; }}
             QProgressBar {{
                 background: {raised}; color: {fg}; border: 1px solid {border};
                 border-radius: 6px; text-align: center; min-height: 13px;
@@ -4492,13 +4613,40 @@ class FDMX(QWidget):
             QToolButton {{ background: {raised}; color: {fg}; border: 1px solid {border}; border-radius: 7px; padding: 6px; }}
             QToolButton:hover {{ background: {accent}; color: {accent_text}; }}
         """
+        if theme == "fluent":
+            qss += """
+                QTabBar::tab { padding: 10px 18px; border-radius: 6px; }
+                QTabBar::tab:selected { border-bottom: 3px solid #0067c0; }
+                QPushButton { border-radius: 6px; padding: 8px 16px; }
+                QLineEdit, QComboBox, QTableWidget { border-radius: 6px; }
+                QProgressBar { border-radius: 4px; }
+                QProgressBar::chunk { border-radius: 3px; }
+            """
+        elif theme == "midnight":
+            qss += """
+                QTabWidget::pane { border-radius: 12px; }
+                QTabBar::tab { border-radius: 8px; padding: 10px 18px; }
+                QPushButton { border-radius: 9px; padding: 9px 16px; }
+                QLineEdit, QComboBox, QTableWidget { border-radius: 9px; }
+                QProgressBar { border-radius: 7px; }
+                QProgressBar::chunk { border-radius: 6px; }
+                QHeaderView::section { background: #18243b; }
+            """
         # Aero Glass presets use layered gradients, translucent-looking surfaces,
         # bright inner highlights and bevel-like borders. Qt stylesheets do not
         # provide true desktop backdrop blur; this is a lightweight glass visual.
         glass_qss = ""
-        native_glass = (theme == "crystal_aqua_glass")
-        self.apply_native_glass_backdrop(native_glass)
-        if theme.startswith("aero_") or theme in ("crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass"):
+        native_glass = (sys.platform == "win32" and theme in ("fluent", "midnight", "crystal_aqua_glass"))
+        native_tints = {
+            "fluent": 0xCCF3F6FB,
+            "midnight": 0xCC101A30,
+            "crystal_aqua_glass": 0xCCBFE9EF,
+        }
+        self.apply_native_glass_backdrop(native_glass, native_tints.get(theme, 0xCCBFE9EF))
+        if theme.startswith("aero_") or theme in (
+            "crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass",
+            "fluent", "midnight"
+        ):
             if theme == "aero_blue":
                 base_a, base_b = "#cceaff", "#f4fbff"
                 surface_a, surface_b = "rgba(255,255,255,0.88)", "rgba(220,242,255,0.78)"
@@ -4540,6 +4688,16 @@ class FDMX(QWidget):
                 base_a, base_b = "#bfe9ef", "#eaffff"
                 surface_a, surface_b = "rgba(255,255,255,0.66)", "rgba(202,242,240,0.48)"
                 edge, glow = "#ffffff", "#18a9b8"
+            elif theme == "fluent":
+                # Windows 11 Mica/Acrylic-inspired cool glass.
+                base_a, base_b = "#c8d9ed", "#edf4fc"
+                surface_a, surface_b = "rgba(255,255,255,0.76)", "rgba(226,237,249,0.60)"
+                edge, glow = "rgba(255,255,255,0.94)", "#4b9de0"
+            elif theme == "midnight":
+                # Deep navy smoked glass with restrained blue edge lighting.
+                base_a, base_b = "#080e1b", "#1b2c49"
+                surface_a, surface_b = "rgba(35,52,79,0.78)", "rgba(13,23,41,0.68)"
+                edge, glow = "rgba(159,184,230,0.42)", "#7c9cff"
             else:
                 base_a, base_b = "#102338", "#294a65"
                 surface_a, surface_b = "rgba(91,133,164,0.42)", "rgba(25,49,70,0.88)"
@@ -4606,29 +4764,46 @@ class FDMX(QWidget):
                 }}
             """
             if native_glass:
-                # Let the real DWM acrylic material show through the entire top-level
-                # window. Interactive controls retain their own translucent surfaces.
+                # Native DWM acrylic remains visible behind theme-tinted glass layers.
+                if theme == "midnight":
+                    root_surface = "rgba(8,14,27,0.30)"
+                    panel_surface = "rgba(17,29,49,0.56)"
+                    control_surface = "rgba(27,42,66,0.76)"
+                    header_surface = "rgba(36,54,82,0.72)"
+                    glass_edge = "rgba(159,184,230,0.34)"
+                else:
+                    root_surface = "rgba(239,246,255,0.24)"
+                    panel_surface = "rgba(255,255,255,0.42)"
+                    control_surface = "rgba(255,255,255,0.66)"
+                    header_surface = "rgba(226,237,249,0.64)"
+                    glass_edge = "rgba(255,255,255,0.86)"
                 glass_qss += f"""
                     QWidget {{ background: transparent; }}
-                    QMainWindow, QDialog {{ background: transparent; }}
+                    QMainWindow {{ background: {root_surface}; }}
+                    QDialog {{ background: {panel_surface}; }}
                     QTabWidget::pane, QGroupBox {{
-                        background: rgba(225,250,250,0.34);
-                        border: 1px solid rgba(255,255,255,0.82);
+                        background: {panel_surface};
+                        border: 1px solid {glass_edge};
+                        border-top: 1px solid rgba(255,255,255,0.92);
                     }}
                     QLineEdit, QSpinBox, QDoubleSpinBox, QDateTimeEdit, QComboBox,
-                    QTextEdit, QTableWidget, QListWidget {{
-                        background: rgba(245,255,255,0.42);
-                        border: 1px solid rgba(255,255,255,0.78);
+                    QTextEdit, QPlainTextEdit, QTableWidget, QTableView, QListWidget,
+                    QTreeWidget, QTreeView {{
+                        background: {control_surface};
+                        border: 1px solid {glass_edge};
                     }}
                     QPushButton, QToolButton {{
-                        background: rgba(255,255,255,0.48);
-                        border: 1px solid rgba(255,255,255,0.9);
+                        background: {header_surface};
+                        border: 1px solid {glass_edge};
+                        border-top: 1px solid rgba(255,255,255,0.96);
                     }}
                     QHeaderView::section {{
-                        background: rgba(205,241,242,0.48);
+                        background: {header_surface};
+                        border-bottom: 1px solid {glass_edge};
                     }}
                     QMenuBar, QMenu, QStatusBar {{
-                        background: rgba(225,250,250,0.38);
+                        background: {panel_surface};
+                        border-color: {glass_edge};
                     }}
                     QTableWidget::item {{ background: transparent; }}
                 """
@@ -4639,20 +4814,25 @@ class FDMX(QWidget):
         if hasattr(self, "settings"):
             self.settings.setValue("theme", theme)
             self.settings.sync()
-        if hasattr(self, "theme_preview"):
-            self.theme_preview.setText(
-                f"●  {self.theme_combo.currentText()}    Accent: {accent}    "
-                "Theme applied to the entire GNS Downloader interface"
+        self.update_theme_preview_palette(theme, panel, raised, fg, muted, accent, border)
+
+    def update_theme_preview_palette(self, theme, panel, raised, fg, muted, accent, border):
+        """Keep the real preview controls synchronized with the active theme."""
+        if not hasattr(self, "theme_preview"):
+            return
+        self.theme_preview.setStyleSheet(
+            f"QFrame#themePreviewCard {{ background:{panel}; color:{fg}; "
+            f"border:1px solid {border}; border-top:3px solid {accent}; border-radius:12px; }}"
+            f"QLabel#previewMuted {{ color:{muted}; background:transparent; font-size:9pt; }}"
+        )
+        if hasattr(self, "theme_preview_primary"):
+            self.theme_preview_primary.setStyleSheet(
+                f"QPushButton[previewPrimary=\"true\"] {{ background:{accent}; color:"
+                f"{'#ffffff' if theme in ('fluent', 'midnight') else fg}; "
+                f"border:1px solid {accent}; border-radius:8px; padding:8px 16px; font-weight:700; }}"
+                f"QPushButton[previewPrimary=\"true\"]:hover {{ background:{raised}; color:{fg}; }}"
             )
-            preview_background = (
-                f"qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {panel}, stop:1 {raised})"
-                if theme.startswith("aero_") or theme in ("crystal", "emerald_glass", "aurora_spectrum", "crystal_aqua_glass") else panel
-            )
-            self.theme_preview.setStyleSheet(
-                f"background:{preview_background}; color:{fg}; border:2px solid {accent}; "
-                "border-top:2px solid white; border-radius:16px; padding:22px; "
-                "font-size:12pt; font-weight:600;"
-            )
+
 
     def export_analytics_report(self):
         path, selected = QFileDialog.getSaveFileName(self, "Export download report", "GNS-Downloader-report.csv", "CSV files (*.csv);;JSON files (*.json)")
@@ -4708,6 +4888,81 @@ class FDMX(QWidget):
             self.analytics_table.setItem(row, 0, QTableWidgetItem(category))
             self.analytics_table.setItem(row, 1, QTableWidgetItem(str(count)))
 
+    def apply_language(self, *_):
+        """Apply the selected interface language to the main window and its settings."""
+        if not hasattr(self, "language_combo"):
+            return
+        language = self.language_combo.currentData() or "en"
+        fa = {
+            "File": "فایل", "Add download": "افزودن دانلود", "Exit": "خروج",
+            "View": "نمایش", "Show": "نمایش", "All downloads": "همه دانلودها",
+            "In progress": "در حال دانلود", "Queue": "صف دانلود", "Completed": "تکمیل‌شده", "Failed": "ناموفق",
+            "File category": "دسته‌بندی فایل", "Video": "ویدئو", "Audio": "صوت", "Documents": "اسناد",
+            "Compressed": "فشرده", "Python": "پایتون", "Programs": "برنامه‌ها", "Images": "تصاویر",
+            "Spreadsheets": "صفحه‌گسترده", "Code": "کد", "Other": "سایر", "Tools": "ابزارها",
+            "Add torrent file…": "افزودن فایل تورنت…", "Website Downloader…": "دریافت وب‌سایت…",
+            "Install browser extensions…": "نصب افزونه مرورگر…", "Read URL from clipboard": "خواندن نشانی از کلیپ‌بورد",
+            "Export report (CSV / JSON)…": "خروجی گزارش (CSV / JSON)…", "Verify SHA-256…": "بررسی SHA-256…",
+            "Settings": "تنظیمات", "Preferences…": "ترجیحات…", "Help": "راهنما", "GitHub project": "پروژه در گیت‌هاب",
+            "Check for updates…": "بررسی به‌روزرسانی…", "Downloads": "دانلودها", "Search downloads…": "جستجوی دانلودها…",
+            "Add URL": "افزودن نشانی", "Start": "شروع", "Pause": "مکث", "Resume": "ادامه", "Cancel": "لغو",
+            "Remove": "حذف", "Delete from disk": "حذف از دیسک", "Open folder": "بازکردن پوشه",
+            "Clipboard Monitor": "پایش کلیپ‌بورد", "URL:": "نشانی:", "Save to:": "ذخیره در:",
+            "Browse…": "مرور…", "Start Download": "شروع دانلود", "Clipboard": "کلیپ‌بورد", "Torrent…": "تورنت…",
+            "Language:": "زبان:", "English": "انگلیسی", "Maximum simultaneous downloads:": "حداکثر دانلود هم‌زمان:",
+            "Download parts per file (1–16):": "تعداد بخش‌های هر فایل (۱ تا ۱۶):",
+            "Speed limit per file (KB/s, 0 = unlimited):": "محدودیت سرعت هر فایل (KB/s، صفر = نامحدود):",
+            "Torrent upload limit (KB/s, 0 = unlimited):": "محدودیت آپلود تورنت (KB/s، صفر = نامحدود):",
+            "Use proxy": "استفاده از پراکسی", "Save": "ذخیره", "Close": "بستن",
+            "File / Progress": "فایل / پیشرفت", "Status": "وضعیت", "Downloaded / Size": "دریافت‌شده / حجم",
+            "Speed": "سرعت", "Time left": "زمان باقی‌مانده", "Select a queued file, choose its start date and time, then apply the schedule.": "یک فایل از صف انتخاب کنید، زمان شروع را تعیین و برنامه‌ریزی را اعمال کنید.",
+            "File": "فایل", "Scheduled start": "زمان شروع برنامه‌ریزی‌شده", "Start date and time:": "تاریخ و زمان شروع:",
+            "Apply to selected file": "اعمال برای فایل انتخاب‌شده", "Clear schedule": "پاک‌کردن زمان‌بندی",
+            "Clear All": "پاک‌کردن همه", "Start now": "شروع اکنون", "Download URL:": "نشانی دانلود:",
+            "Paste a direct HTTP or HTTPS download link": "پیوند مستقیم دانلود HTTP یا HTTPS را وارد کنید",
+            "Add link to schedule": "افزودن پیوند به زمان‌بندی",
+            "Choose a start date/time, paste a direct link, then click Add link to schedule.": "زمان شروع را انتخاب و پیوند مستقیم را وارد کنید؛ سپس افزودن پیوند به زمان‌بندی را بزنید.",
+            "Schedule": "زمان‌بندی", "Website scan": "بررسی وب‌سایت",
+            "Paste HTTP, HTTPS, YouTube, or magnet link here…": "پیوند HTTP، HTTPS، یوتیوب یا مگنت را اینجا وارد کنید…",
+            "YouTube video": "ویدئوی یوتیوب", "YouTube audio": "صدای یوتیوب"
+        }
+        mapping = fa if language == "fa" else {v: k for k, v in fa.items()}
+        self.setLayoutDirection(Qt.RightToLeft if language == "fa" else Qt.LeftToRight)
+        for widget in self.findChildren(QWidget):
+            if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+                old = widget.text()
+                if old in mapping:
+                    widget.setText(mapping[old])
+            if isinstance(widget, QLineEdit):
+                old = widget.placeholderText()
+                if old in mapping:
+                    widget.setPlaceholderText(mapping[old])
+            if isinstance(widget, QComboBox):
+                for index in range(widget.count()):
+                    old = widget.itemText(index)
+                    if old in mapping:
+                        widget.setItemText(index, mapping[old])
+        for menu in self.menu_bar.findChildren(QMenu):
+            for action in menu.actions():
+                old = action.text()
+                if old in mapping:
+                    action.setText(mapping[old])
+        for index in range(self.tabs.count()):
+            old = self.tabs.tabText(index)
+            if old in mapping:
+                self.tabs.setTabText(index, mapping[old])
+        if hasattr(self, "table"):
+            headers = ["File / Progress", "Status", "Downloaded / Size", "Speed", "Time left"]
+            self.table.setHorizontalHeaderLabels([mapping.get(x, x) for x in headers])
+        if hasattr(self, "schedule_table"):
+            headers = ["File", "Status", "Scheduled start"]
+            self.schedule_table.setHorizontalHeaderLabels([mapping.get(x, x) for x in headers])
+        if hasattr(self, "settings_dialog"):
+            self.settings_dialog.setWindowTitle(("تنظیمات " if language == "fa" else "") + APP_NAME + (" — ترجیحات" if language == "fa" else " Preferences"))
+        if hasattr(self, "settings"):
+            self.settings.setValue("language", language)
+            self.settings.sync()
+
     def open_settings_dialog(self):
         self.settings_dialog.exec()
 
@@ -4732,7 +4987,8 @@ class FDMX(QWidget):
             QMessageBox.information(self, "Updates", "An update operation is already running.")
             return
         self.status.setText("Checking GitHub for updates…")
-        worker = GitHubUpdateWorker(APP_VERSION)
+        proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+        worker = GitHubUpdateWorker(APP_VERSION, proxy_url=proxy_url)
         self._update_worker = worker
         worker.update_available.connect(self.on_update_available)
         worker.up_to_date.connect(self.on_update_up_to_date)
@@ -4792,7 +5048,8 @@ class FDMX(QWidget):
         progress.setAutoClose(False)
         progress.setAutoReset(False)
         self._update_progress = progress
-        worker = GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest)
+        proxy_url = self.proxy_url.text().strip() if self.proxy_enabled.isChecked() else ""
+        worker = GitHubUpdateDownloadWorker(asset_url, asset_size, asset_digest, proxy_url=proxy_url)
         self._update_download_worker = worker
         worker.progress.connect(self.on_update_download_progress)
         worker.downloaded.connect(self.on_update_downloaded)
@@ -5165,6 +5422,7 @@ class FDMX(QWidget):
     def add_download_from_browser(self, url, resolved_url=""):
         """Queue a browser-submitted URL while keeping its temporary signed URL in memory only."""
         self._pending_browser_resolved_url = resolved_url or ""
+        self._pending_browser_handoff = True
         self.url.setText(url)
         self.add_download()
         self.showNormal()
@@ -5281,6 +5539,12 @@ class FDMX(QWidget):
         url = self.url.text().strip()
         browser_resolved_url = getattr(self, "_pending_browser_resolved_url", "")
         self._pending_browser_resolved_url = ""
+        browser_handoff = bool(getattr(self, "_pending_browser_handoff", False))
+        self._pending_browser_handoff = False
+        qml_handoff = bool(getattr(self, "_pending_qml_handoff", False))
+        self._pending_qml_handoff = False
+        qml_schedule_at = str(getattr(self, "_pending_qml_schedule_at", "") or "")
+        self._pending_qml_schedule_at = ""
         folder = self.folder.text().strip()
         if url.lower().startswith("magnet:?"):
             self.add_torrent_source(url)
@@ -5307,7 +5571,7 @@ class FDMX(QWidget):
                 "status": "Queued", "downloaded": 0, "total": 0,
                 "speed": 0.0, "eta": -1.0, "path": "", "worker": None,
                 "history": False, "kind": "youtube", "media_type": media_type,
-                "scheduled_at": "", "category": "Audio" if media_type == "audio" else "Video",
+                "qml_handoff": qml_handoff, "scheduled_at": qml_schedule_at, "category": "Audio" if media_type == "audio" else "Video",
                 "post_action_enabled": False, "post_action": "none", "post_action_done": False
             }
             self.save_tasks()
@@ -5331,10 +5595,11 @@ class FDMX(QWidget):
             "status": "Checking metadata", "downloaded": 0, "total": 0,
             "speed": 0.0, "eta": -1.0, "path": "",
             "worker": None, "history": False, "metadata_worker": None,
-            "scheduled_at": "", "total_known": False,
+            "scheduled_at": qml_schedule_at, "total_known": False,
             "category": category_for_filename(name),
             "github_token": github_token,
             "browser_resolved_url": browser_resolved_url,
+            "browser_handoff": browser_handoff, "qml_handoff": qml_handoff,
             "post_action_enabled": False, "post_action": "none", "post_action_done": False
         }
         self.save_tasks()
@@ -5351,7 +5616,8 @@ class FDMX(QWidget):
         worker.info_ready.connect(lambda info, tid=task_id: self.on_file_info_ready(tid, info))
         worker.finished.connect(lambda tid=task_id, current=worker: self._metadata_worker_finished(tid, current))
         worker.start()
-        self.show_download_details(task_id)
+        if not task.get("browser_handoff") and not task.get("qml_handoff"):
+            self.show_download_details(task_id)
         self.refresh_table()
 
     def _metadata_worker_finished(self, task_id, worker):
@@ -5423,6 +5689,33 @@ class FDMX(QWidget):
         task["accept_ranges"] = bool(info.get("accept_ranges"))
         task["status"] = "Ready"
         task["category"] = category_for_filename(task["name"])
+        # Browser hand-offs require explicit user confirmation after metadata is known.
+        # Direct downloads entered inside the desktop app keep their existing flow.
+        if task.get("browser_handoff"):
+            confirm = QMessageBox(self)
+            confirm.setWindowTitle("Confirm browser download")
+            confirm.setIcon(QMessageBox.Information)
+            confirm.setText(task["name"])
+            confirm.setInformativeText(
+                f"File size: {format_bytes(task['total']) if task['total'] else 'Unknown'}\\n"
+                f"File type: {task['content_type']}\\n"
+                f"Source: {task.get('url', '')}\\n\\n"
+                "Start this download now?"
+            )
+            start_button = confirm.addButton("Start Download", QMessageBox.AcceptRole)
+            confirm.addButton("Cancel", QMessageBox.RejectRole)
+            confirm.setDefaultButton(start_button)
+            confirm.exec()
+            if confirm.clickedButton() is not start_button:
+                detail = self.detail_windows.get(task_id)
+                if detail is not None:
+                    detail.close()
+                self.tasks.pop(task_id, None)
+                self.save_tasks()
+                self.refresh_table()
+                self.status.setText("Browser download canceled before transfer started.")
+                return
+
         existing_path = os.path.join(task["folder"], task["name"])
         if os.path.isfile(existing_path):
             choice = self.ask_existing_file_action(existing_path)
@@ -5451,14 +5744,24 @@ class FDMX(QWidget):
         # Metadata is ready: enqueue and start automatically. The details window
         # mirrors this task; it must not require a second Start click.
         task["status"] = "Queued"
-        task["scheduled_at"] = ""
+        # Preserve a QML-supplied future start time; ordinary direct downloads
+        # retain the legacy immediate-start behavior.
+        if not task.get("qml_handoff"):
+            task["scheduled_at"] = ""
         self.save_tasks()
         self.refresh_table()
-        self.show_download_details(task_id)
-        self.status.setText(
-            f"File information ready: {task['name']} — "
-            f"{format_bytes(task['total']) if task['total'] else 'Size unknown'}. Starting download…"
-        )
+        if not task.get("qml_handoff"):
+            self.show_download_details(task_id)
+        size_label = format_bytes(task["total"]) if task["total"] else "Size unknown"
+        if task.get("scheduled_at"):
+            self.status.setText(
+                f"File information ready: {task['name']} — {size_label}. "
+                f"Scheduled for {task['scheduled_at']}."
+            )
+        else:
+            self.status.setText(
+                f"File information ready: {task['name']} — {size_label}. Starting download…"
+            )
         self.start_queue()
 
     def add_torrent_file(self):
@@ -5523,8 +5826,12 @@ class FDMX(QWidget):
                     start_time = datetime.datetime.fromisoformat(scheduled_at)
                     if datetime.datetime.now().astimezone() < start_time.astimezone():
                         continue
+                    # A due task is no longer waiting in the scheduler.
+                    task["scheduled_at"] = ""
+                    self.save_tasks()
                 except (ValueError, TypeError):
                     task["scheduled_at"] = ""
+                    self.save_tasks()
             if task.get("kind") == "torrent":
                 worker = TorrentWorker(task_id, task["url"], task["folder"], self.torrent_upload_limit.value())
             elif task.get("kind") == "youtube":
@@ -5556,7 +5863,8 @@ class FDMX(QWidget):
             worker.canceled.connect(self.on_canceled)
             worker.state.connect(lambda value, tid=task_id: self.on_state(tid, value))
             task["status"] = "Downloading"
-            self.show_download_details(task_id)
+            if not task.get("qml_handoff"):
+                self.show_download_details(task_id)
             worker.start()
             active += 1
         self.refresh_table()
@@ -5993,6 +6301,7 @@ class FDMX(QWidget):
                 "max_height": max(0, min(4320, _safe_int(entry.get("max_height"), 0))),
                 "max_abr": max(0, min(1000, _safe_int(entry.get("max_abr"), 0))),
                 "scheduled_at": entry.get("scheduled_at", ""),
+                "qml_handoff": bool(entry.get("qml_handoff", False)),
                 "category": entry.get("category") or category_for_filename(entry.get("name", "")),
                 "retry_attempts": _safe_int(entry.get("retry_attempts"), 0),
                 "post_action_enabled": bool(entry.get("post_action_enabled", False)),
@@ -6030,7 +6339,7 @@ class FDMX(QWidget):
                 continue
             saved.append({key: task.get(key) for key in (
                 "id", "url", "folder", "name", "status", "downloaded", "total", "path",
-                "category", "kind", "media_type", "max_height", "max_abr", "scheduled_at", "content_type", "retry_attempts",
+                "category", "kind", "media_type", "max_height", "max_abr", "scheduled_at", "qml_handoff", "content_type", "retry_attempts",
                 "post_action_enabled", "post_action", "post_action_done",
                 "parts_count"
             )})
@@ -6053,6 +6362,7 @@ class FDMX(QWidget):
                 file.flush()
                 os.fsync(file.fileno())
             os.replace(temp_path, TASKS_FILE)
+            return True
         except OSError as exc:
             if hasattr(self, "status"):
                 self.status.setText(f"Could not save pending downloads: {exc}")
@@ -6062,6 +6372,7 @@ class FDMX(QWidget):
                         os.remove(path)
                 except OSError:
                     pass
+            return False
 
     def load_history(self):
         try:
@@ -6117,8 +6428,12 @@ class FDMX(QWidget):
         self.folder.editingFinished.connect(self.save_preferences)
         self.clipboard_monitor.setChecked(self.settings.value("clipboard_monitor", False, type=bool))
         default_theme = "ubuntu_yaru" if sys.platform.startswith("linux") else "fluent"
-        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(default_theme)))
-        self.settings.setValue("theme", default_theme)
+        saved_language = self.settings.value("language", "en", type=str)
+        self.language_combo.setCurrentIndex(max(0, self.language_combo.findData(saved_language)))
+        self.apply_language()
+        saved_theme = self.settings.value("theme", default_theme, type=str)
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(saved_theme)))
+        self.settings.setValue("theme", saved_theme if self.theme_combo.currentData() else default_theme)
         self.apply_selected_theme()
         self.proxy_enabled.setChecked(self.settings.value("proxy_enabled", False, type=bool))
         self.proxy_url.setText(self.settings.value("proxy_url", "", type=str))
@@ -6135,6 +6450,7 @@ class FDMX(QWidget):
         self.settings.setValue("speed_limit", self.speed_limit.value())
         self.settings.setValue("torrent_upload_limit", self.torrent_upload_limit.value())
         self.settings.setValue("download_folder", self.folder.text().strip())
+        self.settings.setValue("language", self.language_combo.currentData() or "en")
         self.settings.setValue("clipboard_monitor", self.clipboard_monitor.isChecked())
         self.settings.setValue("proxy_enabled", self.proxy_enabled.isChecked())
         self.settings.setValue("proxy_url", self.proxy_url.text().strip())
