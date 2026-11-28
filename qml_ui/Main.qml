@@ -16,6 +16,8 @@ ApplicationWindow {
     property color panel: "#172238"
     property color muted: "#91a0b8"
     property color accent: "#65d6c4"
+    property string selectedSection: "Overview"
+    property string searchText: ""
 
     Rectangle {
         anchors.fill: parent
@@ -98,14 +100,16 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         height: 46
                         radius: 13
-                        color: index === 0 ? "#3159a8b5" : "transparent"
-                        border.color: index === 0 ? "#5265d6c4" : "transparent"
+                        color: selectedSection === modelData.label ? "#3159a8b5" : "transparent"
+                        border.color: selectedSection === modelData.label ? "#5265d6c4" : "transparent"
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 13
                             spacing: 13
-                            Label { text: modelData.glyph; color: index === 0 ? "#78e4d0" : "#a6b4c9"; font.pixelSize: 19; Layout.preferredWidth: 20 }
-                            Label { text: modelData.label; color: index === 0 ? "white" : "#a6b4c9"; font.pixelSize: 13; font.bold: index === 0 }
+                            Label { text: modelData.glyph; color: selectedSection === modelData.label ? "#78e4d0" : "#a6b4c9"; font.pixelSize: 19; Layout.preferredWidth: 20 }
+                            Label { text: modelData.label; color: selectedSection === modelData.label ? "white" : "#a6b4c9"; font.pixelSize: 13; font.bold: selectedSection === modelData.label }
+                        }
+                        MouseArea { anchors.fill: parent; onClicked: selectedSection = modelData.label }
                         }
                     }
                 }
@@ -139,8 +143,8 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 ColumnLayout {
                     spacing: 3
-                    Label { text: "Your downloads"; color: "white"; font.pixelSize: 27; font.bold: true }
-                    Label { text: "Everything you download, beautifully organized."; color: muted; font.pixelSize: 12 }
+                    Label { text: selectedSection === "Overview" ? "Your downloads" : selectedSection; color: "white"; font.pixelSize: 27; font.bold: true }
+                    Label { text: selectedSection === "Scheduler" ? "Downloads waiting for their scheduled start." : "Everything you download, beautifully organized."; color: muted; font.pixelSize: 12 }
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
@@ -153,13 +157,14 @@ ApplicationWindow {
                         anchors.fill: parent
                         anchors.margins: 11
                         Label { text: "⌕"; color: "#91a0b8"; font.pixelSize: 18 }
-                        Label { text: "Search downloads"; color: "#91a0b8"; font.pixelSize: 11 }
+                        TextField { id: searchField; Layout.fillWidth: true; placeholderText: "Search downloads"; color: "#e5edf8"; font.pixelSize: 11; background: Item {}; onTextChanged: searchText = text }
                     }
                 }
                 Rectangle {
                     width: 42; height: 42; radius: 13
                     color: "#1bffffff"; border.color: "#30ffffff"
                     Label { anchors.centerIn: parent; text: "⚙"; color: "#dbe5f4"; font.pixelSize: 18 }
+                    MouseArea { anchors.fill: parent; onClicked: settingsDialog.open() }
                 }
             }
 
@@ -218,8 +223,11 @@ ApplicationWindow {
                         spacing: 8
                         model: appBridge.downloadModel
                         delegate: Rectangle {
+                            property bool sectionMatch: selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Connecting", "Starting", "Preparing", "Paused"].indexOf(status) >= 0) || (selectedSection === "Completed" && status === "Completed") || (selectedSection === "Scheduler" && scheduledAt.length > 0)
+                            property bool searchMatch: searchText.length === 0 || fileName.toLowerCase().indexOf(searchText.toLowerCase()) >= 0
+                            visible: sectionMatch && searchMatch
                             width: downloadList.width
-                            height: 66
+                            height: visible ? 66 : 0
                             radius: 12
                             color: "#1bffffff"
                             border.color: "#20ffffff"
@@ -253,7 +261,7 @@ ApplicationWindow {
                         }
                         Label {
                             anchors.centerIn: parent
-                            visible: downloadList.count === 0
+                            visible: appBridge.downloads.filter(function(row) { var section = selectedSection === "Overview" || selectedSection === "All downloads" || (selectedSection === "In progress" && ["Downloading", "Checking server", "Retrying", "Connecting", "Starting", "Preparing", "Paused"].indexOf(row.status) >= 0) || (selectedSection === "Completed" && row.status === "Completed") || (selectedSection === "Scheduler" && row.scheduled_at.length > 0); return section && (searchText.length === 0 || row.file_name.toLowerCase().indexOf(searchText.toLowerCase()) >= 0); }).length === 0
                             width: parent.width - 24
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
