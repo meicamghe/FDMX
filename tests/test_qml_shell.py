@@ -299,3 +299,19 @@ def test_start_now_persists_schedule_rollback_when_scheduler_fails():
     assert controller.persisted == ["", "2099-01-01T12:00:00"]
     assert rejected and "previous schedule was restored" in rejected[-1]
     adapter._timer.stop()
+
+
+def test_standalone_preview_bridge_matches_qml_contract():
+    _qt()
+    from qml_ui.main import AppBridge
+    bridge = AppBridge()
+    assert bridge.settings["downloadFolder"] == "Preview only"
+    assert bridge.history == []
+    assert bridge.downloads == []
+    assert bridge.queuedDownloads == 0
+    assert bridge.scheduledDownloads == 0
+    rejected = []
+    bridge.actionRejected.connect(rejected.append)
+    bridge.queueDownload("https://example.test/file.zip", "")
+    bridge.setSchedule("task", "2099-01-01T12:00:00")
+    assert len(rejected) == 2
