@@ -17,13 +17,11 @@ from PySide6.QtWidgets import QApplication
 from FDMX_v6_50 import (
     FDMX,
     parse_gns_protocol_request,
-    register_gns_protocol_handler,
 )
 from qml_ui.host import create_qml_window
 
 
 def main() -> int:
-    register_gns_protocol_handler()
     protocol_request = next(
         (
             parse_gns_protocol_request(arg)
