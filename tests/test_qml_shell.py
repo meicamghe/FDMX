@@ -91,3 +91,40 @@ def test_qml_engine_loads_preview_window():
     assert engine.rootObjects()
     engine.clearComponentCache()
     del engine
+
+
+def test_production_host_embeds_into_existing_qapplication():
+    import os
+    import subprocess
+    import sys
+    script = r"""
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QApplication
+from qml_ui.host import create_qml_window
+app = QApplication([])
+class Controller(QObject):
+    def __init__(self):
+        super().__init__()
+        self.tasks = {}
+        self.history = []
+controller = Controller()
+engine, adapter, root = create_qml_window(controller)
+assert root is not None
+assert adapter.downloadModel.rowCount() == 0
+root.close()
+engine.deleteLater()
+adapter._timer.stop()
+print("production QApplication host smoke passed")
+"""
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "production QApplication host smoke passed" in result.stdout
