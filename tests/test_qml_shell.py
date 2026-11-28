@@ -217,3 +217,12 @@ def test_qml_exposes_real_download_intake():
     source = (QML_DIR / "Main.qml").read_text(encoding="utf-8")
     assert 'placeholderText: "Paste a download link or magnet URL…"' in source
     assert "appBridge.queueDownload(downloadUrlField.text)" in source
+
+
+def test_legacy_controller_suppresses_widgets_detail_windows_for_qml_handoff():
+    source = (ROOT / "FDMX_v6_50.py").read_text(encoding="utf-8")
+    assert 'qml_handoff = bool(getattr(self, "_pending_qml_handoff", False))' in source
+    assert 'not task.get("qml_handoff")' in source
+    assert '"qml_handoff": qml_handoff' in source
+    adapter = (QML_DIR / "adapter.py").read_text(encoding="utf-8")
+    assert 'self._controller._pending_qml_handoff = True' in adapter
