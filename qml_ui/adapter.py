@@ -241,8 +241,25 @@ class FDMXDownloadAdapter(QObject):
     def resume(self, task_id):
         task = self._task(task_id)
         worker = task.get("worker") if task else None
-        if not task or worker is None or task.get("status") != "Paused":
+        if not task or task.get("status") != "Paused":
             self.actionRejected.emit("This download cannot be resumed.")
+            return
+        if worker is None:
+            # A task restored after an application restart has no live worker.
+            # Re-queue it through the controller so its partial data can resume.
+            task["status"] = "Queued"
+            if not self._save_tasks():
+                task["status"] = "Paused"
+                self.actionRejected.emit("The recovered download could not be queued.")
+                self.refresh()
+                return
+            try:
+                self._controller.schedule_downloads()
+            except Exception:
+                task["status"] = "Paused"
+                self._save_tasks()
+                self.actionRejected.emit("The recovered download could not be restarted.")
+            self.refresh()
             return
         try:
             worker.resume()
@@ -250,9 +267,7 @@ class FDMXDownloadAdapter(QObject):
             self.actionRejected.emit("The download worker could not be resumed.")
             return
         task["status"] = "Downloading"
-        try:
-            self._controller.save_tasks()
-        except Exception:
+        if not self._save_tasks():
             self.actionRejected.emit("Download resumed, but its state could not be saved.")
         self.refresh()
 
