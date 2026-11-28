@@ -80,7 +80,7 @@ class FDMXDownloadAdapter(QObject):
             "size": int(_nonnegative(item.get("size", item.get("downloaded")))),
             "downloaded": int(_nonnegative(item.get("downloaded", item.get("size")))),
             "category": str(item.get("category") or ""),
-            "error": str(item.get("error") or ""),
+            "error": "See the application log for details." if item.get("error") else "",
         } for item in history if isinstance(item, dict)]
         self.changed.emit()
 
