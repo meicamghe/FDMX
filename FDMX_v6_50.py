@@ -692,6 +692,14 @@ class DownloadWorker(QThread):
                     except Exception:
                         pass
 
+        reason = getattr(last_error, "reason", last_error)
+        if isinstance(reason, socket.gaierror):
+            host = urllib.parse.urlsplit(self.url).hostname or "the download server"
+            raise RuntimeError(
+                f"Could not resolve the server hostname ({host}). "
+                "Check your internet connection and DNS settings, or enable a working proxy in Settings. "
+                f"Original network error: {reason}"
+            ) from last_error
         raise RuntimeError(
             f"Server rejected both Range and ordinary GET requests: {last_error}"
         ) from last_error
