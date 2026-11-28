@@ -1,4 +1,4 @@
-# GNS Downloader 6.53
+# GNS Downloader 6.54
 
 GNS Downloader is a cross-platform Python desktop download manager built with PySide6.
 
@@ -23,13 +23,21 @@ Firefox users can install or update directly from the AMO listing. For local dev
 
 ## Current version
 
-- Application version: **6.53**
+- Application version: **6.54**
 - Main source: `FDMX_v6_50.py`
 - Python version: **3.12**
 - Windows packages: Windows 10/11, x64
 - Linux source launch: `python ubuntu.py` (same current application source)
 - Appearance: Windows 11 Fluent on Windows; Ubuntu Yaru automatically on Linux.
 - There is no Theme Studio or Plugin Manager in the desktop interface.
+
+## What's new in 6.54
+
+- Added a cleaner download-details window: the progress percentage and downloaded amount are shown only in the progress bar; redundant header fields and the connection-mode message are removed.
+- Added a browser hand-off confirmation showing file name, size, type and source before a transfer starts.
+- Added Light, Dark, Midnight and Violet theme choices with saved preference.
+- Added a Clear All action for scheduled start times; queued downloads are preserved.
+- Added a direct GitHub project link and removed the redundant top-level Download menu.
 
 ## What's new in 6.53
 
