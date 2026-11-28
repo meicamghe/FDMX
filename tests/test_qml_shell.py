@@ -58,6 +58,9 @@ def test_adapter_snapshots_stats_and_task_id_actions():
     assert adapter.activeDownloads == 1
     assert adapter.queuedDownloads == 1
     assert adapter.completedDownloads == 1
+    assert adapter.history[0]["file_name"] == "done.pdf"
+    assert adapter.scheduledDownloads == 0
+    assert adapter.settings["maxDownloads"] is None
     assert adapter.totalSpeed == "2.0 KB/s"
     assert adapter.downloads[0]["download_id"] == "active"
     assert adapter.downloadModel.rowCount() == 3
