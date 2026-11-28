@@ -28,8 +28,10 @@ state access stays on its owning GUI thread.
 **Important integration constraint:** the standalone preview uses
 `QGuiApplication`, whereas the production controller is a QWidget and must
 run under the existing `QApplication`. Do not create a second Qt application.
-The next host integration step must load QML from the existing QApplication
-and inject the adapter while preserving the Widgets UI as the fallback.
+`host.create_qml_window(existing_controller)` now provides that optional host
+path and is covered by a dedicated offscreen smoke test. The production startup
+path still does not call it: Widgets remains the default and fallback until
+real-download lifecycle, UI parity, packaging and Windows rendering are accepted.
 
 The QML download rows expose pause, resume, cancel and retry controls. History
 is currently read-only, while scheduled timestamps and category are included in
@@ -38,8 +40,8 @@ torrent-specific operations and analytics drill-down need additional explicit
 typed slots before those screens can claim parity.
 
 ## Remaining acceptance gates
-1. Embed QML inside the existing QApplication without replacing the default UI.
-2. Test task lifecycle and queue scheduling against the Widgets UI.
-3. Add typed settings, scheduler, history and analytics interfaces.
-4. Validate Windows DPI scaling, GPU/software rendering, packaging and resource use.
+1. Run controlled real-download lifecycle and queue-scheduling comparisons against the Widgets UI.
+2. Add editable typed settings, scheduler operations, history management/export and analytics drill-down.
+3. Validate Windows DPI scaling, GPU/software rendering, packaging, startup and memory/CPU use.
+4. Verify that QML host failure cleanly leaves the Widgets UI usable.
 5. Require feature parity and explicit approval before considering cutover.
