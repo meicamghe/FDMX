@@ -162,6 +162,6 @@ def test_qml_exposes_history_and_scheduler_actions():
         'appBridge.setSchedule(',
         'appBridge.clearSchedule(',
         'appBridge.startNow(',
-        'appBridge.actionRejected',
+        'function onActionRejected(message)',
     ):
         assert marker in source
