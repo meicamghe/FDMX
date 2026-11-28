@@ -348,6 +348,7 @@ def test_resume_requeues_interrupted_task_without_live_worker():
 
 
 def test_real_http_transfer_through_qml_bridge_and_legacy_engine():
+    import os
     import subprocess
     import sys
     script = r"""
