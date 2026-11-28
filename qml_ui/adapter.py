@@ -75,8 +75,11 @@ class FDMXDownloadAdapter(QObject):
             "file_name": str(item.get("name") or "Download"),
             "status": str(item.get("status") or "Unknown"),
             "completed_at": _nonnegative(item.get("completed_at")),
-            "downloaded": int(_nonnegative(item.get("downloaded"))),
+            "time": str(item.get("time") or ""),
+            "size": int(_nonnegative(item.get("size", item.get("downloaded")))),
+            "downloaded": int(_nonnegative(item.get("downloaded", item.get("size")))),
             "category": str(item.get("category") or ""),
+            "error": str(item.get("error") or ""),
         } for item in history if isinstance(item, dict)]
         self.changed.emit()
 
