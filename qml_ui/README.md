@@ -10,7 +10,9 @@ python -m qml_ui.main
 ```
 
 ## Architecture
-- `models.py`: typed Qt list model for normalized download snapshots.
+- `models.py`: typed Qt list model for normalized download snapshots; progress
+  changes emit row-level `dataChanged` updates, while insert/remove/reorder
+  events reset the model only when task identity/order changes.
 - `adapter.py`: `FDMXDownloadAdapter`, a QObject facade over the legacy
   controller's task dictionary, history, workers and task-ID operations.
 - `main.py`: standalone QGuiApplication preview, deliberately disconnected.
@@ -34,7 +36,8 @@ path still does not call it: Widgets remains the default and fallback until
 real-download lifecycle, UI parity, packaging and Windows rendering are accepted.
 
 The QML shell now has working sidebar filtering (overview, all, active,
-completed and scheduled), filename search, a read-only settings snapshot dialog,
+completed, scheduled, queued and failed), filename search, visible rejection
+feedback for unavailable task actions, a read-only settings snapshot dialog,
 and pause/resume/cancel/retry controls on eligible task rows. Scheduled timestamps
 and categories are included in task snapshots. History remains a read-only adapter
 property and is not yet a dedicated history screen. Scheduler edits, settings changes, history management/export,
