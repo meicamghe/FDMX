@@ -188,7 +188,15 @@ ApplicationWindow {
                         anchors.fill: parent
                         anchors.margins: 11
                         Label { text: "⌕"; color: "#91a0b8"; font.pixelSize: 18 }
-                        TextField { id: searchField; Layout.fillWidth: true; placeholderText: "Search downloads"; color: "#e5edf8"; font.pixelSize: 11; background: Item {} onTextChanged: searchText = text }
+                        TextField {
+                            id: searchField
+                            Layout.fillWidth: true
+                            placeholderText: "Search downloads"
+                            color: "#e5edf8"
+                            font.pixelSize: 11
+                            background: Item {}
+                            onTextChanged: searchText = text
+                        }
                     }
                 }
                 Rectangle {
