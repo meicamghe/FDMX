@@ -345,3 +345,122 @@ def test_resume_requeues_interrupted_task_without_live_worker():
     assert controller.saved == 1
     assert controller.scheduled == 1
     adapter._timer.stop()
+
+
+def test_real_http_transfer_through_qml_bridge_and_legacy_engine():
+    import subprocess
+    import sys
+    script = r"""
+import importlib.util
+import os
+import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+data_root = tempfile.mkdtemp(prefix="adm-qml-e2e-")
+os.environ["HOME"] = data_root
+os.environ["USERPROFILE"] = data_root
+
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication
+QSettings.setDefaultFormat(QSettings.IniFormat)
+QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, data_root)
+
+payload = bytes((index * 37) % 256 for index in range(64 * 1024))
+
+class Handler(BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Disposition", 'attachment; filename="qml-transfer.bin"')
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+
+    def do_GET(self):
+        value = self.headers.get("Range", "")
+        if value.startswith("bytes="):
+            start_text, end_text = value[6:].split("-", 1)
+            start = int(start_text or 0)
+            end = min(int(end_text) if end_text else len(payload) - 1, len(payload) - 1)
+            body = payload[start:end + 1]
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{len(payload)}")
+        else:
+            body = payload
+            self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Disposition", 'attachment; filename="qml-transfer.bin"')
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        pass
+
+server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+thread = threading.Thread(target=server.serve_forever, daemon=True)
+thread.start()
+
+from PySide6.QtCore import QCoreApplication
+app = QApplication([])
+import sys
+sys.path.insert(0, os.getcwd())
+
+spec = importlib.util.spec_from_file_location("fdmx_e2e", Path("FDMX_v6_50.py"))
+fdmx = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fdmx)
+fdmx.FDMX.finish_deferred_startup = lambda self: None
+
+from qml_ui.host import create_qml_window
+controller = fdmx.FDMX()
+controller.folder.setText(data_root)
+controller.max_downloads.setValue(1)
+controller.parts_count.setValue(1)
+engine, adapter, root = create_qml_window(controller)
+
+url = f"http://127.0.0.1:{server.server_port}/qml-transfer.bin"
+adapter.queueDownload(url)
+task_id = next(iter(controller.tasks))
+deadline = time.monotonic() + 30
+while time.monotonic() < deadline:
+    app.processEvents()
+    task = controller.tasks[task_id]
+    if task.get("status") in ("Completed", "Failed", "Canceled"):
+        break
+    time.sleep(0.01)
+
+task = controller.tasks[task_id]
+target = Path(data_root) / "qml-transfer.bin"
+assert task.get("status") == "Completed", f"QML transfer ended as {task.get('status')}: {controller.status.text()}"
+assert task.get("qml_handoff") is True
+assert target.is_file(), f"Downloaded file was not created: {target}"
+assert target.read_bytes() == payload, "Downloaded bytes differ from the local HTTP fixture"
+assert not controller.detail_windows, "QML-originated transfer unexpectedly opened a legacy detail dialog"
+adapter.refresh()
+assert adapter.downloadModel.rowCount() == 1
+assert adapter.downloads[0]["status"] == "Completed"
+
+root.close()
+adapter._timer.stop()
+engine.deleteLater()
+controller.close()
+server.shutdown()
+server.server_close()
+print("real local HTTP transfer through QML bridge and legacy engine passed")
+"""
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=45,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "real local HTTP transfer through QML bridge and legacy engine passed" in result.stdout
