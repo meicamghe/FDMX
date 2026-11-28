@@ -1,4 +1,5 @@
 // CI validation branch marker: keep this interface buildable as a standalone Windows preview.
+// Windows CI also verifies the production adapter and the packaged QML runtime.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
