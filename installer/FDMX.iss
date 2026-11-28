@@ -1,6 +1,6 @@
 ; GNS Downloader Windows installer — compressed onedir distribution
 #define AppName "GNS Downloader"
-#define AppVersion "6.52"
+#define AppVersion "6.53"
 #define AppPublisher "MeysamGNS"
 #define AppIconFile AddBackslash(SourcePath) + "gns-downloader.ico"
 
@@ -39,6 +39,12 @@ Source: "..\dist\GNS Downloader\*"; DestDir: "{app}"; Flags: ignoreversion recur
 [Icons]
 Name: "{autoprograms}\GNS Downloader"; Filename: "{app}\GNS Downloader.exe"; IconFilename: "{app}\GNS Downloader.exe"
 Name: "{autodesktop}\GNS Downloader"; Filename: "{app}\GNS Downloader.exe"; IconFilename: "{app}\GNS Downloader.exe"; Tasks: desktopicon
+
+[Registry]
+Root: HKCR; Subkey: "gnsdownloader"; ValueType: string; ValueName: ""; ValueData: "URL:GNS Downloader Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "gnsdownloader"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCR; Subkey: "gnsdownloader\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\GNS Downloader.exe,0"
+Root: HKCR; Subkey: "gnsdownloader\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\GNS Downloader.exe"" ""%1"""
 
 [Run]
 Filename: "{app}\GNS Downloader.exe"; Description: "Launch GNS Downloader"; Flags: postinstall nowait skipifsilent

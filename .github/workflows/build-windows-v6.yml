@@ -3,8 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: [v6.2]
-  pull_request:
-    branches: [main, v6.1]
 permissions:
   contents: read
 jobs:

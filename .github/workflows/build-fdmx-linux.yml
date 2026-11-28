@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - release/6.52-finalization
+      - release/6.53-finalization
     tags:
       - "v*"
     paths:
@@ -46,7 +46,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev upx-ucl fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
+          sudo apt-get install -y dpkg-dev upx-ucl desktop-file-utils fonts-dejavu-core libegl1 libgl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0
 
       - name: Install Python build dependencies
         run: |
@@ -57,6 +57,7 @@ jobs:
         run: |
           python -m py_compile FDMX_v6_50.py ubuntu.py
           python -m unittest discover -s tests -p "test_youtube_integration_regressions.py" -v
+          python -m unittest discover -s tests -p "test_browser_media_handoff.py" -v
           python -m unittest discover -s tests -p "test_auto_start_and_package_size.py" -v
           python -m unittest discover -s tests -p "test_github_artifact_auth_and_sort.py" -v
 
@@ -97,15 +98,29 @@ jobs:
           Type=Application
           Name=GNS Downloader
           Comment=Multi-connection download manager
-          Exec=gns-downloader
+          Exec=gns-downloader %u
           Icon=gns-downloader
+          MimeType=x-scheme-handler/gnsdownloader;
           Terminal=false
           Categories=Network;FileTransfer;
           StartupNotify=true
           EOF
+          install -d "$ROOT/usr/share/applications"
+          cat > "$ROOT/usr/share/applications/mimeapps.list" <<'EOF'
+          [Default Applications]
+          x-scheme-handler/gnsdownloader=gns-downloader.desktop
+          EOF
+          cat > "$ROOT/DEBIAN/postinst" <<'EOF'
+          #!/bin/sh
+          set -e
+          if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications || true
+          fi
+          EOF
+          chmod 0755 "$ROOT/DEBIAN/postinst"
           cat > "$ROOT/DEBIAN/control" <<'EOF'
           Package: gns-downloader
-          Version: 6.52
+          Version: 6.53
           Section: net
           Priority: optional
           Architecture: amd64
@@ -116,27 +131,29 @@ jobs:
           EOF
           echo "Largest bundled runtime files:"
           du -ah "$APPDIR" | sort -h | tail -20
-          dpkg-deb --build --root-owner-group -Zxz -z9 "$ROOT" "dist/GNS-Downloader-6.52-amd64.deb"
-          dpkg-deb --info "dist/GNS-Downloader-6.52-amd64.deb"
-          PACKAGE_SIZE=$(stat -c%s "dist/GNS-Downloader-6.52-amd64.deb")
+          dpkg-deb --build --root-owner-group -Zxz -z9 "$ROOT" "dist/GNS-Downloader-6.53-amd64.deb"
+          dpkg-deb --info "dist/GNS-Downloader-6.53-amd64.deb"
+          PACKAGE_SIZE=$(stat -c%s "dist/GNS-Downloader-6.53-amd64.deb")
           echo "Linux DEB size: $((PACKAGE_SIZE / 1048576)) MiB"
           if [ "$PACKAGE_SIZE" -gt $((50 * 1024 * 1024)) ]; then
             echo "Linux DEB exceeds the 50 MiB package limit."
             exit 1
           fi
-          dpkg-deb --contents "dist/GNS-Downloader-6.52-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
+          dpkg-deb --contents "dist/GNS-Downloader-6.53-amd64.deb" | grep -E 'gns-downloader|GNS Downloader'
 
       - name: Install package and smoke-test launcher
         run: |
-          sudo apt-get install -y ./dist/GNS-Downloader-6.52-amd64.deb
+          sudo apt-get install -y ./dist/GNS-Downloader-6.53-amd64.deb
           test -x /usr/bin/gns-downloader
+          grep -q "x-scheme-handler/gnsdownloader" /usr/share/applications/gns-downloader.desktop
+          grep -q "x-scheme-handler/gnsdownloader=gns-downloader.desktop" /usr/share/applications/mimeapps.list
           QT_QPA_PLATFORM=offscreen timeout 8s gns-downloader || test "$?" -eq 124
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v7
         with:
-          name: GNS-Downloader-Linux-DEB-v6.52
-          path: dist/GNS-Downloader-6.52-amd64.deb
+          name: GNS-Downloader-Linux-DEB-v6.53
+          path: dist/GNS-Downloader-6.53-amd64.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -145,5 +162,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          files: dist/GNS-Downloader-6.52-amd64.deb
+          files: dist/GNS-Downloader-6.53-amd64.deb
           fail_on_unmatched_files: true

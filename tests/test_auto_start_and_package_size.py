@@ -27,15 +27,15 @@ class AutoStartAndPackageSizeTests(unittest.TestCase):
         self.assertNotIn("Press Start to download.", SOURCE)
 
     def test_youtube_video_has_single_file_fallback_without_ffmpeg(self):
-        self.assertIn('options["format"] = "best"', SOURCE)
+        self.assertIn('options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"', SOURCE)
         self.assertIn('options.pop("merge_output_format", None)', SOURCE)
         self.assertIn('return shutil.which("ffmpeg")', SOURCE)
         self.assertNotIn("import imageio_ffmpeg", SOURCE)
 
     def test_windows_release_assets_are_limited_to_50_mib(self):
         self.assertIn("$limit = 50MB", WINDOWS_WORKFLOW)
-        self.assertIn("GNS-Downloader-Setup-6.52.exe", WINDOWS_WORKFLOW)
-        self.assertIn("GNS-Downloader-Portable-v6.52-Windows-x64.zip", WINDOWS_WORKFLOW)
+        self.assertIn("GNS-Downloader-Setup-6.53.exe", WINDOWS_WORKFLOW)
+        self.assertIn("GNS-Downloader-Portable-v6.53-Windows-x64.zip", WINDOWS_WORKFLOW)
         self.assertIn("if ($file.Length -gt $limit)", WINDOWS_WORKFLOW)
 
 

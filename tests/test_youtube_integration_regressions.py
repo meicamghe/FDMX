@@ -64,7 +64,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertNotIn("Test update checker", SOURCE)
         self.assertNotIn("self.update_check_btn", SOURCE)
         self.assertIn('help_menu.addAction("Check for updates…", self.check_for_updates)', SOURCE)
-        self.assertIn('APP_VERSION = "6.52"', SOURCE)
+        self.assertIn('APP_VERSION = "6.53"', SOURCE)
 
     def test_update_checker_selects_highest_stable_release_independent_of_api_order(self):
         tree = ast.parse(SOURCE)
@@ -281,11 +281,13 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
         self.assertIn("self.proxy_url = normalize_proxy_url(proxy_url)", worker)
 
     def test_video_prefers_best_video_and_audio_with_mp4_merge(self):
-        self.assertIn('"format": "bestvideo+bestaudio/best"', SOURCE)
+        self.assertIn("bestvideo+bestaudio/best", SOURCE)
+        self.assertIn('options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"', SOURCE)
         self.assertIn('"merge_output_format": "mp4"', SOURCE)
 
     def test_audio_selects_best_available_audio_without_forcing_conversion(self):
-        self.assertIn('"format": "bestvideo+bestaudio/best" if self.media_type == "video" else "bestaudio[ext=m4a]/bestaudio"', SOURCE)
+        self.assertIn('bestaudio[ext=m4a]/bestaudio', SOURCE)
+        self.assertIn('bestaudio[abr<={self.max_abr}]', SOURCE)
 
     def test_final_postprocessed_filepath_is_preferred(self):
         resolve = load_output_resolver()
@@ -465,7 +467,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
     def test_video_download_uses_optional_ffmpeg_and_falls_back_without_it(self):
         self.assertIn("def _youtube_ffmpeg_executable():", SOURCE)
         self.assertIn('options["ffmpeg_location"] = ffmpeg_executable', SOURCE)
-        self.assertIn('options["format"] = "best"', SOURCE)
+        self.assertIn('options["format"] = f"best[height<={self.max_height}]" if self.max_height else "best"', SOURCE)
         self.assertIn('options.pop("merge_output_format", None)', SOURCE)
         self.assertIn('return shutil.which("ffmpeg")', SOURCE)
 
@@ -478,7 +480,7 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
 
     def test_youtube_tasks_keep_media_type_when_persisted_and_restored(self):
         self.assertIn('"media_type": entry.get("media_type", "video")', SOURCE)
-        self.assertIn('"category", "kind", "media_type", "scheduled_at"', SOURCE)
+        self.assertIn('"category", "kind", "media_type", "max_height", "max_abr", "scheduled_at"', SOURCE)
 
     def test_pause_cancel_and_progress_hooks_are_connected(self):
         worker_start = SOURCE.index("class YouTubeDownloadWorker")
@@ -673,6 +675,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=test"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.state = NoopSignal()
@@ -771,6 +775,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=existing"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -881,6 +887,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
                 self_owner.url = "https://www.youtube.com/watch?v=existing"
                 self_owner.folder = folder
                 self_owner.media_type = "audio"
+                self_owner.max_height = 0
+                self_owner.max_abr = 0
                 self_owner.proxy_url = ""
                 self_owner.cancel_event = threading.Event()
                 self_owner.pause_event = threading.Event()
@@ -1012,6 +1020,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=partial-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -1129,6 +1139,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=paused-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
@@ -1250,6 +1262,8 @@ class YouTubeIntegrationRegressionTests(unittest.TestCase):
             self_owner.url = "https://www.youtube.com/watch?v=cancel-paused-transfer"
             self_owner.folder = folder
             self_owner.media_type = "audio"
+            self_owner.max_height = 0
+            self_owner.max_abr = 0
             self_owner.proxy_url = ""
             self_owner.cancel_event = threading.Event()
             self_owner.pause_event = threading.Event()
